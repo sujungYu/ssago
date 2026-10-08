@@ -1,0 +1,34 @@
+/* 디자인 토큰 — 파랑·아이보리. Figma 최종 토큰을 확인하지 못해 기준 문서의 값을 사용한다(docs/design-differences.md). */
+:root {
+  --c-primary: #315da8;
+  --c-primary-hover: #284d8e;
+  --c-primary-press: #1f3d73;
+  --c-bg: #f8f7f4;
+  --c-surface: #ffffff;
+  --c-text: #20242c;
+  --c-text-2: #606773;
+  --c-line: #e4e6ea;
+  --c-line-strong: #c9ced6;
+  --c-info-bg: #edf3fc;
+  --c-success: #1c7347;
+  --c-success-bg: #e8f4ec;
+  --c-warn: #7d5200;
+  --c-warn-bg: #fff3d6;
+  --c-danger: #b3261e;
+  --c-danger-bg: #fcebea;
+  --c-neutral-bg: #eef0f3;
+  --c-focus: #1b4fa8;
+  --c-disabled-bg: #e9ebef;
+  --c-disabled-text: #7a8190;
+
+  --font: 'Pretendard Variable', Pretendard, -apple-system, 'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', system-ui, sans-serif;
+  --fs-xs: 12px; --fs-sm: 13px; --fs-md: 15px; --fs-lg: 17px; --fs-xl: 20px; --fs-2xl: 24px;
+  --lh: 1.5;
+
+  --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-5: 20px; --sp-6: 24px; --sp-8: 32px;
+  --r-sm: 8px; --r-md: 12px; --r-lg: 16px; --r-pill: 999px;
+  --shadow-bar: 0 -1px 0 var(--c-line);
+  --tab-h: 60px;
+  --header-h: 52px;
+  --content-w: 640px;
+}

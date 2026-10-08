@@ -1,0 +1,292 @@
+/**
+ * 데이터 접근 계약. 화면은 이 인터페이스만 사용하고 목업 데이터를 직접 참조하지 않는다.
+ * 2차에서 Supabase 구현체가 같은 계약을 제공하면 UI 레이어를 다시 만들지 않고 공급자를 교체할 수 있다.
+ * (실제 API 경로·DB 함수명이 아니다 — spec 7.1)
+ *
+ * 모든 상태 변경 메서드는 idempotencyKey를 받는다. 목업은 같은 키의 재호출에 기존 결과를 돌려주고,
+ * 실제 구현은 서버에서 멱등성·권한·조건 버전·기한을 검증해야 한다. (에러 정책서 3, 5)
+ */
+import type {
+  Address, AdditionalWork, Approval, Booking, CancelCause, Category, ChangeProposal, CustomerProfile, DelayChoice,
+  DelayNotice, Deduction, FinalStatement, IsoDate, IsoDateTime, MaterialOffer, ProviderDetail, ProviderSummary,
+  PublicGroup, Refund, RepairRequest, Review, TaskItem, TimeSlot, Transaction, Won,
+} from '../../domain/types';
+import type { CancelPreview, DateChangePreview, Settlement } from '../../domain/pricing';
+
+export type Unsubscribe = () => void;
+
+// ───────── 조회 조건 ─────────
+export interface ProviderQuery {
+  categoryId: string;
+  /** 없으면 공동 예약 가능 여부를 단정하지 않는다(null) */
+  addressId: string | null;
+}
+
+// ───────── 요청 ─────────
+export interface NewRequestInput {
+  providerId: string;
+  groupId: string | null;
+  newDateWish?: IsoDate;
+  slots: TimeSlot[];
+  tasks: Omit<TaskItem, 'id'>[];
+  addressId: string;
+  addressDetail: string;
+  bundleId?: string;
+  idempotencyKey: string;
+}
+
+export interface ProviderBrief { id: string; name: string; phone: string }
+
+export interface RequestListItem {
+  request: RepairRequest;
+  provider: ProviderBrief;
+  visitDate?: IsoDate;
+  paymentDeadline?: IsoDateTime;
+  depositAmount?: Won;
+}
+
+export interface BundleListItem {
+  bundleId: string;
+  taskTitles: string[];
+  items: RequestListItem[];
+  updatedAt: IsoDateTime;
+}
+
+export interface RequestDetail {
+  request: RepairRequest;
+  provider: ProviderBrief;
+  address: Address;
+  addressDetail: string;
+  group?: PublicGroup;
+  groupClosed: boolean;
+  approval?: Approval;
+  now: IsoDateTime;
+}
+
+export interface BundleDetail {
+  bundleId: string;
+  tasks: TaskItem[];
+  items: RequestDetail[];
+  now: IsoDateTime;
+}
+
+export interface ApprovalView extends RequestDetail {
+  approval: Approval;
+  groupEnded: boolean;
+  inFlightPayment?: Transaction;
+}
+
+// ───────── 결제 ─────────
+export interface PaymentResult {
+  tx: Transaction;
+  bookingId?: string;
+}
+
+export interface TransactionDetail {
+  tx: Transaction;
+  providerName?: string;
+  bookingId?: string;
+  requestId?: string;
+  /** 결제 대상 설명 */
+  subject: string;
+}
+
+export type LedgerEntry =
+  | { kind: 'payment'; id: string; at: IsoDateTime; tx: Transaction; subject: string; bookingId?: string; providerName?: string }
+  | { kind: 'refund'; id: string; at: IsoDateTime; refund: Refund; subject: string; bookingId: string; providerName: string }
+  | { kind: 'deduction'; id: string; at: IsoDateTime; deduction: Deduction; subject: string; bookingId: string; providerName: string };
+
+// ───────── 예약 ─────────
+export interface BookingListItem {
+  booking: Booking;
+  providerName: string;
+  /** 예약 상세의 “지금 확인할 내용”에 해당하는 한 줄 요약 */
+  attention: string | null;
+  groupClosed: boolean;
+  /** 마감 전 예상 / 마감 후 확정 출장비 */
+  tripFee: { kind: 'expected' | 'confirmed' | 'locked'; amount: Won | null };
+}
+
+export interface PrepaidSummary {
+  depositPaid: Won;
+  materialPrepaid: Won;
+  changePaid: Won;
+  refunded: Won;
+  deducted: Won;
+  available: Won;
+}
+
+export interface BookingDetail {
+  booking: Booking;
+  provider: ProviderDetail | (ProviderSummary & { phone: string; afterServiceTerms: string[] });
+  address: Address;
+  addressDetail: string;
+  group: PublicGroup;
+  groupClosed: boolean;
+  groupEnded: boolean;
+  tripFee: { kind: 'expected' | 'confirmed' | 'locked'; amount: Won | null; households: number };
+  approval?: Approval;
+  prepaid: PrepaidSummary;
+  delay?: DelayNotice;
+  proposals: ChangeProposal[];
+  materials: MaterialOffer[];
+  additionalWorks: AdditionalWork[];
+  statement?: FinalStatement;
+  ledger: LedgerEntry[];
+  review?: Review;
+  /** 무료 취소가 적용되는 사유(지연 대기, 업체 사유 변경 제안 등) */
+  freeCancel: { reason: string } | null;
+  now: IsoDateTime;
+}
+
+export interface CancelContext {
+  cause: CancelCause;
+  causeLabel: string;
+  preview: CancelPreview;
+  /** 이미 접수된 취소가 있으면 그 결과 */
+  existing?: { refund?: Refund };
+}
+
+export interface ChangeOption {
+  group: PublicGroup;
+  preview: DateChangePreview;
+}
+
+export interface ChangeRequestInput {
+  bookingId: string;
+  kind: 'date' | 'time';
+  targetGroupId?: string;
+  newDateWish?: IsoDate;
+  newSlot: TimeSlot;
+  reason: string;
+  /** 지연 대응에서 무료 변경을 선택한 경우 */
+  delayId?: string;
+  idempotencyKey: string;
+}
+
+export interface ProposalResult {
+  proposal: ChangeProposal;
+  tx?: Transaction;
+  refund?: Refund;
+  booking?: Booking;
+}
+
+export interface ProposalView {
+  proposal: ChangeProposal;
+  booking: Booking;
+  providerName: string;
+  groupClosed: boolean;
+  preview: DateChangePreview | null;
+  /** 업체 사유 거절 시 환불 미리보기 */
+  cancelPreview: CancelPreview;
+}
+
+export interface MaterialView {
+  offer: MaterialOffer;
+  booking: Booking;
+  providerName: string;
+  tx?: Transaction;
+}
+
+export interface AdditionalView {
+  work: AdditionalWork;
+  booking: Booking;
+  providerName: string;
+}
+
+export interface StatementView {
+  statement: FinalStatement;
+  booking: Booking;
+  providerName: string;
+  providerPhone: string;
+  prepaid: PrepaidSummary;
+  settlement: Settlement;
+  inFlightPayment?: Transaction;
+  refund?: Refund;
+}
+
+export interface StatementResult {
+  statement: FinalStatement;
+  settlement: Settlement;
+  tx?: Transaction;
+  refund?: Refund;
+}
+
+export interface ReviewContext {
+  booking: Booking;
+  providerName: string;
+  eligible: boolean;
+  existing?: Review;
+}
+
+export interface NoticeLanding {
+  path: string;
+  /** 알림 이후 상태가 바뀐 경우 안내 문구 (ERR-NOTI-02) */
+  staleMessage?: string;
+}
+
+// ───────── 저장소 ─────────
+export interface Repository {
+  /** 데이터 변경 시 구독자에게 알림. 화면 재조회 신호로만 쓴다. */
+  subscribe(listener: () => void): Unsubscribe;
+  /** 현재 데이터 공급자에 따른 시계(목업은 고정 시계). 화면 표시용 */
+  now(): IsoDateTime;
+
+  // 탐색
+  listCategories(): Promise<Category[]>;
+  searchAddresses(keyword: string): Promise<Address[]>;
+  getAddress(id: string): Promise<Address>;
+  listProviders(q: ProviderQuery): Promise<ProviderSummary[]>;
+  getProvider(id: string, addressId: string | null): Promise<ProviderDetail>;
+
+  // 요청
+  createRequest(input: NewRequestInput): Promise<RepairRequest>;
+  listRequests(): Promise<BundleListItem[]>;
+  getRequest(id: string): Promise<RequestDetail>;
+  getBundle(bundleId: string): Promise<BundleDetail>;
+  supplementRequest(id: string, input: { message: string; photoNames: string[]; idempotencyKey: string }): Promise<RepairRequest>;
+  withdrawRequest(id: string): Promise<RepairRequest>;
+
+  // 승인·결제
+  getApproval(requestId: string): Promise<ApprovalView>;
+  simulateDepositPayment(input: { requestId: string; approvalVersion: number; consentedRecheck?: boolean; idempotencyKey: string }): Promise<PaymentResult>;
+  getTransaction(txId: string): Promise<TransactionDetail>;
+  /** 결제 재실행이 아니라 상태 조회. 처리 중·확인 중 결제의 최신 결과를 가져온다. */
+  refreshPayment(txId: string): Promise<PaymentResult>;
+
+  // 예약
+  listBookings(): Promise<BookingListItem[]>;
+  getBooking(id: string): Promise<BookingDetail>;
+  listChangeOptions(bookingId: string): Promise<ChangeOption[]>;
+  requestChange(input: ChangeRequestInput): Promise<ChangeProposal>;
+  getProposal(id: string): Promise<ProposalView>;
+  respondToProposal(id: string, decision: 'accept' | 'reject', idempotencyKey: string): Promise<ProposalResult>;
+  withdrawProposal(id: string): Promise<ChangeProposal>;
+  getCancelContext(bookingId: string): Promise<CancelContext>;
+  cancelBooking(input: { bookingId: string; expectedRefund: Won; idempotencyKey: string }): Promise<{ booking: Booking; refund: Refund }>;
+  respondToDelayWait(delayId: string): Promise<DelayNotice>;
+  getDelay(delayId: string): Promise<{ delay: DelayNotice; booking: Booking; providerName: string; providerPhone: string }>;
+
+  // 자재·추가 작업
+  getMaterial(offerId: string): Promise<MaterialView>;
+  agreeAndPayMaterial(offerId: string, idempotencyKey: string): Promise<PaymentResult>;
+  getAdditionalWork(id: string): Promise<AdditionalView>;
+  respondToAdditionalWork(id: string, decision: 'agree' | 'decline'): Promise<AdditionalWork>;
+
+  // 최종 정산
+  getFinalStatement(bookingId: string): Promise<StatementView>;
+  confirmSettlement(input: { bookingId: string; statementVersion: number; idempotencyKey: string }): Promise<StatementResult>;
+  reportDispute(bookingId: string): Promise<FinalStatement>;
+
+  // 이용 후
+  listLedger(): Promise<LedgerEntry[]>;
+  getLedgerEntry(id: string): Promise<LedgerEntry>;
+  getReviewContext(bookingId: string): Promise<ReviewContext>;
+  createReview(input: { bookingId: string; rating: number; body: string; photoNames: string[]; idempotencyKey: string }): Promise<Review>;
+  getProfile(): Promise<CustomerProfile>;
+
+  // 알림 진입(S-02)
+  resolveNotice(noticeId: string): Promise<NoticeLanding>;
+}
+
+export type { DelayChoice };
