@@ -12,7 +12,11 @@ const TABS = [
 ];
 
 /** 헤더 + 본문 + (최상위 화면에서만) 하단 탭. 고정 하단 버튼은 ActionBar로 흐름 안에 둔다. */
-export function Page({ title, back, tabs, children }: { title: string; back?: string; tabs?: boolean; children: ReactNode }) {
+/**
+ * back: 'history'면 기록에서 한 칸 뒤로(없으면 업체 찾기), 경로 문자열이면 그 화면으로 이동하는 링크.
+ * onBack을 주면 화면이 직접 정한 뒤로가기(예: 출발 화면으로 한 번만 돌아가기, useBackTo)를 쓴다.
+ */
+export function Page({ title, back, onBack, tabs, children }: { title: string; back?: string; onBack?: () => void; tabs?: boolean; children: ReactNode }) {
   const loc = useLocation();
   const nav = useNavigate();
   const notice = (loc.state as { notice?: string } | null)?.notice;
@@ -22,15 +26,17 @@ export function Page({ title, back, tabs, children }: { title: string; back?: st
       <a href="#main" className="skip-link">본문으로 건너뛰기</a>
       <header className="app-header">
         <div className="app-header__inner">
-          {back === 'history' ? (
+          {onBack ? (
+            <button type="button" className="icon-btn" aria-label="뒤로 가기" onClick={onBack}><Icon name="back" /></button>
+          ) : back === 'history' ? (
             <button type="button" className="icon-btn" aria-label="뒤로 가기" onClick={() => ((window.history.state?.idx ?? 0) > 0 ? nav(-1) : nav('/'))}><Icon name="back" /></button>
           ) : back ? (
             <Link to={back} className="icon-btn" aria-label="뒤로 가기"><Icon name="back" /></Link>
           ) : (
             <Link to="/" className="app-header__brand" aria-label="싸고 홈"><BrandLogo /></Link>
           )}
-          {back && <h1 className="app-header__title" style={{ fontSize: 'var(--fs-lg)' }}>{title}</h1>}
-          {!back && <h1 className="sr-only">{title}</h1>}
+          {(back || onBack) && <h1 className="app-header__title" style={{ fontSize: 'var(--fs-lg)' }}>{title}</h1>}
+          {!back && !onBack && <h1 className="sr-only">{title}</h1>}
           <nav className="top-nav" aria-label="주요 메뉴">
             {TABS.map((t) => <NavLink key={t.to} to={t.to} end={t.end}>{t.label}</NavLink>)}
           </nav>

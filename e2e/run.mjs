@@ -1492,6 +1492,160 @@ for (const w of [360, 1280]) {
   }, { width: w });
 }
 
+// ───────── 요청서 뒤로가기(업체 상세 ↔ 요청서 루프·복귀) ─────────
+const histIdx = (page) => page.evaluate(() => history.state?.idx);
+const pathQ = (page) => { const u = new URL(page.url()); return u.pathname + u.search; };
+const headerBack = (page) => page.locator('.app-header').getByRole('button', { name: '뒤로 가기' }).or(page.locator('.app-header').getByRole('link', { name: '뒤로 가기' })).first();
+/** 업체 목록 → 업체 상세(앱 안 이동) */
+async function openDetailFromList(page) {
+  await start(page, { path: '/providers?category=c2' });
+  await page.locator('ul[aria-label="업체 목록"] a').first().click();
+  await page.locator('.jcal').waitFor();
+}
+
+await test('요청서 뒤로가기: 공동 일정 → 요청서 → 상단 뒤로는 업체 상세로 한 번만(선택 유지), 업체 상세 뒤로는 목록, 3회 반복해도 기록이 늘지 않음', async (page) => {
+  await openDetailFromList(page);
+  const detailIdx = await histIdx(page);
+  const len0 = await page.evaluate(() => history.length);
+  const req0 = (await db(page)).requests.length;
+  for (let i = 0; i < 3; i++) {
+    if (!(await page.locator('input[name="joint-group"]:checked').count())) {
+      await dayBtn(page, '10-16').click();
+      await page.locator('.joint-card').nth(1).locator('input').check();
+    }
+    await reqBtn(page).click();
+    await page.waitForURL((u) => u.pathname === '/providers/p1/request');
+    eq(new URL(page.url()).searchParams.get('group'), 'g1b', '선택한 그룹으로 요청서');
+    await waitText(page, '수리 요청서');
+    await headerBack(page).click();
+    await page.waitForURL((u) => u.pathname === '/providers/p1');
+    eq(await histIdx(page), detailIdx, `#${i + 1} 같은 기록 항목으로 복귀(새 기록 아님)`);
+    await page.locator('.joint-card').first().waitFor();
+    eq(await page.locator('.jcal button[aria-pressed="true"]').getAttribute('data-day'), '2026-10-16', '선택 날짜 유지');
+    truthy(await page.locator('.joint-card').nth(1).locator('input').isChecked(), '선택 그룹 유지');
+    truthy(await reqBtn(page).isEnabled(), '다시 요청 가능');
+    await page.waitForTimeout(500);
+    eq(new URL(page.url()).pathname, '/providers/p1', '자동으로 요청서로 이동하지 않음');
+  }
+  eq(await page.evaluate(() => history.length), len0 + 1, '기록은 요청서 1칸만(앞으로 가기용)');
+  eq((await db(page)).requests.length, req0, '뒤로가기만으로 요청 생성 없음');
+  await headerBack(page).click();
+  await page.waitForURL((u) => u.pathname === '/providers');
+  eq(pathQ(page), '/providers?category=c2', '업체 상세 뒤로는 목록(요청서로 가지 않음)');
+});
+
+await test('요청서 뒤로가기: 새 날짜 요청 → 요청서 → 상단 뒤로 → 업체 상세 → 다시 요청 흐름 정상', async (page) => {
+  await openDetailFromList(page);
+  const detailIdx = await histIdx(page);
+  await page.getByRole('link', { name: '다른 날짜로 새 예약 요청' }).click();
+  await page.waitForURL((u) => u.pathname === '/providers/p1/request' && u.searchParams.get('new') === '1');
+  await waitText(page, '수리 요청서');
+  await headerBack(page).click();
+  await page.waitForURL((u) => u.pathname === '/providers/p1');
+  eq(await histIdx(page), detailIdx, '같은 기록 항목');
+  eq(await page.locator('input[name="joint-group"]:checked').count(), 0, '공동 그룹 선택 없음');
+  await page.getByRole('link', { name: '다른 날짜로 새 예약 요청' }).click();
+  await waitText(page, '수리 요청서');
+});
+
+await test('요청서 뒤로가기: 브라우저 뒤로·앞으로 — 선택 유지, 자동 이동 없음, 요청 생성 없음', async (page) => {
+  await openDetailFromList(page);
+  const req0 = (await db(page)).requests.length;
+  await dayBtn(page, '10-16').click();
+  await page.locator('.joint-card').first().locator('input').check();
+  await reqBtn(page).click();
+  await page.waitForURL((u) => u.pathname === '/providers/p1/request');
+  for (let i = 0; i < 3; i++) {
+    await page.goBack();
+    await page.waitForURL((u) => u.pathname === '/providers/p1');
+    await page.locator('.joint-card').first().waitFor();
+    truthy(await page.locator('.joint-card').first().locator('input').isChecked(), `#${i + 1} 브라우저 뒤로 후 선택 유지`);
+    await page.waitForTimeout(400);
+    eq(new URL(page.url()).pathname, '/providers/p1', '자동 이동 없음');
+    await page.goForward();
+    await page.waitForURL((u) => u.pathname === '/providers/p1/request');
+    await waitText(page, '수리 요청서');
+  }
+  await page.goBack(); await page.waitForURL((u) => u.pathname === '/providers/p1');
+  await page.goBack(); await page.waitForURL((u) => u.pathname === '/providers');
+  eq((await db(page)).requests.length, req0, '요청 생성 없음');
+});
+
+await test('요청서 뒤로가기: 요청서 직접 진입·새로고침 → 상단 뒤로는 업체 상세로 교체, 그다음 뒤로는 업체 찾기', async (page) => {
+  await start(page, { path: '/providers/p1/request?group=g1' });
+  await waitText(page, '수리 요청서');
+  await page.reload();
+  await waitText(page, '수리 요청서');
+  const len = await page.evaluate(() => history.length);
+  await headerBack(page).click();
+  await page.waitForURL((u) => u.pathname === '/providers/p1');
+  eq(await page.evaluate(() => history.length), len, '기록을 쌓지 않고 교체');
+  await page.locator('.jcal').waitFor();
+  await headerBack(page).click();
+  await page.waitForURL((u) => u.pathname === '/');
+  // 업체 상세 직접 진입·새로고침
+  await page.goto(`${BASE}/providers/p1`); await page.reload();
+  await page.locator('.jcal').waitFor();
+});
+
+await test('요청서 뒤로가기: 잘못된 업체 → 안내·업체 찾기, 잘못된 그룹 → 안내 후 업체 상세로, 외부 복귀 경로 무시', async (page) => {
+  await start(page, { path: '/providers/nope/request?group=g1' });
+  await waitText(page, '업체 정보를 찾을 수 없어요');
+  truthy(await page.getByRole('link', { name: '업체 찾기로 가기' }).isVisible(), '업체 찾기 링크');
+  await headerBack(page).click();
+  await page.waitForURL((u) => u.pathname === '/');
+  await page.goto(`${BASE}/providers/p1/request?group=nope`);
+  await waitText(page, '수리 요청서');
+  truthy(await page.getByRole('button', { name: '요청 보내기' }).isDisabled(), '없는 그룹으로는 제출 불가');
+  await headerBack(page).click();
+  await page.waitForURL((u) => u.pathname === '/providers/p1');
+  // 기록 state에 외부 경로를 넣어도 앱 밖으로 나가지 않는다
+  await page.evaluate(() => { history.pushState({ usr: { returnTo: '//evil.example/x' }, key: 'x1', idx: 5 }, '', '/providers/p1/request?new=1'); dispatchEvent(new PopStateEvent('popstate', { state: history.state })); });
+  await waitText(page, '수리 요청서');
+  await headerBack(page).click();
+  await page.waitForURL((u) => u.pathname === '/providers/p1');
+  eq(new URL(page.url()).origin, BASE, '앱 안에 머무름');
+});
+
+await test('요청서 뒤로가기: 요청서에 있는 동안 그룹이 마감되면 돌아왔을 때 선택 해제·사유 안내', async (page) => {
+  await openDetailFromList(page);
+  await dayBtn(page, '10-16').click();
+  await page.locator('.joint-card').nth(1).locator('input').check(); // g1b
+  await reqBtn(page).click();
+  await waitText(page, '수리 요청서');
+  await dev(page, 'closeGroup', 'g1b');
+  await headerBack(page).click();
+  await page.waitForURL((u) => u.pathname === '/providers/p1');
+  await waitText(page, '선택한 일정을 신청할 수 없게 됐어요');
+  eq(await page.locator('input[name="joint-group"]:checked').count(), 0, '선택 해제');
+  truthy(await reqBtn(page).isDisabled(), '요청 버튼 비활성');
+});
+
+await test('배포 라우팅: Vercel식 정적 서버에서 규칙 없으면 깊은 경로 404(원인 재현), vercel.json 규칙 적용 시 새로고침·뒤로가기 정상·정적 파일 보존', async (page) => {
+  const run = async (rewrite, port) => {
+    const sp = spawn(process.execPath, [join(ROOT, 'e2e/vercel-static.mjs')], { cwd: ROOT, stdio: 'ignore', env: { ...process.env, PORT: String(port), ...(rewrite ? { REWRITE: '1' } : {}) } });
+    try {
+      const B = `http://localhost:${port}`;
+      for (let i = 0; i < 50; i++) { try { if ((await fetch(B)).ok) break; } catch { /* 대기 */ } await new Promise((r) => setTimeout(r, 100)); }
+      const code = async (p) => (await fetch(B + p)).status;
+      const out = { deep: await code('/providers/p1/request?group=g1'), missingAsset: await code('/assets/missing.js'), favicon: await code('/favicon.svg') };
+      if (rewrite) {
+        await page.goto(`${B}/`);
+        await page.evaluate((k) => sessionStorage.setItem(k, JSON.stringify({ addressId: 'ad-apt' })), APP_KEY);
+        await page.goto(`${B}/providers/p1`); await page.locator('.jcal').waitFor();
+        await page.reload(); await page.locator('.jcal').waitFor();
+        await page.goto(`${B}/`); await page.goBack(); await page.locator('.jcal').waitFor(); // 문서 경계를 넘어 깊은 경로를 서버에서 다시 받음
+        out.app = true;
+      }
+      return out;
+    } finally { sp.kill(); }
+  };
+  const before = await run(false, 4181);
+  eq(before.deep, 404, '규칙 없으면 깊은 경로 404(Vercel 404와 같은 원인)');
+  const after = await run(true, 4182);
+  eq(JSON.stringify(after), JSON.stringify({ deep: 200, missingAsset: 404, favicon: 200, app: true }), '규칙 적용 후');
+});
+
 // ───────── 탐색 주소 공유(업체 찾기 ↔ 카테고리별 업체 목록) ─────────
 const region = (page) => page.locator('.region-card');
 const regionText = async (page) => (await region(page).innerText()).replace(/\s+/g, ' ').trim();

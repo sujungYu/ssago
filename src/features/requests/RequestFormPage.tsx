@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useBackTo } from '../../app/backNav';
+import { describeError } from '../../domain/errors';
 import { ActionBar, Page } from '../../app/Page';
 import { useAppState, useRepo } from '../../app/context';
 import { useAction, useAsync, useAttemptKey } from '../../app/hooks';
@@ -8,7 +10,7 @@ import { formatSlot } from '../../domain/visitTime';
 import { formatWon } from '../../domain/money';
 import { expectedFeeForJoiner } from '../../domain/pricing';
 import { Icon } from '../../components/Icon';
-import { AsyncView, Banner, Button, Dialog, Field, KV, Section } from '../../components/ui';
+import { AsyncView, Banner, Button, Dialog, EmptyState, Field, KV, LinkButton, Section } from '../../components/ui';
 import { SAVED_ADDRESS_LOADED, detailError, savedDetailFor } from '../../domain/address';
 import type { Address } from '../../domain/types';
 import { AddressSearch } from '../discovery/AddressSearch';
@@ -81,10 +83,19 @@ export function RequestFormPage() {
     setTasks(bundle.data.tasks.map((t) => ({ key: seq++, title: t.title, description: t.description, photoNames: [...t.photoNames] })));
   }, [bundle.data]);
 
-  const back = `/providers/${id}`;
+  // 상단 뒤로가기: 업체 상세에서 왔으면 그 기록으로 한 번만 돌아가고(선택한 날짜·그룹 유지), 직접 진입이면 업체 상세로 교체한다.
+  // 업체 정보를 찾을 수 없으면 업체 찾기로 보낸다. 경로는 앱 내부 경로만 쓴다.
+  const providerPath = `/providers/${encodeURIComponent(id)}`;
+  const providerMissing = !!provider.error && describeError(provider.error).code === 'not_found';
+  const onBack = useBackTo(providerPath, providerMissing || !id ? '/' : providerPath);
 
   return (
-    <Page title="수리 요청서" back={back}>
+    <Page title="수리 요청서" onBack={onBack}>
+      {providerMissing ? (
+        <EmptyState icon="tool" title="업체 정보를 찾을 수 없어요" action={<LinkButton to="/" variant="primary">업체 찾기로 가기</LinkButton>}>
+          주소가 잘못됐거나 더 이상 제공되지 않는 업체예요. 업체 찾기에서 다시 골라 주세요.
+        </EmptyState>
+      ) : (
       <AsyncView state={provider}>
         {(p) => {
           const group = groupId ? p.groups.find((g) => g.id === groupId) : undefined;
@@ -233,6 +244,7 @@ export function RequestFormPage() {
           );
         }}
       </AsyncView>
+      )}
     </Page>
   );
 }

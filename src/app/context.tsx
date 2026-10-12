@@ -43,6 +43,7 @@ export function clearUserAppState(): void {
     sessionStorage.removeItem(KEY);
     sessionStorage.removeItem(LIST_SCROLL_KEY);
     sessionStorage.removeItem(LIST_FILTER_KEY);
+    sessionStorage.removeItem(PROVIDER_PICK_KEY);
   } catch { /* 저장 불가 환경 */ }
 }
 
@@ -60,6 +61,27 @@ export function loadListFilter(list: string, owner: string | undefined): string 
   try {
     const v = JSON.parse(sessionStorage.getItem(LIST_FILTER_KEY) ?? '{}')[list];
     return v && v.owner === owner && typeof v.query === 'string' && v.query ? v.query : null;
+  } catch { return null; }
+}
+
+// ───────── 업체 상세 공동 예약 선택(요청서에서 돌아올 때 복원) ─────────
+const PROVIDER_PICK_KEY = 'on-gimae/provider-pick/v1';
+/** 업체 상세의 선택 상태. 방문 기록 항목(location.key)별로 저장해, 같은 항목으로 돌아왔을 때만 되살린다(이동과 무관). */
+export interface ProviderPick { providerId: string; date: string | null; month: { year: number; month: number }; groupId: string | null }
+export function saveProviderPick(entryKey: string, pick: ProviderPick): void {
+  try {
+    const all = JSON.parse(sessionStorage.getItem(PROVIDER_PICK_KEY) ?? '{}');
+    delete all[entryKey];
+    all[entryKey] = pick;
+    const keys = Object.keys(all);
+    if (keys.length > 20) delete all[keys[0]];
+    sessionStorage.setItem(PROVIDER_PICK_KEY, JSON.stringify(all));
+  } catch { /* 저장 불가 환경 */ }
+}
+export function loadProviderPick(entryKey: string, providerId: string): ProviderPick | null {
+  try {
+    const v = JSON.parse(sessionStorage.getItem(PROVIDER_PICK_KEY) ?? '{}')[entryKey];
+    return v && v.providerId === providerId && v.month ? v : null;
   } catch { return null; }
 }
 

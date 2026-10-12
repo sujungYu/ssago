@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { returnState } from '../../app/backNav';
+import { loadProviderPick, saveProviderPick, type ProviderPick } from '../../app/context';
 import { ActionBar, Page } from '../../app/Page';
 import { useAppState, useRepo } from '../../app/context';
 import { useAction, useAsync } from '../../app/hooks';
@@ -55,15 +57,19 @@ function JointGroupCard({ g, now, checked, onChange }: { g: PublicGroup; now: st
 }
 
 /** 날짜 선택 → 그 날짜의 신청 가능한 공동 예약 카드 → 그룹 하나 선택(자동 선택 없음) */
-function JointSchedule({ p, addressId, now, onPick, picked, notice }: {
+function JointSchedule({ p, addressId, now, onPick, picked, notice, restored, onView }: {
   p: ProviderDetail; addressId: string; now: string; picked: string | null; notice: UnjoinableReason | null;
   onPick: (groupId: string | null, date?: IsoDate | null) => void;
+  /** 이 기록 항목에 저장해 둔 선택(요청서에서 뒤로 돌아온 경우). 이동은 하지 않고 화면 상태만 되살린다 */
+  restored: ProviderPick | null;
+  onView: (v: { date: IsoDate | null; month: YearMonth }) => void;
 }) {
   const repo = useRepo();
   const today = todayYmd(now);
   const counts = joinableDateCounts(p.groups, now);
-  const [month, setMonth] = useState<YearMonth>(() => initialMonth(today, counts.keys()));
-  const [date, setDate] = useState<IsoDate | null>(null);
+  const [month, setMonth] = useState<YearMonth>(() => restored?.month ?? initialMonth(today, counts.keys()));
+  const [date, setDate] = useState<IsoDate | null>(() => restored?.date ?? null);
+  useEffect(() => { onView({ date, month }); }, [date, month]); // eslint-disable-line react-hooks/exhaustive-deps
   const day = useAsync(() => (date ? repo.listJointGroups(p.id, addressId, date) : Promise.resolve(null)), [repo, p.id, addressId, date]);
 
   // 선택 후 최신 상태에서 그 그룹을 신청할 수 없게 되면 선택을 풀고 사유를 알린다
@@ -113,8 +119,16 @@ function JointSchedule({ p, addressId, now, onPick, picked, notice }: {
 function Body({ p, addressId, now }: { p: ProviderDetail; addressId: string | null; now: string }) {
   const repo = useRepo();
   const nav = useNavigate();
+  const loc = useLocation();
+  // 이 기록 항목(location.key)에 저장해 둔 선택. 요청서에서 뒤로 돌아오면 같은 항목이라 날짜·그룹·달을 되살린다.
+  const [restored] = useState(() => loadProviderPick(loc.key, p.id));
   // 공동 그룹 선택만 이 화면의 선택 상태로 둔다. 새 날짜 요청은 별도 버튼으로 바로 신규 요청 흐름에 들어가 두 선택이 동시에 켜지지 않는다.
-  const [picked, setPicked] = useState<{ groupId: string; date: IsoDate } | null>(null);
+  const [picked, setPicked] = useState<{ groupId: string; date: IsoDate } | null>(() => (restored?.groupId && restored.date ? { groupId: restored.groupId, date: restored.date } : null));
+  const [view, setView] = useState<{ date: IsoDate | null; month: YearMonth } | null>(null);
+  // 선택이 바뀔 때마다 이 기록 항목에 저장한다(저장만 하고 화면 이동은 하지 않는다)
+  useEffect(() => {
+    if (view) saveProviderPick(loc.key, { providerId: p.id, date: view.date, month: view.month, groupId: picked?.groupId ?? null });
+  }, [view, picked, loc.key, p.id]);
   const [notice, setNotice] = useState<UnjoinableReason | null>(null);
   const go = useAction();
   const onPick = (groupId: string | null, date?: IsoDate | null) => {
@@ -133,7 +147,7 @@ function Body({ p, addressId, now }: { p: ProviderDetail; addressId: string | nu
   const request = () => go.run(async () => {
     if (!picked || !addressId) return;
     const fresh = await repo.listJointGroups(p.id, addressId, picked.date);
-    if (fresh.some((g) => g.id === picked.groupId)) { nav(`/providers/${p.id}/request?group=${picked.groupId}`); return; }
+    if (fresh.some((g) => g.id === picked.groupId)) { nav(`/providers/${p.id}/request?group=${encodeURIComponent(picked.groupId)}`, { state: returnState(loc.pathname) }); return; }
     await explain(picked.groupId);
     setPicked(null);
   });
@@ -157,12 +171,12 @@ function Body({ p, addressId, now }: { p: ProviderDetail; addressId: string | nu
           <Banner tone="warn" title="현재 공동 예약 참여 가능 여부를 확인하기 어려워요">다시 확인하기 전에는 참여할 수 있다고 안내하지 않아요. 새 날짜로 요청은 보낼 수 있어요.</Banner>
         )}
         {showCalendar && addressId && (
-          <JointSchedule p={p} addressId={addressId} now={now} picked={picked?.groupId ?? null} notice={notice} onPick={onPick} />
+          <JointSchedule p={p} addressId={addressId} now={now} picked={picked?.groupId ?? null} notice={notice} onPick={onPick} restored={restored} onView={setView} />
         )}
         {go.error && <Banner tone="danger" title={go.error.title}>{go.error.hint}</Banner>}
         {/* 캘린더 밖: 공동 예약이 없는 날짜를 누르는 대신 이 버튼으로 새 날짜를 요청한다 */}
         <div className="card stack--sm stack new-date">
-          <LinkButton to={`/providers/${p.id}/request?new=1`} variant="secondary" block><Icon name="calendar" size={18} />다른 날짜로 새 예약 요청</LinkButton>
+          <LinkButton to={`/providers/${p.id}/request?new=1`} state={returnState(loc.pathname)} variant="secondary" block><Icon name="calendar" size={18} />다른 날짜로 새 예약 요청</LinkButton>
           <p className="xs muted">원하는 날짜를 직접 정해요. 이 업체의 기본 출장비는 <span className="money">{formatWon(p.soloTripFee)}</span>이고, 같은 날 이웃이 함께하면 확정된 세대 수로 나눠요.</p>
         </div>
       </Section>

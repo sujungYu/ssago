@@ -50,6 +50,10 @@ Windows(PowerShell) 예: `$env:CHROME_PATH="C:\Program Files\Google\Chrome\Appli
 - **실제 데이터:** 실제 DB·개인정보에 연결하지 않습니다. 앱은 외부 서버로 데이터를 보내거나 받지 않습니다. 이전에 연결 코드만 있던 Supabase Auth는 제거했고(`@supabase/supabase-js` 의존성·`VITE_SUPABASE_*` 환경 변수 포함), Supabase 프로젝트의 계정·테이블·정책·데이터는 건드리지 않았습니다.
 - **나중에 실제 데이터로 바꿀 때:** 익명 방문자 모두를 하나의 실제 고객 계정에 연결하거나, RLS를 끄거나, service role/secret 키를 브라우저에 넣지 않습니다. 인증과 서버·RLS 권한 검증을 함께 도입하고 `account.ts`의 고정 id를 인증된 사용자 id로 바꿉니다(`docs/supabase-handoff.md`).
 
+## 배포(Vercel)
+
+Vite SPA(React Router `BrowserRouter`)라 앱 경로를 서버가 모르면 새로고침·뒤로가기 때 404가 납니다. `vercel.json`의 rewrites가 확장자 없는 앱 경로(`/assets/` 제외)만 `index.html`로 보내고, 실제 정적 파일은 그대로, 없는 정적 파일은 404로 둡니다. API 경로는 없습니다. e2e의 ‘배포 라우팅’ 점검은 `e2e/vercel-static.mjs`(Vercel식 정적 서버 흉내)로 규칙 전후를 확인합니다 — 실제 Vercel 환경 확인을 대신하지는 않습니다.
+
 ## 문서
 
 - `spec.md` — 요청 명세 원문 · `docs/reference/` — Notion 기획 문서 6종 사본
