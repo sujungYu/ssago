@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 120" width="160" height="120">
+  <!-- c4 수납장·서랍 수리: 살짝 열린 서랍장 -->
+  <defs>
+    <linearGradient id="b" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7aa2e3"/><stop offset="1" stop-color="#315da8"/></linearGradient>
+    <linearGradient id="iv" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fffdf8"/><stop offset="1" stop-color="#e8dcc6"/></linearGradient>
+    <linearGradient id="ivd" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ddd0b6"/><stop offset="1" stop-color="#c9b896"/></linearGradient>
+    <filter id="s" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="2" dy="3" stdDeviation="2.5" flood-color="#1f3d73" flood-opacity=".18"/></filter>
+    <filter id="g"><feGaussianBlur stdDeviation="3"/></filter>
+  </defs>
+  <ellipse cx="80" cy="106" rx="44" ry="6" fill="#1f3d73" opacity=".13" filter="url(#g)"/>
+  <g filter="url(#s)">
+    <polygon points="44,30 108,30 118,23 54,23" fill="#fffdf8"/>
+    <polygon points="108,30 118,23 118,95 108,102" fill="url(#ivd)"/>
+    <rect x="44" y="30" width="64" height="72" fill="url(#iv)"/>
+    <rect x="50" y="59" width="52" height="19" rx="1.5" fill="url(#iv)" stroke="#d6c7a9" stroke-width="1.5"/>
+    <rect x="50" y="81" width="52" height="16" rx="1.5" fill="url(#iv)" stroke="#d6c7a9" stroke-width="1.5"/>
+    <circle cx="76" cy="68.5" r="3" fill="url(#b)"/>
+    <circle cx="76" cy="89" r="3" fill="url(#b)"/>
+    <rect x="50" y="36" width="52" height="19" rx="1" fill="#b9a684"/>
+    <polygon points="42,41 94,41 102,36 50,36" fill="#cdbb98"/>
+    <polygon points="46,41 90,41 96,37.5 52,37.5" fill="#a8946f"/>
+    <polygon points="94,41 102,36 102,55 94,60" fill="url(#ivd)"/>
+    <rect x="42" y="41" width="52" height="19" rx="1.5" fill="url(#iv)" stroke="#d6c7a9" stroke-width="1.5"/>
+    <circle cx="68" cy="50.5" r="3" fill="url(#b)"/>
+    <path d="M47 33h56" stroke="#fff" stroke-width="1.4" opacity=".7"/>
+  </g>
+</svg>

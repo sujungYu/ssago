@@ -191,10 +191,23 @@ a.list-row:hover { background: #fafbfd; }
 
 /* ───────── 업체 카드 등 ───────── */
 .avatar { width: 44px; height: 44px; border-radius: var(--r-md); background: var(--c-info-bg); color: var(--c-primary); display: grid; place-items: center; font-weight: 800; flex: none; }
+/* 업체 찾기 카테고리: 이미지 중심 카드(위 대표 이미지, 아래 카테고리명). 모바일 2열, 넓은 화면 3열(콘텐츠 너비 640px 기준) */
 .cat-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-2); }
-.cat { display: flex; align-items: center; gap: var(--sp-3); min-height: 60px; padding: var(--sp-3) var(--sp-4); background: var(--c-surface); border: 1px solid var(--c-line); border-radius: var(--r-md); text-decoration: none; color: inherit; font-weight: 600; }
-.cat svg { color: var(--c-primary); flex: none; }
-.cat:hover { border-color: var(--c-primary); }
+@media (min-width: 560px) { .cat-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-3); } }
+.cat-card {
+  display: flex; flex-direction: column; height: 100%; min-height: 44px; overflow: hidden; text-decoration: none; color: inherit;
+  background: var(--c-surface); border: 1px solid var(--c-line); border-radius: var(--r-md); transition: border-color .15s, box-shadow .15s, transform .1s;
+}
+.cat-card__art {
+  display: grid; place-items: center; height: 92px; padding: var(--sp-1) var(--sp-2) 0;
+  background: linear-gradient(180deg, var(--c-info-bg), #faf7f0); /* 모든 카드 같은 연한 블루 → 아이보리 */
+}
+.cat-card__art img { display: block; width: auto; height: 84px; max-width: 100%; object-fit: contain; } /* 영역(92px − 위 여백 4px) 안에 비율 그대로 */
+.cat-card__name { flex: 1; display: flex; align-items: center; justify-content: center; text-align: center; padding: var(--sp-2) var(--sp-2) var(--sp-3); font-weight: 600; font-size: var(--fs-sm); line-height: 1.35; overflow-wrap: anywhere; }
+.cat-card:hover { border-color: var(--c-primary); box-shadow: 0 4px 12px rgba(49, 93, 168, .12); }
+.cat-card:active { transform: scale(.98); background: var(--c-info-bg); }
+.cat-card:focus-visible { outline: 3px solid var(--c-focus); outline-offset: 2px; border-color: var(--c-primary); }
+@media (prefers-reduced-motion: reduce) { .cat-card { transition: none; } .cat-card:active { transform: none; } }
 .group-opt { display: flex; flex-direction: column; gap: var(--sp-2); }
 .meter { height: 6px; border-radius: 3px; background: var(--c-line); overflow: hidden; }
 .meter > i { display: block; height: 100%; background: var(--c-primary); }

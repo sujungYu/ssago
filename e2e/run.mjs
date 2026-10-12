@@ -2146,6 +2146,93 @@ await test('요청서 오류 이동: 네트워크·처리 실패는 입력란으
   eq((await db(page)).requests.length, req0 + 1, '재시도로 한 번만 제출');
 });
 
+// ───────── 업체 찾기: 이미지 중심 카테고리 카드 ─────────
+const CAT_NAMES = ['방충망 수리·교체', '수전·샤워기·배수 부품', '문손잡이·경첩·문', '수납장·서랍 수리', '창문 부속·틈새 보수', '조명·스위치·콘센트', '커튼·블라인드·선반 설치', '생활 부속품 설치·교체', '실리콘·줄눈 보수', '기타 수리·교체·설치'];
+const CAT_FILES = ['c1-window-screen', 'c2-faucet', 'c3-door-handle', 'c4-drawer-cabinet', 'c5-window-glass', 'c6-bulb-socket', 'c7-curtain-rod', 'c8-towel-holder', 'c9-tile-sealant', 'c10-toolbox-wrench'];
+
+await test('카테고리 카드: 10개 순서·이름·개별 이미지 매핑, 장식 이미지 alt 비움·크기 지정, 카드 전체가 하나의 링크', async (page) => {
+  await start(page, { path: '/' });
+  await page.locator('a.cat-card').nth(9).waitFor();
+  await page.waitForFunction(() => [...document.querySelectorAll('.cat-card img')].every((i) => i.complete && i.naturalWidth > 0));
+  const cards = await page.locator('a.cat-card').evaluateAll((els) => els.map((a) => {
+    const img = a.querySelector('img');
+    return { href: a.getAttribute('href'), name: a.querySelector('.cat-card__name').textContent, src: img?.getAttribute('src'), alt: img?.getAttribute('alt'), w: img?.getAttribute('width'), h: img?.getAttribute('height'), nested: a.querySelectorAll('a, button').length };
+  }));
+  eq(cards.length, 10, '카드 10개');
+  cards.forEach((cd, i) => {
+    eq(cd.href, `/providers?category=c${i + 1}`, `${i + 1} 이동`);
+    eq(cd.name, CAT_NAMES[i], `${i + 1} 이름·순서`);
+    eq(cd.src, `/categories/${CAT_FILES[i]}.svg`, `${i + 1} 개별 자산`);
+    truthy(cd.alt === '' && cd.w === '160' && cd.h === '120' && cd.nested === 0, `${i + 1} alt·크기·중첩 ${JSON.stringify(cd)}`);
+  });
+  eq(new Set(cards.map((x) => x.src)).size, 10, '카드마다 다른 이미지');
+  // 접근성 이름은 카테고리명만(이미지 중복 낭독 없음)
+  eq(await page.getByRole('link', { name: '창문 부속·틈새 보수', exact: true }).count(), 1, '링크 이름 = 카테고리명');
+  // 배지·다른 클릭 요소 없음
+  eq(await page.locator('.cat-card .badge').count(), 0, '배지 없음');
+  // 공동 예약 한 줄 안내·정보 아이콘, 주소 설정 유지
+  await waitText(page, '이웃과 같은 날 예약하면 출장비를 나눠 내요.');
+  eq(await page.getByRole('button', { name: '공동 예약 이용 방법' }).count(), 1, '정보 아이콘');
+  await page.locator('.explore-address').waitFor();
+});
+
+for (const [w, cols] of [[360, 2], [390, 2], [1280, 3]]) {
+  await test(`카테고리 카드: ${w}px ${cols}열, 이미지 영역 높이 통일, 긴 이름 잘림·겹침 없음, 터치 영역`, async (page) => {
+    await page.setViewportSize({ width: w, height: 900 });
+    await start(page, { path: '/' });
+    await page.locator('a.cat-card').nth(9).waitFor();
+    await page.waitForFunction(() => [...document.querySelectorAll('.cat-card img')].every((i) => i.complete && i.naturalWidth > 0));
+    const r = await page.evaluate(() => {
+      const cards = [...document.querySelectorAll('a.cat-card')];
+      const rc = cards.map((a) => a.getBoundingClientRect());
+      const arts = cards.map((a) => Math.round(a.querySelector('.cat-card__art').getBoundingClientRect().height));
+      const imgs = cards.map((a) => { const i = a.querySelector('img').getBoundingClientRect(); const box = a.querySelector('.cat-card__art').getBoundingClientRect(); return { ratio: +(i.width / i.height).toFixed(2), inside: i.left >= box.left - .5 && i.right <= box.right + .5 && i.top >= box.top - .5 && i.bottom <= box.bottom + .5 }; });
+      const names = cards.map((a) => { const n = a.querySelector('.cat-card__name'); const cs = getComputedStyle(n); return { clip: n.scrollWidth > n.clientWidth + 1 || n.scrollHeight > n.clientHeight + 1, ellipsis: cs.textOverflow === 'ellipsis' }; });
+      return {
+        cols: new Set(rc.map((x) => Math.round(x.left))).size, arts: [...new Set(arts)], ratios: [...new Set(imgs.map((x) => x.ratio))], inside: imgs.every((x) => x.inside),
+        clipped: names.filter((x) => x.clip || x.ellipsis).length, minH: Math.min(...rc.map((x) => x.height)), maxH: Math.max(...rc.map((x) => x.height)), minW: Math.min(...rc.map((x) => x.width)),
+        overflow: document.documentElement.scrollWidth > innerWidth,
+      };
+    });
+    eq(r.cols, cols, '열 수');
+    eq(r.arts.length, 1, `이미지 영역 높이 통일 ${r.arts}`);
+    truthy(r.ratios.every((x) => Math.abs(x - 1.33) < .03) && r.inside, `이미지 비율 유지·잘림 없음 ${JSON.stringify(r)}`);
+    eq(r.clipped, 0, '이름 잘림·말줄임 없음');
+    truthy(!r.overflow, '가로 넘침 없음');
+    truthy(r.minH >= 44 && r.minW >= 44 && r.maxH <= 170, `카드 크기 ${JSON.stringify(r)}`);
+    await page.locator('.cat-grid').scrollIntoViewIfNeeded();
+    await page.screenshot({ path: join(ROOT, `e2e/screens/${w}_category_cards.png`), fullPage: true });
+  }, { width: w });
+}
+
+await test('카테고리 카드: 이미지를 불러오지 못해도 이름·영역·이동 유지 → 업체 목록에 같은 주소', async (page) => {
+  await page.route('**/categories/c5-window-glass.svg', (route) => route.abort());
+  await start(page, { path: '/' });
+  const card = page.getByRole('link', { name: '창문 부속·틈새 보수', exact: true });
+  await card.waitFor();
+  await page.waitForFunction(() => !document.querySelector('a[href="/providers?category=c5"] img'));
+  const h = await page.evaluate(() => [...document.querySelectorAll('.cat-card__art')].map((e) => Math.round(e.getBoundingClientRect().height)));
+  eq(new Set(h).size, 1, '실패한 카드도 같은 이미지 영역 높이');
+  await card.click();
+  await page.waitForURL((u) => u.pathname === '/providers' && u.searchParams.get('category') === 'c5');
+  await page.locator('.region-card').getByText('햇살마을 3단지', { exact: true }).waitFor();
+});
+
+await test('카테고리 카드: 키보드 Tab·Enter로 선택, 포커스 표시, 업체 목록 이동·주소 전달', async (page) => {
+  await start(page, { path: '/' });
+  await page.locator('a.cat-card').first().waitFor();
+  await page.locator('a.cat-card').nth(1).focus();
+  const outline = await page.locator('a.cat-card').nth(1).evaluate((el) => getComputedStyle(el).outlineStyle);
+  await page.keyboard.press('Tab');
+  eq(await page.evaluate(() => document.activeElement.getAttribute('href')), '/providers?category=c3', 'Tab으로 다음 카드');
+  await page.keyboard.press('Shift+Tab');
+  await page.keyboard.press('Enter');
+  await page.waitForURL((u) => u.pathname === '/providers' && u.searchParams.get('category') === 'c2');
+  await page.locator('.region-card').getByText('햇살마을 3단지', { exact: true }).waitFor();
+  await page.locator('ul[aria-label="업체 목록"]').waitFor();
+  truthy(outline !== 'none', `포커스 표시 ${outline}`);
+});
+
 // ───────── 탐색 주소 공유(업체 찾기 ↔ 카테고리별 업체 목록) ─────────
 const region = (page) => page.locator('.region-card');
 const regionText = async (page) => (await region(page).innerText()).replace(/\s+/g, ' ').trim();
@@ -2161,7 +2248,7 @@ await test('탐색 주소: 업체 찾기에서 고른 주소가 카테고리 목
   await pickAddress(page, '햇살마을 3단지');
   await waitText(page, '서울 가상구 햇살로 100 (햇살마을 3단지)');
   const home = await page.locator('.explore-address').innerText();
-  await page.locator('a.cat').nth(1).click();
+  await page.locator('a.cat-card').nth(1).click();
   await region(page).getByText('햇살마을 3단지', { exact: true }).waitFor();
   const t = await regionText(page);
   truthy(t.includes('현재 조회 지역') && t.includes('햇살마을 3단지') && t.includes('서울 가상구 햇살로 100 (햇살마을 3단지)'), t);
@@ -2208,7 +2295,7 @@ await test('탐색 주소: 변경 취소(뒤로)·브라우저 뒤로가기·카
   // 업체 찾기로 뒤로 → 다른 카테고리
   await page.goto(`${BASE}/`);
   await page.locator('.explore-address').getByText('푸른숲 2단지', { exact: true }).waitFor();
-  await page.locator('a.cat').nth(4).click();
+  await page.locator('a.cat-card').nth(4).click();
   await region(page).getByText('푸른숲 2단지', { exact: true }).waitFor();
   await page.goBack();
   await page.locator('.explore-address').getByText('푸른숲 2단지', { exact: true }).waitFor();
