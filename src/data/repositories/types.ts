@@ -8,6 +8,7 @@
  */
 import type { RequestListQuery } from '../../domain/requestFilter';
 export type { RequestListQuery } from '../../domain/requestFilter';
+import type { TripFeeBasis } from '../../domain/bookingCost';
 import type {
   Address, AdditionalWork, Approval, Booking, CancelCause, Category, ChangeProposal, CustomerProfile, DelayChoice,
   DelayNotice, Deduction, FinalStatement, IsoDate, IsoDateTime, MaterialOffer, ProviderDetail, ProviderSummary,
@@ -139,7 +140,8 @@ export interface BookingDetail {
   group: PublicGroup;
   groupClosed: boolean;
   groupEnded: boolean;
-  tripFee: { kind: 'expected' | 'confirmed' | 'locked'; amount: Won | null; households: number };
+  /** 내 출장비와 분담 기준(마감 후 = 마감 시 확정 세대 수) */
+  tripFee: TripFeeBasis;
   approval?: Approval;
   prepaid: PrepaidSummary;
   delay?: DelayNotice;

@@ -220,7 +220,7 @@ export function finalizeProposalAccept(db: MockDb, p: import('../../domain/types
   const free = p.origin === 'provider' || !!p.free;
   if (p.newVisit.groupId && p.newVisit.groupId !== oldGroup.id) {
     const ng = byId(db.groups, p.newVisit.groupId)!;
-    if (!oldGroup.closed) oldGroup.confirmedHouseholds = Math.max(0, oldGroup.confirmedHouseholds - 1);
+    oldGroup.confirmedHouseholds = Math.max(0, oldGroup.confirmedHouseholds - 1); // 마감 후면 확정값은 그대로, 현재 참여 세대만 줄인다
     if (!ng.closed) ng.confirmedHouseholds += 1;
     b.groupId = ng.id;
     endGroupIfEmpty(db, oldGroup);
@@ -272,8 +272,9 @@ export function cancelBookingInternal(
   booking.status = 'cancelled';
   booking.cancelledAt = db.now;
   booking.cancelCause = cause;
-  if (!g.closed) g.confirmedHouseholds = Math.max(0, g.confirmedHouseholds - 1); // 마감 전: 남은 세대 예상 출장비 재계산
-  // 마감 후에는 다른 세대의 확정 출장비를 바꾸지 않는다.
+  // 현재 참여 세대 수는 줄인다. 마감 전이면 남은 세대 예상 출장비가 재계산되고,
+  // 마감 후에는 확정 출장비(finalPerHouseholdFee)와 분담 기준(finalHouseholds)을 바꾸지 않는다.
+  g.confirmedHouseholds = Math.max(0, g.confirmedHouseholds - 1);
   for (const p of db.proposals.filter((x) => x.bookingId === booking.id && (x.status === 'requested' || x.status === 'proposed'))) {
     p.status = p.origin === 'provider' ? 'rejected' : 'withdrawn';
   }

@@ -101,6 +101,8 @@ function group(p: Partial<GroupRecord> & Pick<GroupRecord, 'id' | 'providerId' |
     slots: ['09:00–12:00', '13:00–16:00'], capacity: 5, confirmedHouseholds: 0, pendingSeats: 0,
     scopeType: p.anchorKey.startsWith('complex:') ? 'complex' : 'radius', closed: false, ended: false, finalPerHouseholdFee: null,
     ...p,
+    // 마감된 시드 그룹은 마감 시 확정 세대 수를 함께 둔다(세대별 확정 출장비의 분담 기준)
+    finalHouseholds: p.closed ? (p.finalHouseholds ?? p.confirmedHouseholds ?? 0) : null,
   };
 }
 

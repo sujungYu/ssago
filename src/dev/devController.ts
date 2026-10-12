@@ -142,6 +142,7 @@ export class DevController {
     if (!g || g.closed || g.ended) return no('이미 마감·종료된 그룹이에요.');
     g.closed = true;
     g.finalPerHouseholdFee = perHouseholdFee(g.totalTripFee, g.confirmedHouseholds);
+    g.finalHouseholds = g.confirmedHouseholds;
     for (const r of this.db.requests.filter((x) => x.groupId === g.id && x.status === 'approved_pending_payment')) {
       r.status = 'approval_expired'; r.updatedAt = this.db.now;
     }

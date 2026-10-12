@@ -581,6 +581,65 @@ await test('예약 목록·상세: 진행/이용 내역, 마감 후 확정 출�
   truthy(!/anchorKey|radius:|complex:/.test(html), '내부 기준 키 노출');
 });
 
+// ───────── 예약 금액·결제(통합 카드) ─────────
+const costCard = (page) => page.locator('.cost');
+const costText = async (page) => (await costCard(page).innerText()).replace(/\s+/g, ' ');
+
+await test('예약 금액·결제: 한 카드에서 총금액 → 결제한 금액 → 예상 추가 결제액, 중복 영역 없음', async (page) => {
+  await start(page, { path: '/bookings/bk-k4' });
+  await waitText(page, '예약 금액·결제');
+  const t = await costText(page);
+  for (const part of ['예상 작업비 40,000원', '예상 부품·자재비 5,000원', '내 확정 출장비 16,666원', '예상 총금액 61,666원', '예상 추가 결제액 11,666원', '작업 완료 후 합의된 실제 내역으로 최종 정산됩니다.']) {
+    truthy(t.includes(part), `카드에 “${part}” 없음: ${t}`);
+  }
+  truthy(/결제한 예약금 −\s?(차감 )?50,000원/.test(t), `선결제 차감 표시: ${t}`);
+  const main = await page.locator('main').innerText();
+  for (const gone of ['금액·자재', '결제·변경 기록', '최종 정산에 쓸 선결제']) truthy(!main.includes(gone), `이전 영역 남음: ${gone}`);
+  eq(await costCard(page).getByRole('button').count(), 0, '금액 카드에 결제·취소 버튼 없음');
+  truthy(!(await costCard(page).innerText()).includes('예약 취소'), '취소는 예약 관리 영역에만');
+  await page.getByRole('link', { name: '예약 취소하기' }).waitFor();
+  // 출장비 상세: 그룹 총액·세대·절감액은 펼쳤을 때만
+  eq(await page.getByText('그룹 총 출장비').isVisible(), false, '접힌 상태');
+  await costCard(page).getByText('출장비 계산 상세').click();
+  const d1 = await costText(page);
+  truthy(d1.includes('그룹 총 출장비 50,000원') && d1.includes('분담 기준 세대 수(마감 시 확정) 3세대') && d1.includes('단독 방문 대비 절감액'), `출장비 상세: ${d1}`);
+  // 결제 내역: 기존 거래 상세 화면 재사용
+  await costCard(page).getByText('결제 내역 보기').click();
+  await waitText(page, '정산에 사용 가능한 잔액');
+  await costCard(page).getByRole('link', { name: /예약금/ }).click();
+  await page.waitForURL((u) => u.pathname.startsWith('/ledger/'));
+  // 일정 변경 제안은 별도 영역에서 계속 접근 가능
+  await page.goto(`${BASE}/bookings/bk-k4`);
+  await page.getByRole('heading', { name: '일정 변경' }).waitFor();
+  await page.getByRole('link', { name: /업체 변경 제안/ }).click();
+  await page.waitForURL((u) => u.pathname === '/proposals/pr-k4');
+});
+
+await test('예약 금액·결제: 마감 전 예상 출장비 · 데이터 누락은 0원 대신 ‘확인 필요’', async (page) => {
+  await start(page, { path: '/bookings/bk-k1' });
+  await waitText(page, '현재 예상 출장비');
+  truthy((await costText(page)).includes('예상 총금액'), '마감 전 예상 총금액');
+  await patchDb(page, (d) => { d.approvals.find((a) => a.requestId === 'rq-k4').tasks[0].estimate = null; }, '/bookings/bk-k4');
+  await waitText(page, '업체가 현장 확인 후 산정해요');
+  const t = await costText(page);
+  truthy(t.includes('예상 작업비') && t.includes('확인 필요'), `누락 항목: ${t}`);
+  truthy(t.includes('예상 총금액 아직 산정되지 않았어요') && t.includes('예상 추가 결제액 아직 산정되지 않았어요'), `총액·차액 미산정: ${t}`);
+  truthy(!/(^|\s)0원/.test(t) && !t.includes('16,666원 예상 총금액 21,666원') && !t.includes('예상 총금액 21,666원'), `0원·부분합으로 대신하지 않음: ${t}`);
+});
+
+await test('예약 금액·결제: 자재 선결제·동의 필요 자재 접근, 공제 이후 잔액', async (page) => {
+  await start(page, { path: '/bookings/bk-k5' });
+  await page.getByRole('heading', { name: '자재·추가 작업' }).waitFor();
+  await page.locator('main').getByText('동의 필요').first().waitFor();
+  await page.getByRole('link', { name: /맞춤|도어|자재/ }).filter({ hasText: '납기' }).first().click();
+  await page.waitForURL((u) => u.pathname.startsWith('/materials/'));
+  // 마감 후 취소된 예약: 결제·공제·환불만, 예상 총액 없음
+  await page.goto(`${BASE}/bookings/bk-k16`);
+  await waitText(page, '취소 환불 요청 금액');
+  const t = await costText(page);
+  truthy(t.includes('이미 공제·충당된 금액') && !t.includes('예상 총금액'), `취소 예약 카드: ${t}`);
+});
+
 await test('취소(마감 후): 본인 확정 출장비 12,500원 공제 · 환불 37,500원 · 재취소 불가', async (page) => {
   await start(page, { path: '/bookings/bk-k2/cancel' });
   await waitText(page, '고객 사유 취소예요');
@@ -803,8 +862,10 @@ await test('최종 정산: 이견 접수 시 자동 확인·청구 없음', asyn
 await test('최종 정산: 이미 환불·공제된 선결제는 다시 쓰지 않는다 (취소 예약)', async (page) => {
   await start(page, { path: '/bookings/bk-k18' });
   await waitText(page, '취소된 예약이에요');
-  await waitText(page, '−42,500원', { exact: false }).catch(() => {});
+  await page.locator('.cost').getByText('결제 내역 보기').click(); // 결제·공제·환불 기록은 통합 카드의 결제 내역에서
   await waitText(page, '환불 처리 요청 접수');
+  const t = (await page.locator('.cost').innerText()).replace(/\s+/g, ' ');
+  truthy(t.includes('이미 공제·충당된 금액') && t.includes('취소 환불 요청 금액') && !t.includes('이미 환불 요청한 금액'), `공제·환불 구분 표시: ${t}`);
 });
 
 await test('이용 후: 정산 완료 건 리뷰 작성, 미정산 건은 작성 불가', async (page) => {
@@ -1122,7 +1183,7 @@ await test('접근성: 모든 입력에 이름이 있고 키보드로 대화상�
 // ───────── 반응형 ─────────
 const WIDTHS = [360, 390, 430, 768, 1280];
 const ROUTES = ['/', '/address', '/providers?category=c2', '/providers/p1', '/providers/p1/request?group=g1', '/requests', '/requests/bundle/b-sink', '/requests/rq-3', '/requests/rq-2/supplement',
-  '/requests/rq-3/approval', '/requests/rq-10/recheck', '/bookings', '/bookings/bk-k2', '/bookings/bk-k2/change', '/bookings/bk-k2/cancel', '/delays/dl-k3', '/proposals/pr-k4', '/materials/mt-1',
+  '/requests/rq-3/approval', '/requests/rq-10/recheck', '/bookings', '/bookings/bk-k2', '/bookings/bk-k4', '/bookings/bk-k5', '/bookings/bk-k16', '/bookings/bk-k2/change', '/bookings/bk-k2/cancel', '/delays/dl-k3', '/proposals/pr-k4', '/materials/mt-1',
   '/additional/aw-1', '/bookings/bk-k9/final', '/bookings/bk-k14', '/bookings/bk-k13/review', '/ledger', '/me', '/guide'];
 /** 로그아웃 상태로 확인하는 인증 화면 */
 const AUTH_ROUTES = ['/login', '/signup', '/password/reset', '/password/reset/sent', '/password/new'];

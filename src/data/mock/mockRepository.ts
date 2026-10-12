@@ -3,6 +3,7 @@ import { expectedFeeForJoiner, computeSettlement, perHouseholdFee } from '../../
 import { checkPayable } from '../../domain/rules';
 import { REQUEST_PRIORITY } from '../../domain/rules';
 import { filterRequestBundles } from '../../domain/requestFilter';
+import type { TripFeeBasis } from '../../domain/bookingCost';
 import type {
   AdditionalWork, Booking, Category, ChangeProposal, CustomerProfile, DelayNotice, FinalStatement, Address,
   ProviderDetail, ProviderSummary, RepairRequest, Review, Transaction, Won, GroupRecord,
@@ -369,11 +370,16 @@ export class MockRepository implements Repository {
   }
 
   // ───────── 예약 ─────────
-  private tripFeeOf(b: Booking): BookingListItem['tripFee'] & { households: number } {
+  /**
+   * 내 출장비와 분담 기준. 마감 후에는 마감 시 확정 세대 수(finalHouseholds) 기준이며,
+   * 마감 후 다른 세대가 취소해 현재 참여 세대가 줄어도 다시 계산하지 않는다. 변경으로 유지된 확정값은 변경 전 그룹 기준이다.
+   */
+  private tripFeeOf(b: Booking): TripFeeBasis {
     const g = this.group(b.groupId);
-    if (b.lockedTripFee !== undefined) return { kind: 'locked', amount: b.lockedTripFee, households: g.confirmedHouseholds };
-    if (g.closed) return { kind: 'confirmed', amount: g.finalPerHouseholdFee, households: g.confirmedHouseholds };
-    return { kind: 'expected', amount: perHouseholdFee(g.totalTripFee, g.confirmedHouseholds), households: g.confirmedHouseholds };
+    const currentHouseholds = g.confirmedHouseholds;
+    if (b.lockedTripFee !== undefined) return { kind: 'locked', amount: b.lockedTripFee, households: null, groupTotal: null, currentHouseholds };
+    if (g.closed) return { kind: 'confirmed', amount: g.finalPerHouseholdFee, households: g.finalHouseholds ?? null, groupTotal: g.totalTripFee, currentHouseholds };
+    return { kind: 'expected', amount: perHouseholdFee(g.totalTripFee, g.confirmedHouseholds), households: g.confirmedHouseholds, groupTotal: g.totalTripFee, currentHouseholds };
   }
 
   private attention(b: Booking): string | null {

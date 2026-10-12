@@ -211,6 +211,8 @@ export interface GroupRecord extends PublicGroup {
   closed: boolean;
   ended: boolean;
   finalPerHouseholdFee: Won | null; // 마감 시 확정된 세대별 출장비
+  /** 마감 시 확정 세대 수(분담 기준). 마감 후 취소로 confirmedHouseholds(현재 참여 세대)가 줄어도 바뀌지 않는다 */
+  finalHouseholds?: number | null;
   anchorKey: string; // 단지 ID 또는 최초 확정 예약지 기준 키 — 비공개
 }
 
