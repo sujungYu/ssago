@@ -97,7 +97,7 @@ function Body({ v, bookingId }: { v: StatementView; bookingId: string }) {
             <Button block onClick={() => setDlg(false)}>돌아가기</Button>
           </>}>
           <p>이견을 접수하면 업체와 합의하기 전까지 금액이 확정되거나 자동으로 청구되지 않아요.</p>
-          <p className="small muted">온김에는 누가 옳은지 판단하지 않아요. 먼저 {v.providerName}에 전화로 확인해 보세요.</p>
+          <p className="small muted">싸고는 누가 옳은지 판단하지 않아요. 먼저 {v.providerName}에 전화로 확인해 보세요.</p>
           <PhoneButton phone={v.providerPhone} name={v.providerName} />
           {action.error && <Banner tone="danger" title={action.error.title}>{action.error.hint}</Banner>}
         </Dialog>

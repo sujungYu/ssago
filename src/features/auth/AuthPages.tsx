@@ -6,6 +6,7 @@ import { useAction } from '../../app/hooks';
 import { emailError, newPasswordErrors, validateSignIn, validateSignUp } from '../../domain/auth';
 import { RepoError, describeError } from '../../domain/errors';
 import { Icon } from '../../components/Icon';
+import { BrandLogo } from '../../components/brand/Brand';
 import { Banner, Button, Field, LinkButton, PasswordInput } from '../../components/ui';
 
 /*
@@ -118,7 +119,7 @@ export function LoginPage() {
   return (
     <AuthLayout title="로그인">
       <div className="stack stack--sm">
-        <p className="auth__logo" aria-hidden>온김에</p>
+        <p className="auth__logo"><BrandLogo size="lg" /></p>
         <p className="muted small">이웃과 같은 날 부르고, 출장비는 함께 나눠요</p>
       </div>
       <AuthModeNotice demoText="Supabase 연결 전 임시 로그인이에요. 처음 입력한 이메일은 데모 계정이 바로 만들어져 로그인되고, 이 브라우저에만 저장돼요. 실제로 쓰는 비밀번호는 입력하지 마세요." />
@@ -172,6 +173,7 @@ export function SignUpPage() {
 
   return (
     <AuthLayout title="회원가입" back="/login">
+      <p className="auth__logo"><BrandLogo size="lg" /></p>
       <Heading title="이메일로 가입하기">주소는 수리를 요청할 때 입력해요.</Heading>
       <AuthModeNotice />
       <form ref={formRef} className="stack" noValidate onSubmit={submit} aria-label="회원가입">

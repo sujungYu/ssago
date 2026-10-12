@@ -1,6 +1,6 @@
-# 온김에 — 사용자 화면 (1차: 목업 데이터)
+# 싸고 — 사용자 화면 (1차: 목업 데이터)
 
-가까운 이웃과 같은 업체·같은 날 방문을 예약하고 출장비를 확정 세대 수로 나누는 생활 수리 공동 예약 서비스의 **고객용 웹 화면**입니다.
+**싸고**(싸게 고치고, 이전 서비스명 ‘온김에’)는 가까운 이웃과 같은 업체·같은 날 방문을 예약하고 출장비를 확정 세대 수로 나누는 생활 수리 공동 예약 서비스입니다. 이 저장소는 그 **고객용 웹 화면**입니다. 저장소·폴더명(`on-gimae`)과 DB·인증·배포 식별자는 이전 이름을 그대로 씁니다.
 **로그인·회원가입은 Supabase Auth에 실제로 연결**하고, 예약·업체·작업·결제·환불·알림·주소 검색 데이터는 **목업(모의)**입니다. 업체·운영자 화면은 범위 밖입니다.
 앱은 로그인 후에만 이용할 수 있습니다(비로그인 → 로그인 화면). Supabase 환경 값이 없으면 빌드·실행은 되지만 “로그인 서버 연결이 설정되지 않았어요”를 안내하고 로그인할 수 없습니다.
 
@@ -33,6 +33,8 @@ e2e의 인증 흐름은 **실제 Supabase 프로젝트가 아니라 브라우저
 | `src/data/repositories/auth.ts` | **인증 계약**(`AuthRepository`) |
 | `src/data/auth/` | Supabase 클라이언트(`supabaseClient.ts`)와 Supabase Auth 구현(`supabaseAuthRepository.ts`) |
 | `src/components/`, `src/styles/` | 디자인 토큰과 공통 컴포넌트 |
+| `src/components/brand/` | 브랜드: 심볼·로고(`Brand.tsx`), 심볼 형태 값(`marks.ts`), 공동 방문 일러스트(`CoopVisitIllustration.tsx`) |
+| `public/favicon.svg`, `public/brand/` | 파비콘(단순형 심볼), 앱 아이콘 원본(`app-icon.svg`), 투명 배경 심볼 SVG |
 | `src/features/*` | 화면(IA의 C-01~C-25, S-01~S-05). 로그인·회원가입·비밀번호 재설정은 `features/auth/AuthPages.tsx` |
 | `src/dev/` | 시나리오 도구 — `import.meta.env.DEV` 또는 `VITE_ENABLE_DEV_TOOLS=true`일 때만 lazy 로드 |
 

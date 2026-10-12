@@ -8,7 +8,7 @@
   display: flex; align-items: center; gap: var(--sp-1);
 }
 .app-header__title { flex: 1; min-width: 0; font-size: var(--fs-lg); font-weight: 700; padding: 0 var(--sp-2); }
-.app-header__brand { font-weight: 800; color: var(--c-primary); font-size: var(--fs-lg); padding: 0 var(--sp-3); text-decoration: none; }
+.app-header__brand { display: inline-flex; align-items: center; min-height: 44px; padding: 0 var(--sp-2); border-radius: var(--r-sm); color: var(--c-primary); text-decoration: none; flex: none; }
 .icon-btn { width: 44px; height: 44px; border: 0; background: transparent; border-radius: var(--r-sm); display: grid; place-items: center; color: var(--c-text); text-decoration: none; }
 .icon-btn:hover { background: var(--c-neutral-bg); }
 .top-nav { display: none; gap: var(--sp-1); margin-left: auto; }
@@ -142,8 +142,9 @@ a.list-row:hover { background: #fafbfd; }
 .money { white-space: nowrap; font-variant-numeric: tabular-nums; }
 .money--neg { color: var(--c-danger); }
 
-/* ───────── 가이드 카드 ("온김에 공동 예약이란?") ───────── */
+/* ───────── 가이드 카드 ("싸고 공동 예약이란?") ───────── */
 .guide { background: var(--c-info-bg); border-radius: var(--r-lg); padding: var(--sp-4); }
+.guide__art { display: block; width: 100%; max-width: 248px; height: auto; margin: 0 auto var(--sp-3); }
 .guide__title { display: flex; align-items: center; gap: var(--sp-2); }
 .guide__title svg { flex: none; color: var(--c-primary); }
 .guide__body { margin-top: var(--sp-2); color: var(--c-text); }
@@ -206,7 +207,7 @@ a.list-row:hover { background: #fafbfd; }
 
 /* ───────── 인증 화면 ───────── */
 .auth { width: 100%; max-width: 420px; margin: 0 auto; }
-.auth__logo { margin: 0; font-size: var(--fs-2xl); font-weight: 800; color: var(--c-primary); letter-spacing: -0.02em; }
+.auth__logo { margin: 0; color: var(--c-primary); }
 .auth__links { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: var(--sp-1) var(--sp-2); font-size: var(--fs-sm); color: var(--c-text-2); }
 .auth__links a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 var(--sp-2); font-weight: 600; }
 .auth__icon { width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center; background: var(--c-info-bg); color: var(--c-primary); }
@@ -220,3 +221,16 @@ a.list-row:hover { background: #fafbfd; }
 .boot { min-height: 100dvh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--sp-5); padding: var(--sp-6) var(--sp-4); text-align: center; }
 .boot__body { width: 100%; max-width: 420px; align-items: center; }
 .boot .btn__spin { width: 28px; height: 28px; border-width: 3px; color: var(--c-primary); }
+
+/* ───────── 브랜드 (심볼 + ‘싸고’) ───────── */
+.brand { display: inline-flex; align-items: center; color: var(--c-primary); line-height: 1; }
+.brand-symbol { flex: none; display: block; }
+.brand__text { display: flex; flex-direction: column; }
+.brand__name { font-weight: 800; letter-spacing: -0.02em; }
+.brand__tagline { font-weight: 600; color: var(--c-text-2); letter-spacing: -0.01em; }
+.brand--sm { gap: 6px; }
+.brand--sm .brand__name { font-size: 20px; }
+.brand--lg { gap: 10px; }
+.brand--lg .brand__text { gap: 4px; }
+.brand--lg .brand__name { font-size: 28px; }
+.brand--lg .brand__tagline { font-size: var(--fs-sm); }

@@ -4,6 +4,7 @@ import type { AuthRepository, AuthSession } from '../data/repositories/auth';
 import { describeError } from '../domain/errors';
 import { Banner, Button } from '../components/ui';
 import { Icon } from '../components/Icon';
+import { BrandLogo } from '../components/brand/Brand';
 
 /**
  * 인증 주입 지점과 화면용 로그인 상태.
@@ -77,7 +78,7 @@ export function AuthProvider({ auth, onAccount, children }: { auth: AuthReposito
 function BootScreen({ children }: { children: ReactNode }) {
   return (
     <main className="boot" aria-busy="true" aria-live="polite">
-      <h1 className="auth__logo">온김에</h1>
+      <h1 className="auth__logo"><BrandLogo size="lg" /></h1>
       <div className="stack boot__body">{children}</div>
     </main>
   );

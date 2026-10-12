@@ -33,7 +33,7 @@ export function HomePage() {
         )}
       </Section>
 
-      <GuideCard />
+      <GuideCard illustrated />
 
       <Section title="어떤 수리가 필요하세요?">
         <AsyncView state={cats} loading={<Skeleton h={60} n={5} />}>

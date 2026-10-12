@@ -168,7 +168,7 @@ const txt = (page, t, o = {}) => page.getByText(t, { exact: false, ...o }).first
 const waitText = (page, t, o) => txt(page, t, o).waitFor();
 
 // ═════════ 점검 ═════════
-console.log('\n온김에 사용자 화면 e2e\n');
+console.log('\n싸고 사용자 화면 e2e\n');
 
 await test('탐색: 주소 설정 → 카테고리 → 업체 목록(공동 예약 표시) → 업체 상세', async (page) => {
   await start(page, { address: null });
@@ -654,7 +654,7 @@ await test('인증: 회원가입 → 가입 완료 → 로그인 화면 → 로�
   await field(page, '비밀번호').fill('newpass-01');
   await field(page, '비밀번호').press('Enter'); // Enter 제출
   await waitPath(page, '/');
-  await waitText(page, '온김에 공동 예약이란?');
+  await waitText(page, '싸고 공동 예약이란?');
   truthy(!(await storageDump(page)).includes('newpass-01'), '브라우저 저장소에 비밀번호가 남음');
 });
 
@@ -725,7 +725,7 @@ await test('인증: 새로고침해도 세션 유지, 세션이 무효면 로그
   await signInUi(page, E2E_USER);
   await waitPath(page, '/');
   await page.reload();
-  await waitText(page, '온김에 공동 예약이란?');
+  await waitText(page, '싸고 공동 예약이란?');
   eq(pathOf(page), '/', '새로고침 후 위치');
   await page.goto(`${BASE}/bookings/bk-k2`);
   await waitText(page, '예약 상세').catch(() => {});
@@ -741,7 +741,7 @@ await test('인증: 시작할 때 네트워크가 끊겨도 저장된 세션으�
   await start(page, { path: '/' });
   page.fake.offline = true;
   await page.reload();
-  await waitText(page, '온김에 공동 예약이란?');
+  await waitText(page, '싸고 공동 예약이란?');
   eq(pathOf(page), '/', '오프라인 시작 위치');
 });
 
@@ -927,10 +927,10 @@ if (!only || '데모 로그인'.includes(only) || only.includes('데모')) {
     await f('비밀번호').fill('demo-pass-1');
     await page.getByRole('button', { name: '로그인', exact: true }).click();
     await page.waitForURL((u) => u.pathname === '/');
-    await waitText(page, '온김에 공동 예약이란?');
+    await waitText(page, '싸고 공동 예약이란?');
     truthy(!(await page.evaluate(() => JSON.stringify({ ...localStorage }))).includes('demo-pass-1'), '비밀번호 원문 저장');
     await page.reload();
-    await waitText(page, '온김에 공동 예약이란?');
+    await waitText(page, '싸고 공동 예약이란?');
     await page.goto(`${DEMO_BASE}/me`);
     await waitText(page, 'first-time@ongimae.test');
     await page.getByRole('button', { name: '로그아웃' }).click();

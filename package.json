@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "온김에 — 생활 수리 공동 예약 서비스 사용자 웹 (1차: 목업 데이터)",
+  "description": "싸고(싸게 고치고) — 생활 수리 공동 예약 서비스 사용자 웹 (1차: 목업 데이터)",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",

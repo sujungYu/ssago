@@ -4,6 +4,7 @@ import { describeError } from '../domain/errors';
 import { formatWon } from '../domain/money';
 import type { Tone } from '../domain/rules';
 import { Icon } from './Icon';
+import { CoopVisitIllustration } from './brand/CoopVisitIllustration';
 import type { AsyncState } from '../app/hooks';
 
 // ───────── 버튼 ─────────
@@ -190,11 +191,12 @@ export function Dialog({ title, onClose, children, actions }: { title: string; o
   );
 }
 
-// ───────── 온김에 공동 예약이란? ─────────
-export function GuideCard() {
+// ───────── 싸고 공동 예약이란? ─────────
+export function GuideCard({ illustrated }: { /** 공동 방문 일러스트 표시(업체 찾기에서만) */ illustrated?: boolean }) {
   return (
     <section className="guide" aria-labelledby="guide-t">
-      <h2 className="guide__title" id="guide-t" style={{ fontSize: 'var(--fs-md)' }}><Icon name="users" size={22} />온김에 공동 예약이란?</h2>
+      {illustrated && <CoopVisitIllustration className="guide__art" />}
+      <h2 className="guide__title" id="guide-t" style={{ fontSize: 'var(--fs-md)' }}><Icon name="users" size={22} />싸고 공동 예약이란?</h2>
       <p className="guide__body small">같은 업체를 같은 날 가까운 이웃과 함께 예약하면, 업체의 출장비를 확정된 세대 수만큼 나눠 내요.</p>
       <ol className="guide__steps">
         <li className="guide__step"><b>1</b><span>참여할 수 있는 공동 날짜를 골라 요청해요</span></li>

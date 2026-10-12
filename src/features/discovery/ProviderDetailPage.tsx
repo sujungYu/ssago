@@ -99,7 +99,7 @@ function Body({ p, addressId, now }: { p: ProviderDetail; addressId: string | nu
           <p className="xs muted">연락은 전화로 해요. 앱 안 채팅은 제공하지 않아요.</p>
           <h3>업체가 제시하는 사후 처리 조건</h3>
           <ul className="stack--sm stack">{p.afterServiceTerms.map((t) => <li key={t} className="small">· {t}</li>)}</ul>
-          <p className="xs muted">위 조건은 업체가 직접 안내하는 내용이에요. 온김에가 공통 사후 보증(A/S)을 제공하는 것은 아니에요.</p>
+          <p className="xs muted">위 조건은 업체가 직접 안내하는 내용이에요. 싸고가 공통 사후 보증(A/S)을 제공하는 것은 아니에요.</p>
         </div>
       </Section>
 

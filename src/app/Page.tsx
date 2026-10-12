@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { Icon } from '../components/Icon';
+import { BrandLogo } from '../components/brand/Brand';
 import { Banner } from '../components/ui';
 
 const TABS = [
@@ -26,9 +27,9 @@ export function Page({ title, back, tabs, focus, children }: { title: string; ba
           ) : back ? (
             <Link to={back} className="icon-btn" aria-label="뒤로 가기"><Icon name="back" /></Link>
           ) : focus ? (
-            <span className="app-header__brand">온김에</span>
+            <span className="app-header__brand"><BrandLogo /></span>
           ) : (
-            <Link to="/" className="app-header__brand" aria-label="온김에 홈">온김에</Link>
+            <Link to="/" className="app-header__brand" aria-label="싸고 홈"><BrandLogo /></Link>
           )}
           {back && <h1 className="app-header__title" style={{ fontSize: 'var(--fs-lg)' }}>{title}</h1>}
           {!back && <h1 className="sr-only">{title}</h1>}
