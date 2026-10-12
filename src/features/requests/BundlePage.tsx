@@ -63,8 +63,8 @@ function ResponseCard({ d, now }: { d: RequestDetail; now: string }) {
       <article className="card stack--sm stack resp-card" aria-label={`${d.provider.name} 응답`}>
         {head}
         {ap && <KV rows={[{ k: '방문 예정', v: <VisitText date={ap.visitDate} time={ap.visitTime} /> }]} />}
-        <p className="small muted">예약금 결제로 예약이 확정됐어요.</p>
-        <LinkButton to={r.bookingId ? `/bookings/${r.bookingId}` : `/requests/${r.id}`} variant="secondary" block>{r.bookingId ? '예약 상세 보기' : '요청 상세 보기'}</LinkButton>
+        <p className="small muted">예약 완료 · 일정·작업·정산은 내 예약에서 관리해요.</p>
+        <LinkButton to={r.bookingId ? `/bookings/${r.bookingId}` : `/requests/${r.id}`} variant="secondary" block>{r.bookingId ? '예약 보기' : '요청 상세 보기'}</LinkButton>
       </article>
     );
   }

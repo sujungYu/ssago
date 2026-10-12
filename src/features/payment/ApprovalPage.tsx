@@ -10,6 +10,8 @@ import type { ApprovalView } from '../../data/repositories/types';
 import { AsyncView, Banner, Button, KV, LinkButton, MockPayNotice, Section } from '../../components/ui';
 import { PAYMENT_STATUS, VisitText, slotsText } from '../shared';
 import { DURATION_NOTE } from '../../domain/visitTime';
+import { progressOfRequest, unlessComplete } from '../../domain/progressStep';
+import { ProgressSteps } from '../../components/ProgressSteps';
 
 function Panel({ v, reload }: { v: ApprovalView; reload: () => void }) {
   const repo = useRepo();
@@ -42,7 +44,10 @@ function Panel({ v, reload }: { v: ApprovalView; reload: () => void }) {
   const pay = () => void action.run(async () => {
     try {
       const res = await repo.simulateDepositPayment({ requestId: v.request.id, approvalVersion: ap.version, consentedRecheck: rc ? true : undefined, idempotencyKey: attempt.get() });
-      nav(`/pay/${res.tx.id}`, { replace: true });
+      // 결제 성공과 예약 생성이 모두 확인되면 그 예약 상세로(이 화면 기록은 교체해 뒤로가기로 결제 화면이 다시 열리지 않게 한다).
+      // 실패·처리 중·결과 확인 중이거나 예약을 아직 확인하지 못하면 결제 결과 화면에서 상태를 확인한다(재결제 유도 없음).
+      if (res.tx.status === 'success' && res.bookingId) nav(`/bookings/${res.bookingId}`, { replace: true, state: { flash: '예약이 확정됐어요' } });
+      else nav(`/pay/${res.tx.id}`, { replace: true });
     } catch (e) {
       const code = (e as { code?: string }).code;
       if (code === 'version_changed' || code === 'recheck_required' || code === 'group_closed' || code === 'payment_expired') reload();
@@ -148,7 +153,8 @@ export function ApprovalPage({ mode }: { mode: 'approval' | 'recheck' }) {
   const repo = useRepo();
   const q = useAsync(() => repo.getApproval(id), [repo, id]);
   return (
-    <Page title={mode === 'recheck' ? '새 예약 조건 확인' : '승인 내용 확인'} back={`/requests/${id}`}>
+    <Page title={mode === 'recheck' ? '새 예약 조건 확인' : '승인 내용 확인'} back={`/requests/${id}`}
+      progress={q.data && <ProgressSteps progress={unlessComplete(progressOfRequest(q.data.request.status, { inFlight: !!q.data.inFlightPayment }))} />}>
       <AsyncView state={q}>
         {(v) => {
           const hasRc = !!v.approval.recheck && v.request.status === 'approved_pending_payment';

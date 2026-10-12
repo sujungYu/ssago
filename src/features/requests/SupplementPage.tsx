@@ -5,6 +5,8 @@ import { useRepo } from '../../app/context';
 import { useAction, useAsync, useAttemptKey } from '../../app/hooks';
 import { Icon } from '../../components/Icon';
 import { AsyncView, Banner, Button, Field } from '../../components/ui';
+import { progressOfRequest, unlessComplete } from '../../domain/progressStep';
+import { ProgressSteps } from '../../components/ProgressSteps';
 
 /** C-09 요청서 보완 */
 export function SupplementPage() {
@@ -18,7 +20,7 @@ export function SupplementPage() {
   const [photos, setPhotos] = useState<string[]>([]);
   const [touched, setTouched] = useState(false);
   return (
-    <Page title="요청서 보완" back={`/requests/${id}`}>
+    <Page title="요청서 보완" back={`/requests/${id}`} progress={q.data && <ProgressSteps progress={unlessComplete(progressOfRequest(q.data.request.status))} />}>
       <AsyncView state={q}>
         {(d) => d.request.status !== 'needs_info' || !d.request.infoRequest ? (
           <Banner tone="info" title="지금은 보완할 내용이 없어요">업체가 추가 정보를 요청하면 이 화면에서 보완할 수 있어요.</Banner>

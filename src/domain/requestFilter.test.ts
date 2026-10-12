@@ -97,7 +97,7 @@ describe('상태 그룹 필터(단일 선택)', () => {
     const all = Object.values(STATUS_GROUP_STATUSES).flat();
     expect([...all].sort()).toEqual(Object.keys(REQUEST_STATUS).sort());
     expect(new Set(all).size).toBe(all.length);
-    expect(STATUS_GROUP_OPTIONS.map((o) => o.label)).toEqual(['전체', '결제 대기', '추가 정보 필요', '업체 검토 중', '예약 확정', '종료']);
+    expect(STATUS_GROUP_OPTIONS.map((o) => o.label)).toEqual(['전체', '결제 대기', '추가 정보 필요', '업체 검토 중', '예약 완료', '종료']);
   });
   it('접수일 단독 · 상태 단독 · 두 조건 AND(묶음 안 업체별 접수일이 달라도 업체별 요청 기준)', () => {
     // 최근 7일(10-07~10-13): b-new 안에서 rq-1(10-12)만, rq-2(10-05)는 숨김

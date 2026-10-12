@@ -55,7 +55,7 @@ export const STATUS_GROUP_OPTIONS: { value: StatusGroup; label: string }[] = [
   { value: 'payment_pending', label: '결제 대기' },
   { value: 'needs_info', label: '추가 정보 필요' },
   { value: 'reviewing', label: '업체 검토 중' },
-  { value: 'booked', label: '예약 확정' },
+  { value: 'booked', label: '예약 완료' },
   { value: 'ended', label: '종료' },
 ];
 const isStatusGroup = (s: string | null): s is StatusGroup => STATUS_GROUP_OPTIONS.some((o) => o.value === s);

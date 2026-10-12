@@ -10,6 +10,8 @@ import { Icon } from '../../components/Icon';
 import { AsyncView, Banner, Button, Dialog, KV, LinkButton, PhoneButton, Section } from '../../components/ui';
 import type { RequestDetail } from '../../data/repositories/types';
 import { RequestBadge } from './RequestsPage';
+import { progressOfRequest, unlessComplete } from '../../domain/progressStep';
+import { ProgressSteps } from '../../components/ProgressSteps';
 import { VisitAddressText, VisitText, slotsText } from '../shared';
 import { DURATION_NOTE } from '../../domain/visitTime';
 
@@ -54,8 +56,14 @@ function Body({ d, now }: { d: RequestDetail; now: string }) {
           <p className="xs muted">승인만으로는 예약이 확정되지 않아요. 결제 기한 안에 예약금을 결제하면 업체가 제안한 방문 시각으로 확정돼요. 방문 시각은 도착 예정 시각이며, {DURATION_NOTE}</p>
         </div>
       )}
-      {r.status === 'booked' && r.bookingId && (
-        <LinkButton to={`/bookings/${r.bookingId}`} variant="primary" block>예약 상세 보기</LinkButton>
+      {r.status === 'booked' && (
+        <div className="card stack--sm stack done-summary" role="status">
+          <p className="strong"><span className="done-summary__mark" aria-hidden>✓</span> 예약 완료 · 요청 과정이 끝났어요</p>
+          <p className="small muted">예약금 결제로 예약이 확정됐어요. 일정 변경·취소·작업·정산은 내 예약에서 관리해요.</p>
+          {r.bookingId
+            ? <LinkButton to={`/bookings/${r.bookingId}`} variant="primary" block>예약 보기</LinkButton>
+            : <LinkButton to="/bookings" variant="primary" block>내 예약에서 확인하기</LinkButton>}
+        </div>
       )}
 
       <Section title="업체 연락">
@@ -136,7 +144,7 @@ export function RequestDetailPage() {
   const repo = useRepo();
   const q = useAsync(() => repo.getRequest(id), [repo, id]);
   return (
-    <Page title="요청 상세" back="/requests">
+    <Page title="요청 상세" back="/requests" progress={q.data && <ProgressSteps progress={unlessComplete(progressOfRequest(q.data.request.status))} />}>
       <AsyncView state={q}>{(d) => <Body d={d} now={repo.now()} />}</AsyncView>
     </Page>
   );

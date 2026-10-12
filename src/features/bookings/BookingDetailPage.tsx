@@ -2,6 +2,8 @@ import { Link, useParams } from 'react-router-dom';
 import { Page } from '../../app/Page';
 import { useRepo } from '../../app/context';
 import { useAsync } from '../../app/hooks';
+import { progressOfBooking } from '../../domain/progressStep';
+import { ProgressSteps } from '../../components/ProgressSteps';
 import { formatDate, formatDateTime } from '../../domain/time';
 import { formatWon } from '../../domain/money';
 import { Icon } from '../../components/Icon';
@@ -199,7 +201,7 @@ export function BookingDetailPage() {
   const repo = useRepo();
   const q = useAsync(() => repo.getBooking(id), [repo, id]);
   return (
-    <Page title="예약 상세" back="/bookings">
+    <Page title="예약 상세" back="/bookings" progress={q.data && <ProgressSteps progress={progressOfBooking(q.data.booking)} />}>
       <AsyncView state={q}>{(d) => <Body d={d} />}</AsyncView>
     </Page>
   );

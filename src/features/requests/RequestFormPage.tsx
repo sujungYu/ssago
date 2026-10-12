@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useBackTo } from '../../app/backNav';
 import { describeError } from '../../domain/errors';
+import { FORM_PROGRESS } from '../../domain/progressStep';
+import { ProgressSteps } from '../../components/ProgressSteps';
 import { ActionBar, Page } from '../../app/Page';
 import { useAppState, useRepo } from '../../app/context';
 import { useAction, useAsync, useAttemptKey } from '../../app/hooks';
@@ -90,7 +92,7 @@ export function RequestFormPage() {
   const onBack = useBackTo(providerPath, providerMissing || !id ? '/' : providerPath);
 
   return (
-    <Page title="수리 요청서" onBack={onBack}>
+    <Page title="수리 요청서" onBack={onBack} progress={providerMissing ? null : <ProgressSteps progress={FORM_PROGRESS} />}>
       {providerMissing ? (
         <EmptyState icon="tool" title="업체 정보를 찾을 수 없어요" action={<LinkButton to="/" variant="primary">업체 찾기로 가기</LinkButton>}>
           주소가 잘못됐거나 더 이상 제공되지 않는 업체예요. 업체 찾기에서 다시 골라 주세요.

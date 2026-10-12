@@ -61,7 +61,7 @@ export const REQUEST_STATUS: Record<RequestStatus, { label: string; tone: Tone; 
   withdrawn: { label: '철회', tone: 'neutral', hint: '직접 철회한 요청이에요. 취소수수료는 없어요.' },
   approval_expired: { label: '승인 만료', tone: 'warn', hint: '결제 기한이 지나 예약이 확정되지 않았어요. 취소수수료는 없어요.' },
   closed_other_booking: { label: '다른 업체 예약으로 종료', tone: 'neutral', hint: '같은 작업으로 다른 업체 예약이 확정되어 종료됐어요.' },
-  booked: { label: '예약 확정', tone: 'success', hint: '예약금 결제가 완료되어 예약이 확정됐어요.' },
+  booked: { label: '예약 완료', tone: 'success', hint: '예약금 결제로 요청 과정이 끝났어요. 일정·작업·정산은 내 예약에서 관리해요.' },
 };
 
 /** 요청 목록에서 사용자가 먼저 봐야 하는 순서 */

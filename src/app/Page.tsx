@@ -15,8 +15,9 @@ const TABS = [
 /**
  * back: 'history'면 기록에서 한 칸 뒤로(없으면 업체 찾기), 경로 문자열이면 그 화면으로 이동하는 링크.
  * onBack을 주면 화면이 직접 정한 뒤로가기(예: 출발 화면으로 한 번만 돌아가기, useBackTo)를 쓴다.
+ * progress: 수리 요청 → 예약 확정 진행 표시(ProgressSteps). 헤더 아래·본문 위에 둔다.
  */
-export function Page({ title, back, onBack, tabs, children }: { title: string; back?: string; onBack?: () => void; tabs?: boolean; children: ReactNode }) {
+export function Page({ title, back, onBack, tabs, progress, children }: { title: string; back?: string; onBack?: () => void; tabs?: boolean; progress?: ReactNode; children: ReactNode }) {
   const loc = useLocation();
   const nav = useNavigate();
   const notice = (loc.state as { notice?: string } | null)?.notice;
@@ -44,6 +45,7 @@ export function Page({ title, back, onBack, tabs, children }: { title: string; b
       </header>
       <main id="main" className={`main${tabs ? ' main--tabs' : ''}`}>
         <div className="stack stack--lg">
+          {progress}
           {notice && <Banner tone="warn" title="알림 이후 내용이 바뀌었어요">{notice}</Banner>}
           {sent && <Banner tone="success" title={sent} />}
           {children}

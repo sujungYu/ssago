@@ -681,7 +681,7 @@ await test('요청 필터: 캡슐 버튼 [요청 상태][접수일] 순서·높�
   eq(await page.getByRole('button', { name: /초기화/ }).count(), 0, '초기화 버튼 없음');
 });
 
-await test('요청 필터: 상태 그룹 단일 선택(결제 대기·추가 정보 필요·업체 검토 중·예약 확정·종료) · 전체로 그 조건만 해제', async (page) => {
+await test('요청 필터: 상태 그룹 단일 선택(결제 대기·추가 정보 필요·업체 검토 중·예약 완료·종료) · 전체로 그 조건만 해제', async (page) => {
   await start(page, { path: '/requests' });
   await waitText(page, '업체 승인 완료 · 결제 대기');
   const total = await cards(page).count();
@@ -700,7 +700,7 @@ await test('요청 필터: 상태 그룹 단일 선택(결제 대기·추가 정
   await expectGroup('결제 대기', 'payment_pending', ['업체 승인 완료 · 결제 대기']);
   await expectGroup('추가 정보 필요', 'needs_info', ['추가 정보 필요']);
   await expectGroup('업체 검토 중', 'reviewing', ['업체 검토 중']);
-  await expectGroup('예약 확정', 'booked', ['예약 확정']);
+  await expectGroup('예약 완료', 'booked', ['예약 완료']);
   const ended = await expectGroup('종료', 'ended', ENDED);
   truthy(new Set(ended).size >= 3, `종료에 구체 상태가 그대로 보임: ${ended}`);
   // 접수일과 함께 적용한 뒤 상태만 ‘전체’로 → 접수일은 유지
@@ -742,7 +742,7 @@ await test('요청 필터: 접수일 직접 선택(오류·경계) + 상태 AND 
   truthy(labels.length === 2 && labels.every((t) => t.includes('요청 접수일 2026.10.12')), '모두 10-12 접수');
   // 적용 전에 닫으면 기존 조건 유지(편집값 ≠ 적용값)
   await statusBtn(page).click();
-  await page.getByRole('dialog', { name: '요청 상태' }).getByRole('radio', { name: /^예약 확정/ }).check();
+  await page.getByRole('dialog', { name: '요청 상태' }).getByRole('radio', { name: /^예약 완료/ }).check();
   await page.keyboard.press('Escape');
   await statusBtn(page).filter({ hasText: '요청 상태' }).waitFor();
   eq(search(page).includes('status'), false, '닫으면 적용 안 됨');
@@ -850,7 +850,7 @@ await test('요청 필터: 목록 위치 유지(상세 → 뒤로) · 필터 변
   truthy(Math.abs(back - y) < 40, `복귀 위치 ${back} / 이전 ${y}`);
   await statusBtn(page).scrollIntoViewIfNeeded();
   await page.evaluate(() => window.scrollTo(0, 200));
-  await pickStatus(page, '예약 확정');
+  await pickStatus(page, '예약 완료');
   await page.waitForTimeout(200);
   eq(await page.evaluate(() => window.scrollY), 0, '필터 변경 시 목록 처음으로');
 });
@@ -910,7 +910,8 @@ await test('결제: 승인 조건 → 동의 → 모의 결제 → 예약 확정
   eq(d.requests.find((r) => r.id === 'rq-3').status, 'booked', '요청 상태');
   eq(d.requests.find((r) => r.id === 'rq-4').status, 'closed_other_booking', '같은 묶음의 다른 업체 요청');
   eq(d.bookings.filter((b) => b.requestId === 'rq-3').length, 1, '예약 수');
-  await page.getByRole('link', { name: '예약 상세 보기' }).click();
+  // 결제 성공·예약 생성 확인 → 그 예약 상세로 바로 이동
+  await page.waitForURL((u) => u.pathname === `/bookings/${d.requests.find((r) => r.id === 'rq-3').bookingId}`);
   await waitText(page, '방문 예정');
 });
 
@@ -1721,12 +1722,12 @@ await test('비교 요청: 상태 필터(결제 대기·추가 정보 필요·�
   await respCards(page).first().waitFor();
   truthy((await bundleTitle(page).innerText()).startsWith('업체별 응답 · ') && !(await bundleTitle(page).innerText()).includes('중'), '다른 묶음은 전체');
   eq(new URL(page.url()).search, '', '다른 묶음 URL에 필터 없음');
-  // 예약 확정 요청은 전체에서 보이고 종료로 분류되지 않는다
-  const booked = page.locator('.resp-card').filter({ hasText: '예약 확정' });
-  eq(await booked.getByRole('link', { name: '예약 상세 보기' }).count(), 1, '예약 확정 → 예약 상세');
+  // 예약 완료 요청은 전체에서 보이고 종료로 분류되지 않는다
+  const booked = page.locator('.resp-card').filter({ hasText: '예약 완료' });
+  eq(await booked.getByRole('link', { name: '예약 보기' }).count(), 1, '예약 완료 → 예약 보기');
   eq(await booked.getByRole('link', { name: '상세 조건 보기' }).count(), 0, '예약 확정에 결제 버튼 없음');
   await pickBundleStatus(page, '종료');
-  eq(await page.locator('.resp-card').filter({ hasText: '예약 확정' }).count(), 0, '예약 확정은 종료에 없음');
+  eq(await page.locator('.resp-card').filter({ hasText: '예약 완료' }).count(), 0, '예약 완료는 종료에 없음');
 });
 
 await test('비교 요청: 예상 총금액 = 승인 조건 화면 예상 총액, 견적 누락 시 금액 확인 필요(0원 대체 없음)', async (page) => {
@@ -1797,8 +1798,219 @@ await test('비교 요청: 한 업체 결제 → 같은 작업의 다른 업체 
   await page.goto(`${BASE}/requests/bundle/b-sink`);
   await respCards(page).first().waitFor();
   truthy((await respCard(page, '새봄수리').innerText()).includes('같은 작업을 다른 업체로 예약해 종료됐어요.'), '다른 업체 요청 종료');
-  eq(await respCard(page, '한빛설비').getByRole('link', { name: '예약 상세 보기' }).count(), 1, '예약 확정 카드');
+  eq(await respCard(page, '한빛설비').getByRole('link', { name: '예약 보기' }).count(), 1, '예약 완료 카드');
 });
+
+// ───────── 진행 단계 표시(내 요청 3단계 · 내 예약 3단계) ─────────
+/** 진행 표시 상태: 없으면 null. flow = request|booking, current = aria-current 단계 전체 라벨, done = 완료 단계, note = 보조 안내 */
+const stepState = async (page) => {
+  await page.waitForTimeout(80);
+  return page.evaluate(() => {
+    const navs = [...document.querySelectorAll('nav.steps')];
+    if (!navs.length) return null;
+    const nav = navs[0];
+    const items = [...nav.querySelectorAll('li')];
+    const label = (li) => li.querySelector('.steps__label--full').textContent;
+    return {
+      count: navs.length, flow: nav.dataset.flow, total: items.length,
+      current: items.filter((li) => li.getAttribute('aria-current') === 'step').map(label).join(','),
+      done: items.filter((li) => li.classList.contains('steps__item--done')).map(label),
+      note: nav.querySelector('.steps__note')?.textContent ?? null,
+    };
+  });
+};
+const expectStep = async (page, flow, current, doneCount, noteIncludes, label) => {
+  await page.locator(`nav.steps[data-flow="${flow}"]`).waitFor();
+  const st = await stepState(page);
+  eq(st.count, 1, `${label}: 진행 표시 하나`);
+  eq(st.flow, flow, `${label}: 과정`);
+  eq(st.total, 3, `${label}: 3단계`);
+  eq(st.current, current, `${label}: 현재 단계`);
+  eq(st.done.length, doneCount, `${label}: 완료 단계 수`);
+  if (noteIncludes === null) eq(st.note, null, `${label}: 안내 없음`);
+  else if (noteIncludes) truthy((st.note ?? '').includes(noteIncludes), `${label}: 안내 ${st.note}`);
+};
+
+await test('진행 과정: 요청서(1) → 검토(2) → 보완(2) → 승인·결제 대기(3) → 결제 성공 시 예약 상세(내 예약 1)로 이동', async (page) => {
+  await start(page, { path: '/providers/p1' });
+  await dayBtn(page, '10-16').click();
+  await page.locator('.joint-card').first().locator('input').check();
+  await reqBtn(page).click();
+  await waitText(page, '수리 요청서');
+  await expectStep(page, 'request', '수리 요청', 0, null, '요청서');
+  await page.getByLabel('어떤 작업인가요?').fill('주방 수전 교체');
+  await page.getByLabel('상세 주소', { exact: true }).fill('301동 1204호');
+  await page.getByRole('button', { name: '09:00~12:00' }).click();
+  await page.getByRole('button', { name: '요청 보내기' }).click();
+  await waitText(page, '요청을 보냈어요');
+  await expectStep(page, 'request', '업체 검토·견적', 1, '업체가 작업 가능 여부와 견적을 확인하고 있어요.', '검토 중');
+  const id = new URL(page.url()).pathname.split('/').pop();
+  await dev(page, 'requestInfo', id);
+  await expectStep(page, 'request', '업체 검토·견적', 1, '추가 정보를 요청했어요', '추가 정보 필요');
+  await page.getByRole('link', { name: '요청서 보완하기' }).click();
+  await waitText(page, '보완 내용');
+  await expectStep(page, 'request', '업체 검토·견적', 1, '추가 정보를 요청했어요', '보완 화면');
+  await page.getByLabel('보완 내용').fill('수전 모델 사진을 다시 올렸어요.');
+  await page.getByRole('button', { name: '보완 내용 보내기' }).click();
+  await waitText(page, '보완한 내용을 보냈어요');
+  await expectStep(page, 'request', '업체 검토·견적', 1, '견적을 확인하고 있어요', '보완 후 재검토');
+  truthy((await dev(page, 'approveRequest', id, '10:00')).ok, '업체 승인');
+  await expectStep(page, 'request', '예약금 결제', 2, null, '승인·결제 대기(요청 상세)');
+  await page.goto(`${BASE}/requests/${id}/approval`);
+  await expectStep(page, 'request', '예약금 결제', 2, null, '승인 조건 확인');
+  const bk0 = (await db(page)).bookings.length;
+  await page.getByRole('checkbox').check();
+  await page.getByRole('button', { name: /모의 결제하기/ }).click();
+  await page.waitForURL((u) => u.pathname.startsWith('/bookings/bk-'));
+  const d = await db(page);
+  const req = d.requests.find((r) => r.id === id);
+  eq(new URL(page.url()).pathname, `/bookings/${req.bookingId}`, '그 예약 상세로 이동');
+  await waitText(page, '예약이 확정됐어요');
+  await expectStep(page, 'booking', '예약 확정', 0, null, '예약 상세(방문 예정)');
+  eq(d.bookings.length, bk0 + 1, '예약 1건 생성');
+  // 새로고침·뒤로가기로 중복 예약이 생기지 않는다(결제 화면 기록은 교체됨)
+  await page.reload();
+  await expectStep(page, 'booking', '예약 확정', 0, null, '새로고침');
+  await page.goBack();
+  await page.waitForTimeout(400);
+  truthy(!new URL(page.url()).pathname.endsWith('/approval'), `뒤로가기로 결제 화면이 다시 열리지 않음: ${page.url()}`);
+  eq((await db(page)).bookings.length, bk0 + 1, '중복 예약 없음');
+  // 완료 요청: 진행 표시 대신 완료 요약 + 예약 보기, 재결제·보완·철회 없음
+  await page.goto(`${BASE}/requests/${id}`);
+  await waitText(page, '예약 완료 · 요청 과정이 끝났어요');
+  eq(await stepState(page), null, '완료 요청에는 진행 표시 없음');
+  for (const b of ['승인 조건 확인하고 결제하기', '요청서 보완하기', '이 업체 요청 철회하기']) eq(await page.getByRole('button', { name: b }).or(page.getByRole('link', { name: b })).count(), 0, `${b} 없음`);
+  await page.getByRole('link', { name: '예약 보기' }).click();
+  await page.waitForURL((u) => u.pathname === `/bookings/${req.bookingId}`);
+  // 승인 화면을 직접 열어도 다시 결제할 수 없다
+  await page.goto(`${BASE}/requests/${id}/approval`);
+  await waitText(page, '지금은 결제할 수 없는 상태예요');
+  eq(await page.getByRole('button', { name: /모의 결제하기/ }).count(), 0, '재결제 버튼 없음');
+  eq(await stepState(page), null, '완료 요청의 승인 화면에 진행 표시 없음');
+});
+
+await test('진행 과정: 비교 요청은 합친 단계 없음, 예약한 업체는 예약 완료·예약 보기, 같은 묶음 다른 업체는 다른 업체 예약으로 종료', async (page) => {
+  await start(page, { path: '/requests/rq-3/approval' });
+  await page.getByRole('checkbox').check();
+  await page.getByRole('button', { name: /모의 결제하기/ }).click();
+  await page.waitForURL((u) => u.pathname.startsWith('/bookings/'));
+  await page.goto(`${BASE}/requests/bundle/b-sink`);
+  await page.locator('.resp-card').first().waitFor();
+  eq(await page.locator('nav.steps').count(), 0, '비교 요청 화면에는 진행 표시 없음');
+  const hb = page.locator('.resp-card').filter({ hasText: '한빛설비' });
+  truthy((await hb.innerText()).includes('예약 완료'), '예약한 업체: 예약 완료');
+  eq(await hb.getByRole('link', { name: '예약 보기' }).count(), 1, '예약 보기 연결');
+  truthy((await page.locator('.resp-card').filter({ hasText: '새봄수리' }).innerText()).includes('다른 업체 예약으로 종료'), '다른 업체 종료');
+  await page.goto(`${BASE}/requests/rq-4`);
+  await waitText(page, '다른 업체 예약이 확정됐어요');
+  eq(await stepState(page), null, '종료 요청에는 진행 표시 없음');
+  // 내 요청 목록 필터 표시는 ‘예약 완료’
+  await page.goto(`${BASE}/requests`);
+  await page.getByRole('button', { name: /^요청 상태 필터/ }).click();
+  await page.getByRole('dialog').getByText('예약 완료', { exact: true }).waitFor();
+  eq(await page.getByRole('dialog').getByText('예약 확정', { exact: true }).count(), 0, '요청 필터에 ‘예약 확정’ 문구 없음');
+});
+
+await test('진행 과정: 결제 실패·결과 확인 중은 내 요청 3단계(예약 확정 표시 없음), 확인 성공 시 예약 상세로', async (page) => {
+  await start(page, { path: '/requests/rq-3/approval', patch: (d) => { d.settings.payOutcome = 'fail'; } });
+  await page.getByRole('checkbox').check();
+  await page.getByRole('button', { name: /모의 결제하기/ }).click();
+  await waitText(page, '결제가 완료되지 않았어요');
+  await expectStep(page, 'request', '예약금 결제', 2, '결제가 완료되지 않았어요', '결제 실패');
+  eq(await page.locator('nav.steps[data-flow="booking"]').count(), 0, '실패 시 예약 과정 없음');
+  await patchDb(page, (d) => { d.settings.payOutcome = 'unknown'; d.settings.resolveOutcome = 'unknown'; }, '/requests/rq-3/approval');
+  await page.getByRole('checkbox').check();
+  await page.getByRole('button', { name: /모의 결제하기/ }).click();
+  await waitText(page, '결제 결과를 확인하고 있어요');
+  await expectStep(page, 'request', '예약금 결제', 2, '결과를 확인하고 있어요', '결과 확인 중');
+  const payUrl = page.url();
+  await page.goto(`${BASE}/requests/rq-3/approval`);
+  await expectStep(page, 'request', '예약금 결제', 2, '결과를 확인하고 있어요', '결과 확인 중(승인 화면)');
+  await page.goto(payUrl);
+  await page.getByRole('button', { name: '결제 결과 확인하기' }).click();
+  await waitText(page, '결제 결과를 확인하고 있어요');
+  await expectStep(page, 'request', '예약금 결제', 2, '결과를 확인하고 있어요', '여전히 확인 중');
+  await patchDb(page, (d) => { d.settings.resolveOutcome = 'success'; }, null);
+  await page.getByRole('button', { name: '결제 결과 확인하기' }).click();
+  await page.waitForURL((u) => u.pathname.startsWith('/bookings/bk-'));
+  await waitText(page, '예약이 확정됐어요');
+  await expectStep(page, 'booking', '예약 확정', 0, null, '확인 성공 후 예약 상세');
+  eq((await db(page)).transactions.filter((t) => t.requestId === 'rq-3' && t.kind === 'deposit' && t.status === 'success').length, 1, '성공 거래 1건');
+  // 기존 결제 결과 화면도 내 예약 과정과 ‘예약 보기’
+  await page.goto(payUrl);
+  await expectStep(page, 'booking', '예약 확정', 0, null, '결제 결과(성공)');
+  eq(await page.getByRole('link', { name: '예약 보기' }).count(), 1, '예약 보기');
+  // 성공했지만 예약을 확인하지 못한 경우: 결과 확인만(재결제 유도 없음)
+  await patchDb(page, (d) => { const t = d.transactions.find((x) => x.requestId === 'rq-3' && x.status === 'success'); delete t.bookingId; }, null);
+  await waitText(page, '예약 생성 결과를 확인하고 있어요');
+  await expectStep(page, 'request', '예약금 결제', 2, '예약 생성 결과를 확인하고 있어요', '예약 생성 미확인');
+  eq(await page.getByRole('button', { name: /결제하기/ }).count(), 0, '재결제 버튼 없음');
+  truthy(await page.getByRole('button', { name: '결제 결과 확인하기' }).isVisible(), '결과 확인 제공');
+});
+
+await test('진행 과정: 내 예약 — 방문 예정(1)·작업 중(2)·후속 작업(2)·최종 정산(3)·이용 완료, 취소·중단은 진행 표시 없음, 직접 접근·새로고침', async (page) => {
+  await start(page, { path: '/bookings/bk-k1' });
+  for (const [id, cur, done, note] of [['bk-k1', '예약 확정', 0, null], ['bk-k6', '방문·작업', 1, '작업을 진행하고 있어요'], ['bk-k7', '방문·작업', 1, '후속 방문'], ['bk-k9', '최종 정산', 2, '최종 금액을 확인'], ['bk-k12', null], ['bk-k15', null], ['bk-k17', null]]) {
+    await page.goto(`${BASE}/bookings/${id}`); await page.reload();
+    await page.locator('main h2, main .card').first().waitFor();
+    if (cur === null) { await page.waitForTimeout(300); eq(await stepState(page), null, `${id} 진행 표시 없음(취소·중단)`); continue; }
+    await expectStep(page, 'booking', cur, done, note, id);
+  }
+  await page.goto(`${BASE}/bookings/bk-k13`);
+  await page.locator('nav.steps[data-flow="booking"]').waitFor();
+  const st = await stepState(page);
+  eq(st.current, '', '이용 완료: 현재 단계 없음');
+  eq(st.done.length, 3, '이용 완료: 모든 단계 완료');
+  truthy(st.note.includes('이용 완료'), '이용 완료 안내');
+  // 조건 재확인 예약은 1단계 + 안내
+  await patchDb(page, (d) => { d.bookings.find((b) => b.id === 'bk-k2').status = 'terms_recheck'; }, '/bookings/bk-k2');
+  await expectStep(page, 'booking', '예약 확정', 0, '조건이 바뀌어', '조건 재확인');
+  // 예약 하위 화면·목록에는 표시하지 않음, 변경·취소 화면 정상
+  for (const p of ['/bookings', '/bookings?tab=past', '/bookings/bk-k1/change', '/bookings/bk-k1/cancel', '/bookings/bk-k9/final', '/requests', '/', '/providers/p1', '/me']) {
+    await page.goto(`${BASE}${p}`); await page.waitForTimeout(250);
+    eq(await page.locator('nav.steps').count(), 0, `${p}에는 표시하지 않음`);
+  }
+  await page.goto(`${BASE}/bookings/bk-k1/cancel`);
+  await waitText(page, '접수 마감 전이라 출장비 공제가 없어요');
+});
+
+await test('진행 과정: 단계는 누를 수 없고 업무 상태·경로를 바꾸지 않음', async (page) => {
+  for (const p of ['/requests/rq-3', '/bookings/bk-k6']) {
+    await start(page, { path: p });
+    await page.locator('nav.steps').waitFor();
+    eq(await page.locator('nav.steps a, nav.steps button, nav.steps [tabindex]').count(), 0, '조작 요소 없음');
+    const before = JSON.stringify((await db(page)).requests.map((r) => r.status)) + JSON.stringify((await db(page)).bookings.map((b) => b.workStatus));
+    for (const li of await page.locator('nav.steps li').all()) await li.click();
+    await page.waitForTimeout(200);
+    eq(new URL(page.url()).pathname, p, '이동 없음');
+    eq(JSON.stringify((await db(page)).requests.map((r) => r.status)) + JSON.stringify((await db(page)).bookings.map((b) => b.workStatus)), before, '상태 변경 없음');
+  }
+});
+
+for (const w of [360, 1280]) {
+  await test(`진행 과정: ${w}px 세 단계가 잘리지 않고 높이가 과하지 않음(내 요청·내 예약)`, async (page) => {
+    await page.setViewportSize({ width: w, height: 800 });
+    for (const [p, labels, short] of [['/requests/rq-1', '수리 요청,업체 검토·견적,예약금 결제', '요청,검토·견적,결제'], ['/bookings/bk-k6', '예약 확정,방문·작업,최종 정산', '확정,방문·작업,정산']]) {
+      await start(page, { path: p });
+      await page.locator('nav.steps li[aria-current="step"]').waitFor();
+      const r = await page.evaluate(() => {
+        const nav = document.querySelector('nav.steps'); const nr = nav.getBoundingClientRect();
+        const ls = [...nav.querySelectorAll('.steps__label')].filter((l) => getComputedStyle(l).display !== 'none' && l.getBoundingClientRect().width > 1);
+        const header = document.querySelector('.app-header').getBoundingClientRect();
+        const firstMain = document.querySelector('main .stack > *').getBoundingClientRect();
+        return {
+          visible: ls.map((l) => l.textContent).join(','), clipped: ls.filter((l) => l.scrollWidth > l.clientWidth + 1 || l.getBoundingClientRect().right > nr.right + 1 || l.getBoundingClientRect().left < nr.left - 1).length,
+          height: Math.round(nr.height), overflow: document.documentElement.scrollWidth > innerWidth, belowHeader: nr.top >= header.bottom - 1, first: Math.abs(firstMain.top - nr.top) < 1,
+        };
+      });
+      eq(r.visible, w < 480 ? short : labels, `${p} 라벨`);
+      truthy(!r.clipped && !r.overflow, `잘림·가로 넘침 ${JSON.stringify(r)}`);
+      truthy(r.height <= 100, `높이 ${r.height}`);
+      truthy(r.belowHeader && r.first, `헤더 아래·본문 맨 위 ${JSON.stringify(r)}`);
+      await page.screenshot({ path: join(ROOT, `e2e/screens/${w}_progress_${p.includes('bookings') ? 'booking' : 'request'}.png`) });
+    }
+  }, { width: w });
+}
 
 // ───────── 탐색 주소 공유(업체 찾기 ↔ 카테고리별 업체 목록) ─────────
 const region = (page) => page.locator('.region-card');
@@ -2219,6 +2431,7 @@ for (const w of WIDTHS) {
         const clipped = [];
         for (const el of document.querySelectorAll('main *, header *')) {
           if (el.closest('.sr-only') || el.classList.contains('sr-only')) continue;
+          if (getComputedStyle(el).clip === 'rect(0px, 0px, 0px, 0px)') continue; // 화면에서 숨기고 스크린리더용으로 남긴 텍스트(예: 좁은 화면의 진행 단계 전체 라벨)
           const cs = getComputedStyle(el);
           if (cs.display === 'none' || cs.visibility === 'hidden') continue;
           const rc = el.getBoundingClientRect();
