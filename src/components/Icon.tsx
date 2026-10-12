@@ -31,6 +31,7 @@ const P: Record<string, ReactNode> = {
   shelf: <><path d="M4 8h16M4 16h16" /><path d="M7 8v-3M17 8v-3M7 16v-3M17 16v-3" /></>,
   tool: <path d="M14.5 6.5a4 4 0 0 0 4.9 4.9L21 13l-8 8a2.1 2.1 0 0 1-3-3l8-8-1.5-3.5z" />,
   seal: <><path d="M4 18h16M6 18v-5h12v5" /><path d="M9 13V7a3 3 0 0 1 6 0v6" /></>,
+  filter: <path d="M4 5h16l-6 7.5V18l-4 2v-7.5L4 5z" />,
   more: <path d="M5 12h.01M12 12h.01M19 12h.01" />,
   receipt: <><path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3z" /><path d="M9 8h6M9 12h6" /></>,
   box: <><path d="M3.5 7.5L12 3l8.5 4.5v9L12 21l-8.5-4.5v-9z" /><path d="M3.5 7.5L12 12l8.5-4.5M12 12v9" /></>,

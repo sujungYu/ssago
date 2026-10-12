@@ -261,6 +261,180 @@ await test('요청: 비교 묶음에서 업체별 승인 조건 비교', async (
   await waitText(page, '하나를 예약하면 나머지 요청은 종료돼요');
 });
 
+// ───────── 내 요청 필터 ─────────
+const statusBtn = (page) => page.getByRole('button', { name: /^상태 필터/ });
+const periodBtn = (page) => page.getByRole('button', { name: /^요청 접수일 필터/ });
+const cards = (page) => page.locator('main .request-list > li');
+const badges = (page) => page.locator('main .request-list > li .badge').allInnerTexts();
+/** 조회가 끝난 뒤의 건수 문구(조회 중에는 비어 있다) */
+const countText = async (page) => { await page.locator('.filter-bar__summary p', { hasText: '요청 묶음' }).waitFor(); await page.waitForSelector('.request-list[aria-busy]', { state: 'detached' }).catch(() => {}); return page.locator('.filter-bar__summary p').innerText(); };
+const search = (page) => new URL(page.url()).search;
+const onPath = (page, p) => page.waitForURL((u) => u.pathname === p);
+const listBadges = async (page) => { await page.locator('main .request-list .badge').first().waitFor(); return badges(page); };
+async function pickStatuses(page, labels) {
+  await statusBtn(page).click();
+  const dlg = page.getByRole('dialog', { name: '요청 상태' });
+  for (const l of labels) await dlg.getByRole('checkbox', { name: l, exact: true }).check();
+  await dlg.getByRole('button', { name: '적용', exact: true }).click();
+  await dlg.waitFor({ state: 'detached' });
+}
+
+await test('요청 필터: 기본 조회 → 복수 상태(OR) → 건수 일치 → 초기화', async (page) => {
+  await start(page, { path: '/requests' });
+  await waitText(page, '업체 승인 완료 · 결제 대기');
+  await periodBtn(page).filter({ hasText: '전체 기간' }).waitFor();
+  await statusBtn(page).filter({ hasText: '전체 상태' }).waitFor();
+  const total = await cards(page).count();
+  eq(await countText(page), `요청 묶음 ${total}건`, '기본 건수');
+  truthy(await page.getByText('요청 접수일 2026.', { exact: false }).count() >= total, '목록의 요청 접수일 라벨');
+
+  // 전체 상태 ↔ 개별 상태 선택 규칙
+  await statusBtn(page).click();
+  const dlg = page.getByRole('dialog', { name: '요청 상태' });
+  truthy(await dlg.getByRole('checkbox', { name: '전체 상태', exact: true }).isChecked(), '시트 기본값: 전체 상태');
+  await dlg.getByRole('checkbox', { name: '승인 완료·결제 대기', exact: true }).check();
+  eq(await dlg.getByRole('checkbox', { name: '전체 상태', exact: true }).isChecked(), false, '개별 선택 시 전체 상태 해제');
+  await dlg.getByRole('checkbox', { name: '승인 완료·결제 대기', exact: true }).uncheck();
+  truthy(await dlg.getByRole('checkbox', { name: '전체 상태', exact: true }).isChecked(), '모두 해제하면 전체 상태');
+  await dlg.getByRole('checkbox', { name: '승인 완료·결제 대기', exact: true }).check();
+  await dlg.getByRole('checkbox', { name: '예약 확정', exact: true }).check();
+  await dlg.getByRole('checkbox', { name: '전체 상태', exact: true }).check();
+  eq(await dlg.getByRole('checkbox', { name: '예약 확정', exact: true }).isChecked(), false, '전체 상태 선택 시 개별 해제');
+  await dlg.getByRole('button', { name: '닫기' }).click();
+  await statusBtn(page).filter({ hasText: '전체 상태' }).waitFor();
+  eq(await page.evaluate(() => document.activeElement?.getAttribute('aria-label')?.startsWith('상태 필터')), true, '닫은 뒤 포커스 복귀');
+
+  await pickStatuses(page, ['승인 완료·결제 대기', '예약 확정']);
+  eq(search(page), '?status=approved_pending_payment%2Cbooked', 'URL 쿼리');
+  await countText(page);
+  await statusBtn(page).filter({ hasText: '상태 2개' }).waitFor();
+  const shown = await badges(page);
+  truthy(shown.length > 0 && shown.every((b) => ['업체 승인 완료 · 결제 대기', '예약 확정'].includes(b)), `표시 상태: ${shown}`);
+  truthy(shown.includes('예약 확정') && shown.includes('업체 승인 완료 · 결제 대기'), '결제 대기와 예약 확정이 각각 보임');
+  eq(await countText(page), `요청 묶음 ${await cards(page).count()}건`, '필터 후 건수 = 표시 카드 수');
+
+  await statusBtn(page).click();
+  const dlg2 = page.getByRole('dialog', { name: '요청 상태' });
+  truthy(await dlg2.getByRole('checkbox', { name: '예약 확정', exact: true }).isChecked(), '시트에 적용값 표시');
+  await dlg2.getByRole('checkbox', { name: '승인 완료·결제 대기', exact: true }).uncheck();
+  await dlg2.getByRole('button', { name: '적용', exact: true }).click();
+  await page.waitForURL((u) => u.search === '?status=booked');
+  await statusBtn(page).filter({ hasText: '예약 확정' }).waitFor();
+  await page.getByRole('button', { name: '필터 초기화' }).click();
+  await page.waitForURL((u) => u.search === '');
+  await statusBtn(page).filter({ hasText: '전체 상태' }).waitFor();
+  await page.locator('.filter-bar__summary p', { hasText: `요청 묶음 ${total}건` }).waitFor();
+  eq(await cards(page).count(), total, '초기화 후 전체 목록');
+  eq(await page.getByRole('button', { name: '필터 초기화' }).count(), 0, '기본값이면 초기화 버튼 없음');
+});
+
+await test('요청 필터: 직접 선택 기간 오류·적용(경계 포함) + 상태 AND → 결과 없음 → 초기화', async (page) => {
+  await page.setViewportSize({ width: 360, height: 760 });
+  await start(page, { path: '/requests' });
+  await waitText(page, '업체 승인 완료 · 결제 대기');
+  await periodBtn(page).click();
+  const dlg = page.getByRole('dialog', { name: '요청 접수일' });
+  await waitText(page, '방문 예정일이 아니에요');
+  await dlg.getByRole('radio', { name: '직접 선택', exact: true }).check();
+  await dlg.getByRole('button', { name: '적용', exact: true }).click();
+  await waitText(page, '시작일을 입력해 주세요');
+  await dlg.getByLabel('시작일', { exact: true }).fill('2026-10-12');
+  await dlg.getByLabel('종료일', { exact: true }).fill('2026-10-10');
+  await dlg.getByRole('button', { name: '적용', exact: true }).click();
+  await waitText(page, '종료일은 시작일과 같거나 늦어야 해요');
+  await dlg.getByLabel('종료일', { exact: true }).fill('2026-10-12');
+  await waitText(page, '선택 기간: 2026.10.12 ~ 2026.10.12');
+  await ((n) => process.env.E2E_SHOTS !== '0' && page.screenshot({ path: join(ROOT, `e2e/screens/360_filter_${n}.png`) }))('period_sheet');
+  await dlg.getByRole('button', { name: '적용', exact: true }).click();
+  await dlg.waitFor({ state: 'detached' });
+  await periodBtn(page).filter({ hasText: '2026.10.12 ~ 2026.10.12' }).waitFor();
+  // 10-12에 접수된 요청: rq-2(20:00), rq-10(09:00)
+  await page.locator('.filter-bar__summary', { hasText: '요청 묶음 2건' }).waitFor();
+  const labels = await page.locator('main .request-list > li').allInnerTexts();
+  eq(labels.length, 2, '하루 기간 결과 수');
+  truthy(labels.every((t) => t.includes('요청 접수일 2026.10.12')), '모두 10-12 접수');
+
+  // 바꾸다 Esc로 닫으면 기존 적용값 유지
+  await periodBtn(page).click();
+  await page.getByRole('dialog', { name: '요청 접수일' }).getByRole('radio', { name: '최근 7일', exact: true }).check();
+  await page.keyboard.press('Escape');
+  await periodBtn(page).filter({ hasText: '2026.10.12 ~ 2026.10.12' }).waitFor();
+
+  await pickStatuses(page, ['철회']); // 철회 요청(rq-6)은 10-10 접수 → AND 결과 없음
+  await waitText(page, '선택한 조건에 맞는 요청이 없어요.');
+  await ((n) => process.env.E2E_SHOTS !== '0' && page.screenshot({ path: join(ROOT, `e2e/screens/360_filter_${n}.png`) }))('no_result');
+  eq(await countText(page), '요청 묶음 0건', '결과 없음 건수');
+  truthy(!(await page.locator('main').innerText()).includes('아직 보낸 수리 요청이 없어요'), '요청 없음과 구분');
+  await page.locator('.empty').getByRole('button', { name: '필터 초기화' }).click();
+  await page.waitForURL((u) => u.search === '');
+  await waitText(page, '업체 승인 완료 · 결제 대기');
+  await periodBtn(page).filter({ hasText: '전체 기간' }).waitFor();
+});
+
+await test('요청 필터: 상세 진입 후 복귀·새로고침·뒤로가기·잘못된 쿼리', async (page) => {
+  await start(page, { path: '/requests?status=needs_info' });
+  eq((await listBadges(page)).join(), '추가 정보 필요', '주소의 필터 적용');
+  await page.getByRole('link', { name: /현관문 손잡이 교체/ }).click();
+  await onPath(page, '/requests/rq-2');
+  await page.getByRole('link', { name: '뒤로 가기' }).click(); // 헤더 ‘뒤로’는 쿼리 없는 /requests 링크
+  await page.waitForURL((u) => u.pathname === '/requests' && u.search === '?status=needs_info');
+  eq((await listBadges(page)).join(), '추가 정보 필요', '상세 복귀 후 필터 유지');
+  await page.reload();
+  eq((await listBadges(page)).join(), '추가 정보 필요', '새로고침 후 유지');
+  await pickStatuses(page, ['업체 검토 중']);
+  eq(search(page), '?status=reviewing%2Cneeds_info', '두 번째 적용');
+  await page.goBack();
+  await page.waitForURL((u) => u.search === '?status=needs_info');
+  await page.waitForTimeout(200);
+  eq((await badges(page)).join(), '추가 정보 필요', '뒤로가기로 이전 조건');
+  // 하단 탭으로 다시 들어와도 마지막 적용값
+  await page.locator('.tabbar').getByRole('link', { name: '내 정보' }).click();
+  await page.locator('.tabbar').getByRole('link', { name: '내 요청' }).click();
+  await page.waitForURL((u) => u.search === '?status=needs_info');
+
+  await page.goto(`${BASE}/requests?period=custom&from=2026-99-01&to=x&status=zzz`);
+  await page.waitForURL((u) => u.pathname === '/requests' && u.search === '');
+  await periodBtn(page).filter({ hasText: '전체 기간' }).waitFor();
+  await statusBtn(page).filter({ hasText: '전체 상태' }).waitFor();
+});
+
+await test('요청 필터: 목록 위치 유지(상세 → 뒤로)', async (page) => {
+  await page.setViewportSize({ width: 390, height: 600 });
+  await start(page, { path: '/requests' });
+  await waitText(page, '업체 승인 완료 · 결제 대기');
+  const last = cards(page).last();
+  await last.scrollIntoViewIfNeeded();
+  await page.waitForTimeout(150);
+  const y = await page.evaluate(() => window.scrollY);
+  truthy(y > 100, `스크롤 가능한 목록 (${y})`);
+  await last.getByRole('link').click();
+  await page.waitForURL((u) => u.pathname !== '/requests');
+  await page.goBack();
+  await page.waitForURL((u) => u.pathname === '/requests');
+  await page.waitForTimeout(400);
+  const back = await page.evaluate(() => window.scrollY);
+  truthy(Math.abs(back - y) < 40, `복귀 위치 ${back} / 이전 ${y}`);
+});
+
+await test('요청 필터: 로그아웃·계정 전환 시 필터 초기화', async (page) => {
+  await start(page, { path: '/requests' });
+  await waitText(page, '업체 승인 완료 · 결제 대기');
+  await pickStatuses(page, ['철회']);
+  await page.locator('.tabbar').getByRole('link', { name: '내 정보' }).click();
+  await page.getByRole('button', { name: '로그아웃' }).click();
+  await onPath(page, '/login');
+  truthy(!(await page.evaluate(() => JSON.stringify({ ...sessionStorage }))).includes('list-filter'), '로그아웃 후 저장된 필터');
+  page.fake.add({ email: 'user-c@ongimae.test', password: 'user-c-pass' });
+  await page.getByLabel('이메일', { exact: true }).fill('user-c@ongimae.test');
+  await page.getByLabel('비밀번호', { exact: true }).fill('user-c-pass');
+  await page.getByRole('button', { name: '로그인', exact: true }).click();
+  await onPath(page, '/');
+  await page.locator('.tabbar').getByRole('link', { name: '내 요청' }).click();
+  await waitText(page, '업체 승인 완료 · 결제 대기');
+  eq(search(page), '', '새 계정 쿼리');
+  await statusBtn(page).filter({ hasText: '전체 상태' }).waitFor();
+});
+
 await test('요청: 추가 정보 요청 → 보완 제출 → 검토 중', async (page) => {
   await start(page, { path: '/requests/rq-2' });
   await page.getByRole('link', { name: '요청서 보완하기' }).click();
@@ -580,7 +754,9 @@ await test('결제·환불 내역: 목록·상세·환불 상태 문구', async 
 
 await test('빈 상태: 요청·예약·내역이 없을 때', async (page) => {
   await start(page, { path: '/requests', patch: (d) => { d.requests = []; d.approvals = []; d.bookings = []; d.transactions = []; d.refunds = []; d.deductions = []; d.proposals = []; d.delays = []; d.materials = []; d.additionalWorks = []; d.statements = []; d.reviews = []; } });
-  await waitText(page, '아직 보낸 요청이 없어요');
+  await waitText(page, '아직 보낸 수리 요청이 없어요.');
+  eq(await page.locator('.filter-bar').count(), 0, '요청이 없으면 필터 숨김');
+  await page.locator('.empty').getByRole('link', { name: '업체 찾기' }).waitFor();
   await page.goto(`${BASE}/bookings`); await waitText(page, '진행 중인 예약이 없어요');
   await page.goto(`${BASE}/ledger`); await waitText(page, '내역이 없어요');
 });
@@ -874,6 +1050,31 @@ const ROUTES = ['/', '/address', '/providers?category=c2', '/providers/p1', '/pr
   '/additional/aw-1', '/bookings/bk-k9/final', '/bookings/bk-k14', '/bookings/bk-k13/review', '/ledger', '/me', '/guide'];
 /** 로그아웃 상태로 확인하는 인증 화면 */
 const AUTH_ROUTES = ['/login', '/signup', '/password/reset', '/password/reset/sent', '/password/new'];
+await test('브랜드: 탭 제목·파비콘·헤더 로고(싸고 홈)·인증 화면 로고, 화면에 이전 서비스명 없음', async (page) => {
+  await start(page, { path: '/' });
+  truthy((await page.title()).startsWith('싸고'), `탭 제목: ${await page.title()}`);
+  const icon = await page.locator('link[rel="icon"]').getAttribute('href');
+  const res = await page.request.get(`${BASE}${icon}`);
+  truthy(res.ok() && (await res.text()).includes('#315DA8'), '파비콘');
+  const home = page.getByRole('link', { name: '싸고 홈', exact: true });
+  await home.waitFor();
+  eq(await home.locator('svg[aria-hidden="true"]').count(), 1, '헤더 심볼은 스크린리더에서 숨김');
+  await page.locator('.guide__art[aria-hidden="true"]').waitFor();
+  const bad = [];
+  for (const r of ROUTES) {
+    await page.goto(`${BASE}${r}`); await page.waitForTimeout(250);
+    if ((await page.locator('body').innerText()).includes('온김에')) bad.push(r);
+  }
+  eq(await page.locator('.guide__art').count(), 0, '일러스트는 업체 찾기에만'); // 마지막 화면(/guide)
+  await page.evaluate(() => localStorage.clear());
+  for (const r of ['/login', '/signup']) {
+    await page.goto(`${BASE}${r}`); await page.waitForURL((u) => u.pathname === r);
+    await waitText(page, '싸게 고치고');
+    if ((await page.locator('body').innerText()).includes('온김에')) bad.push(r);
+  }
+  truthy(!bad.length, `이전 서비스명이 남은 화면: ${bad.join(', ')}`);
+});
+
 mkdirSync(join(ROOT, 'e2e/screens'), { recursive: true });
 for (const w of WIDTHS) {
   await test(`반응형 ${w}px: 모든 화면에서 가로 넘침·잘림 없음`, async (page) => {

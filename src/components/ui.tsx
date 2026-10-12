@@ -158,7 +158,8 @@ export function PasswordInput(props: Omit<InputHTMLAttributes<HTMLInputElement>,
 }
 
 // ───────── 대화상자 ─────────
-export function Dialog({ title, onClose, children, actions }: { title: string; onClose: () => void; children: ReactNode; actions: ReactNode }) {
+/** 확인 대화상자. 좁은 화면에서는 하단 시트, 넓은 화면에서는 가운데 대화상자. closeLabel을 주면 제목 옆에 닫기 버튼을 둔다. */
+export function Dialog({ title, onClose, children, actions, closeLabel }: { title: string; onClose: () => void; children: ReactNode; actions: ReactNode; closeLabel?: string }) {
   const ref = useRef<HTMLDivElement>(null);
   const tid = useId();
   const closeRef = useRef(onClose);
@@ -183,7 +184,12 @@ export function Dialog({ title, onClose, children, actions }: { title: string; o
   return (
     <div className="dialog-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="dialog" role="dialog" aria-modal="true" aria-labelledby={tid} ref={ref}>
-        <h2 id={tid}>{title}</h2>
+        {closeLabel ? (
+          <div className="dialog__head">
+            <h2 id={tid}>{title}</h2>
+            <button type="button" className="icon-btn" aria-label={closeLabel} onClick={onClose}><Icon name="close" /></button>
+          </div>
+        ) : <h2 id={tid}>{title}</h2>}
         <div className="stack">{children}</div>
         <div className="stack--sm stack">{actions}</div>
       </div>

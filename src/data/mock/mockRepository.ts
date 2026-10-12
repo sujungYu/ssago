@@ -2,12 +2,14 @@ import { RepoError } from '../../domain/errors';
 import { expectedFeeForJoiner, computeSettlement, perHouseholdFee } from '../../domain/pricing';
 import { checkPayable } from '../../domain/rules';
 import { REQUEST_PRIORITY } from '../../domain/rules';
+import { filterRequestBundles } from '../../domain/requestFilter';
 import type {
   AdditionalWork, Booking, Category, ChangeProposal, CustomerProfile, DelayNotice, FinalStatement, Address,
   ProviderDetail, ProviderSummary, RepairRequest, Review, Transaction, Won, GroupRecord,
 } from '../../domain/types';
 import type {
   AdditionalView, ApprovalView, BookingDetail, BookingListItem, BundleDetail, BundleListItem, CancelContext, ChangeOption,
+  RequestListQuery, RequestListResult,
   ChangeRequestInput, LedgerEntry, MaterialView, NewRequestInput, NoticeLanding, PaymentResult, ProposalResult, ProposalView,
   ProviderBrief, ProviderQuery, Repository, RequestDetail, RequestListItem, ReviewContext, StatementResult, StatementView,
   TransactionDetail,
@@ -222,16 +224,26 @@ export class MockRepository implements Repository {
   }
 
   listRequests(): Promise<BundleListItem[]> {
+    return this.read(() => this.bundleList());
+  }
+
+  queryRequests(query: RequestListQuery): Promise<RequestListResult> {
+    // 목업은 전체를 메모리에서 거른다. 서버 구현은 같은 조건을 조회 쿼리에 넣는다.
     return this.read(() => {
-      const map = new Map<string, RepairRequest[]>();
-      for (const r of this.db.requests) map.set(r.bundleId, [...(map.get(r.bundleId) ?? []), r]);
-      const rank = (r: RepairRequest) => REQUEST_PRIORITY.indexOf(r.status);
-      return [...map.entries()].map(([bundleId, rs]) => ({
-        bundleId, taskTitles: rs[0].tasks.map((t) => t.title),
-        items: rs.sort((a, b) => rank(a) - rank(b)).map((r) => this.reqListItem(r)),
-        updatedAt: rs.map((r) => r.updatedAt).sort().at(-1)!,
-      })).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+      const all = this.bundleList();
+      return { bundles: filterRequestBundles(all, query), hasAnyRequest: all.length > 0 };
     });
+  }
+
+  private bundleList(): BundleListItem[] {
+    const map = new Map<string, RepairRequest[]>();
+    for (const r of this.db.requests) map.set(r.bundleId, [...(map.get(r.bundleId) ?? []), r]);
+    const rank = (r: RepairRequest) => REQUEST_PRIORITY.indexOf(r.status);
+    return [...map.entries()].map(([bundleId, rs]) => ({
+      bundleId, taskTitles: rs[0].tasks.map((t) => t.title),
+      items: [...rs].sort((a, b) => rank(a) - rank(b)).map((r) => this.reqListItem(r)),
+      updatedAt: rs.map((r) => r.updatedAt).sort().at(-1)!,
+    })).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   }
 
   getRequest(id: string): Promise<RequestDetail> { return this.read(() => this.reqDetail(this.request(id))); }

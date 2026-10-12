@@ -6,6 +6,8 @@
  * 모든 상태 변경 메서드는 idempotencyKey를 받는다. 목업은 같은 키의 재호출에 기존 결과를 돌려주고,
  * 실제 구현은 서버에서 멱등성·권한·조건 버전·기한을 검증해야 한다. (에러 정책서 3, 5)
  */
+import type { RequestListQuery } from '../../domain/requestFilter';
+export type { RequestListQuery } from '../../domain/requestFilter';
 import type {
   Address, AdditionalWork, Approval, Booking, CancelCause, Category, ChangeProposal, CustomerProfile, DelayChoice,
   DelayNotice, Deduction, FinalStatement, IsoDate, IsoDateTime, MaterialOffer, ProviderDetail, ProviderSummary,
@@ -50,6 +52,19 @@ export interface BundleListItem {
   taskTitles: string[];
   items: RequestListItem[];
   updatedAt: IsoDateTime;
+}
+
+export interface FilteredBundleListItem extends BundleListItem {
+  /** 조건에 맞지 않아 목록에서 숨긴 같은 묶음의 업체별 요청 수(데이터는 그대로 있다) */
+  hiddenItemCount: number;
+}
+
+/** 내 요청 조회 결과. hasAnyRequest로 ‘요청 자체 없음’과 ‘조건에 맞는 요청 없음’을 구분한다. */
+export interface RequestListResult {
+  /** 조건에 맞는 묶음(묶음 안에는 맞는 업체별 요청만). 요청 접수일 최신순 */
+  bundles: FilteredBundleListItem[];
+  /** 조건과 무관하게 이 사용자의 요청이 하나라도 있는지 */
+  hasAnyRequest: boolean;
 }
 
 export interface RequestDetail {
@@ -242,6 +257,11 @@ export interface Repository {
   // 요청
   createRequest(input: NewRequestInput): Promise<RepairRequest>;
   listRequests(): Promise<BundleListItem[]>;
+  /**
+   * 조건(요청 접수일 범위·상태)으로 내 요청을 조회한다. 필터는 조회 조건일 뿐 데이터를 바꾸지 않는다.
+   * 서버 구현은 페이지네이션이 생겨도 이 조건을 전체 조회에 적용해야 한다(로드된 항목만 거르지 않는다).
+   */
+  queryRequests(query: RequestListQuery): Promise<RequestListResult>;
   getRequest(id: string): Promise<RequestDetail>;
   getBundle(bundleId: string): Promise<BundleDetail>;
   supplementRequest(id: string, input: { message: string; photoNames: string[]; idempotencyKey: string }): Promise<RepairRequest>;

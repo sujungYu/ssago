@@ -51,7 +51,47 @@ function loadState(): { addressId: string | null } {
 }
 /** 사용자별 화면 상태(방문 지역 등)를 지운다. 로그인 계정이 바뀌거나 로그아웃할 때 호출. */
 export function clearUserAppState(): void {
-  try { sessionStorage.removeItem(KEY); } catch { /* 저장 불가 환경 */ }
+  try {
+    sessionStorage.removeItem(KEY);
+    sessionStorage.removeItem(LIST_SCROLL_KEY);
+    sessionStorage.removeItem(LIST_FILTER_KEY);
+  } catch { /* 저장 불가 환경 */ }
+}
+
+// ───────── 목록 필터(마지막 적용값) ─────────
+const LIST_FILTER_KEY = 'on-gimae/list-filter/v1';
+/** 목록별 마지막 적용 필터(쿼리 문자열, 날짜·상태만). 계정 id와 함께 저장해 다른 계정에는 쓰지 않는다. */
+export function saveListFilter(list: string, owner: string | undefined, query: string): void {
+  try {
+    const all = JSON.parse(sessionStorage.getItem(LIST_FILTER_KEY) ?? '{}');
+    all[list] = { owner, query };
+    sessionStorage.setItem(LIST_FILTER_KEY, JSON.stringify(all));
+  } catch { /* 저장 불가 환경 */ }
+}
+export function loadListFilter(list: string, owner: string | undefined): string | null {
+  try {
+    const v = JSON.parse(sessionStorage.getItem(LIST_FILTER_KEY) ?? '{}')[list];
+    return v && v.owner === owner && typeof v.query === 'string' && v.query ? v.query : null;
+  } catch { return null; }
+}
+
+// ───────── 목록 위치(상세에 들어갔다 돌아올 때 복원) ─────────
+const LIST_SCROLL_KEY = 'on-gimae/list-scroll/v1';
+function readScrolls(): Record<string, number> {
+  try { return JSON.parse(sessionStorage.getItem(LIST_SCROLL_KEY) ?? '{}'); } catch { return {}; }
+}
+/** 방문 기록 항목(location.key)별 스크롤 위치. 계정이 바뀌면 clearUserAppState로 지운다. */
+export function saveListScroll(entryKey: string, y: number): void {
+  try {
+    const all = readScrolls();
+    all[entryKey] = Math.round(y);
+    const keys = Object.keys(all);
+    if (keys.length > 30) delete all[keys[0]];
+    sessionStorage.setItem(LIST_SCROLL_KEY, JSON.stringify(all));
+  } catch { /* 저장 불가 환경 */ }
+}
+export function loadListScroll(entryKey: string): number | undefined {
+  return readScrolls()[entryKey];
 }
 
 /**

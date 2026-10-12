@@ -234,3 +234,32 @@ a.list-row:hover { background: #fafbfd; }
 .brand--lg .brand__text { gap: 4px; }
 .brand--lg .brand__name { font-size: 28px; }
 .brand--lg .brand__tagline { font-size: var(--fs-sm); }
+
+/* ───────── 목록 필터 (내 요청) ───────── */
+.request-list[aria-busy] { opacity: .55; transition: opacity .15s; }
+.filter-bar { display: flex; flex-direction: column; gap: var(--sp-2); }
+.filter-bar__buttons { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.filter-btn {
+  flex: 1 1 140px; min-width: 0; min-height: 52px; display: flex; align-items: center; gap: var(--sp-2); padding: 6px var(--sp-3);
+  border: 1px solid var(--c-line-strong); border-radius: var(--r-md); background: var(--c-surface); color: var(--c-text); text-align: left; font: inherit;
+}
+.filter-btn:hover { border-color: var(--c-primary); }
+.filter-btn > svg { flex: none; color: var(--c-text-2); }
+.filter-btn__text { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.filter-btn__label { font-size: var(--fs-xs); color: var(--c-text-2); }
+.filter-btn__value { font-size: var(--fs-sm); font-weight: 700; overflow-wrap: anywhere; }
+.filter-btn--on { background: var(--c-info-bg); border-color: var(--c-primary); }
+.filter-btn--on > svg, .filter-btn--on .filter-btn__value { color: var(--c-primary); }
+.filter-bar__summary { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); min-height: 36px; }
+.filter-bar__summary .btn { margin-right: calc(-1 * var(--sp-2)); }
+.choices { border: 0; padding: 0; margin: 0; display: flex; flex-direction: column; gap: var(--sp-2); }
+.choice {
+  display: flex; align-items: center; gap: var(--sp-3); min-height: 48px; padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--c-line); border-radius: var(--r-md); cursor: pointer;
+}
+.choice input { width: 20px; height: 20px; margin: 0; accent-color: var(--c-primary); flex: none; }
+.choice--on { border-color: var(--c-primary); background: var(--c-info-bg); }
+.choice__mark { font-size: var(--fs-xs); font-weight: 700; color: var(--c-primary); }
+.choice:focus-within { outline: 2px solid var(--c-focus); outline-offset: 2px; }
+.date-range { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: var(--sp-3); }
+.dialog__head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); margin: calc(-1 * var(--sp-2)) calc(-1 * var(--sp-2)) 0 0; }

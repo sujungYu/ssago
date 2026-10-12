@@ -187,3 +187,50 @@ describe('계정별 목업 상태', () => {
     expect(r.__db().settings.payOutcome).toBe('fail');
   });
 });
+
+describe('내 요청 필터 조회', () => {
+  it('전체 기간·전체 상태는 기존 목록과 같은 묶음', async () => {
+    const r = repo();
+    const [all, res] = await Promise.all([r.listRequests(), r.queryRequests({})]);
+    expect(res.hasAnyRequest).toBe(true);
+    expect(res.bundles.map((b) => b.bundleId).sort()).toEqual(all.map((b) => b.bundleId).sort());
+    expect(res.bundles.every((b) => b.hiddenItemCount === 0)).toBe(true);
+  });
+  it('비교 묶음은 조건에 맞는 업체 요청만 보여주고, 묶음 상세에는 모두 남는다', async () => {
+    const r = repo();
+    // b-sink: rq-3·rq-4 모두 승인 완료·결제 대기. 한쪽을 철회해 상태를 나눈다.
+    await r.withdrawRequest('rq-4');
+    const res = await r.queryRequests({ statuses: ['withdrawn'] });
+    const sink = res.bundles.find((b) => b.bundleId === 'b-sink')!;
+    expect(sink.items.map((i) => i.request.id)).toEqual(['rq-4']);
+    expect(sink.hiddenItemCount).toBe(1);
+    expect((await r.getBundle('b-sink')).items).toHaveLength(2);
+  });
+  it('승인 완료·결제 대기와 예약 확정을 구분한다', async () => {
+    const r = repo();
+    const pending = await r.queryRequests({ statuses: ['approved_pending_payment'] });
+    const booked = await r.queryRequests({ statuses: ['booked'] });
+    expect(pending.bundles.flatMap((b) => b.items).every((i) => i.request.status === 'approved_pending_payment')).toBe(true);
+    expect(booked.bundles.flatMap((b) => b.items).every((i) => i.request.status === 'booked')).toBe(true);
+    expect(pending.bundles.length).toBeGreaterThan(0);
+    expect(booked.bundles.length).toBeGreaterThan(0);
+  });
+  it('조건에 맞는 요청이 없으면 빈 목록이지만 요청은 있다', async () => {
+    const res = await repo().queryRequests({ createdFrom: '2025-01-01', createdTo: '2025-01-31' });
+    expect(res).toEqual({ bundles: [], hasAnyRequest: true });
+  });
+  it('요청 자체가 없으면 hasAnyRequest=false', async () => {
+    const r = repo(); r.__db().requests = [];
+    expect(await r.queryRequests({ statuses: ['booked'] })).toEqual({ bundles: [], hasAnyRequest: false });
+  });
+  it('필터 조회는 요청 데이터·상태를 바꾸지 않는다', async () => {
+    const r = repo();
+    const before = JSON.stringify(r.__db().requests);
+    await r.queryRequests({ statuses: ['booked'], createdFrom: '2026-10-10', createdTo: '2026-10-12' });
+    expect(JSON.stringify(r.__db().requests)).toBe(before);
+  });
+  it('조회 실패는 빈 결과가 아니라 오류', async () => {
+    const r = repo(); r.__db().settings.failNextQuery = true;
+    expect(await code(r.queryRequests({}))).toBe('network');
+  });
+});
