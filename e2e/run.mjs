@@ -351,7 +351,8 @@ await test('업체 찾기: 이용 방법 데스크톱은 가운데 모달 · 작
   await start(page, { path: '/' });
   await guideBtn(page).click();
   const b = await page.locator('.dialog').boundingBox();
-  truthy(b.y > 40 && b.y + b.height < 760 && Math.abs(b.x + b.width / 2 - 640) < 4, `데스크톱 가운데 모달(${JSON.stringify(b)})`);
+  const mid = await page.evaluate(() => { const r = document.querySelector('.dialog-backdrop').getBoundingClientRect(); return r.left + r.width / 2; }); // 배경(스크롤바 자리를 뺀 화면)의 가운데
+  truthy(b.y > 40 && b.y + b.height < 760 && Math.abs(b.x + b.width / 2 - mid) < 4, `데스크톱 가운데 모달(${JSON.stringify(b)})`);
   await page.keyboard.press('Escape');
   await page.setViewportSize({ width: 360, height: 380 });
   await guideBtn(page).click();
@@ -1469,6 +1470,70 @@ for (const [w, hgt] of [[1280, 720], [390, 844]]) {
     await page.locator('main .card').first().waitFor(); // 업종 카드까지 그려진 뒤 측정
     await openCloseRepeat(page, guideBtn(page), '공동 예약 안내', {});
   }, { browser: browserSB, width: w, height: hgt });
+}
+
+// ───────── 필터 선택지 테두리·포커스 표시 잘림 ─────────
+/** 요소의 outline(바깥 폭 = 두께 + offset)이 대화상자 스크롤 영역의 보이는 부분 안에 온전히 들어가는지 */
+const ringInside = (loc) => loc.evaluate((el) => {
+  const cs = getComputedStyle(el);
+  const ext = cs.outlineStyle === 'none' ? 0 : parseFloat(cs.outlineWidth) + Math.max(0, parseFloat(cs.outlineOffset));
+  const r = el.getBoundingClientRect(); const body = el.closest('.dialog__body'); const b = body.getBoundingClientRect();
+  const view = { top: b.top + body.clientTop, left: b.left + body.clientLeft, bottom: b.top + body.clientTop + body.clientHeight, right: b.left + body.clientLeft + body.clientWidth };
+  const ring = { top: r.top - ext, left: r.left - ext, bottom: r.bottom + ext, right: r.right + ext };
+  const ok = ring.top >= view.top - 0.5 && ring.left >= view.left - 0.5 && ring.bottom <= view.bottom + 0.5 && ring.right <= view.right + 0.5;
+  return { ok, outline: cs.outlineStyle, ext, ring, view, scrollable: body.scrollHeight > body.clientHeight + 1 };
+});
+for (const [w, hgt] of [[390, 844], [390, 520], [1280, 800], [1280, 560]]) {
+  await test(`필터 선택지: 첫·마지막 항목 선택 테두리·키보드 포커스 표시가 잘리지 않음(${w}×${hgt}${hgt < 600 ? ', 내부 스크롤' : ''})`, async (page) => {
+    let scrolledOnce = false;
+    for (const path of ['/requests', '/bookings', '/bookings?tab=past']) {
+      await start(page, { path });
+      const n = await page.locator('.capsule[aria-haspopup="dialog"]').count();
+      for (let i = 0; i < n; i++) {
+        const label = `${path} 필터 ${i + 1}`;
+        // ① 마우스: 첫·마지막 항목 선택 → 선택 테두리만(포커스 표시 없음), 잘림 없음
+        await page.locator('.capsule[aria-haspopup="dialog"]').nth(i).click();
+        const dlg = page.getByRole('dialog'); await dlg.waitFor();
+        const items = dlg.locator('.choice');
+        const cnt = await items.count();
+        for (const k of [cnt - 1, 0]) {
+          await items.nth(k).click();
+          truthy(await items.nth(k).evaluate((el) => el.classList.contains('choice--on')), `${label} 마우스 선택 ${k}`);
+          const m = await ringInside(items.nth(k));
+          eq(m.outline, 'none', `${label} 마우스 선택 시 포커스 표시 없음(선택 테두리와 구분)`);
+          truthy(m.ok, `${label} 마우스 선택 ${k} 테두리 잘림 ${JSON.stringify(m)}`);
+        }
+        await page.keyboard.press('Escape'); await dlg.waitFor({ state: 'detached' });
+        // ② 키보드: 열고 Tab으로 선택된 첫 항목(‘전체’ 등)에 포커스 → 방향키로 마지막까지 → 다시 첫 항목
+        await page.locator('.capsule[aria-haspopup="dialog"]').nth(i).focus();
+        await page.keyboard.press('Enter'); await dlg.waitFor();
+        await page.keyboard.press('Tab');
+        const first = await ringInside(items.first());
+        eq(first.outline, 'solid', `${label} 첫 항목 키보드 포커스 표시`);
+        truthy(first.ok, `${label} 첫 항목 포커스 표시 잘림 ${JSON.stringify(first)}`);
+        for (let k = 1; k < cnt; k++) {
+          await page.keyboard.press('ArrowDown');
+          const r = await ringInside(items.nth(k));
+          if (r.scrollable) scrolledOnce = true;
+          eq(r.outline, 'solid', `${label} ${k + 1}번째 항목 포커스 표시`);
+          truthy(r.ok, `${label} ${k + 1}번째 항목 포커스 표시 잘림 ${JSON.stringify(r)}`);
+        }
+        // 마지막 항목이 ‘직접 선택’이면 날짜 입력도 포커스 표시가 잘리지 않아야 한다
+        if (await dlg.locator('input[type="date"]').count()) {
+          await page.keyboard.press('Tab');
+          const d = await ringInside(dlg.locator('input[type="date"]').first());
+          truthy(d.ext > 0 && d.ok, `${label} 날짜 입력 포커스 표시 잘림 ${JSON.stringify(d)}`);
+          await page.keyboard.press('Shift+Tab');
+        }
+        await page.keyboard.press('ArrowDown'); // 마지막에서 첫 항목으로 돌아간다
+        const back = await ringInside(items.first());
+        truthy(back.outline === 'solid' && back.ok, `${label} 다시 첫 항목 ${JSON.stringify(back)}`);
+        // 적용 동작 유지: 첫 항목(기본값) 적용 후 닫힘
+        await dlg.getByRole('button', { name: '적용' }).click(); await dlg.waitFor({ state: 'detached' });
+      }
+    }
+    if (hgt < 600) truthy(scrolledOnce, '내부 스크롤 상태를 한 번 이상 점검');
+  }, { width: w, height: hgt });
 }
 
 // ───────── 키보드·접근성 ─────────

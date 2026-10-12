@@ -183,7 +183,11 @@ a.list-row:hover { background: #fafbfd; }
   max-height: 90dvh; overflow: hidden; display: flex; flex-direction: column; gap: var(--sp-4);
 }
 /* 제목·하단 버튼은 고정, 본문만 내부 스크롤(작은 화면에서 버튼이 내용을 가리지 않게) */
-.dialog__body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; margin: 0 calc(-1 * var(--sp-4)); padding: 2px var(--sp-4); }
+/* 스크롤 영역 안쪽에 포커스 표시가 들어갈 여백(--focus-ring-space)을 위아래로 둔다. 위아래 음수 margin으로 같은 만큼 상쇄해 기존 위치·크기(본문 위 2px)는 그대로다. */
+.dialog__body {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+  margin: calc(2px - var(--focus-ring-space)) calc(-1 * var(--sp-4)); padding: var(--focus-ring-space) var(--sp-4);
+}
 .dialog__head, .dialog__actions { flex: none; }
 @media (min-width: 768px) {
   .dialog-backdrop { align-items: center; }
@@ -246,7 +250,10 @@ a.list-row:hover { background: #fafbfd; }
 .choice input { width: 20px; height: 20px; margin: 0; accent-color: var(--c-primary); flex: none; }
 .choice--on { border-color: var(--c-primary); background: var(--c-info-bg); }
 .choice__mark { font-size: var(--fs-xs); font-weight: 700; color: var(--c-primary); }
-.choice:focus-within { outline: 2px solid var(--c-focus); outline-offset: 2px; }
+/* 선택 상태는 안쪽 1px 테두리 + 연한 배경(.choice--on), 키보드 포커스는 바깥 outline으로 구분한다. 마우스로 누를 때는 포커스 표시를 그리지 않는다. */
+.choice:has(input:focus-visible) { outline: 2px solid var(--c-focus); outline-offset: 2px; }
+.choice input:focus-visible { outline: none; } /* 항목 전체 outline이 포커스를 표시하므로 라디오 자체의 이중 outline은 그리지 않는다 */
+.choice { scroll-margin-block: var(--focus-ring-space); }
 .date-range { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: var(--sp-3); }
 .dialog__head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); margin: calc(-1 * var(--sp-2)) calc(-1 * var(--sp-2)) 0 0; }
 

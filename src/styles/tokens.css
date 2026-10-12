@@ -25,6 +25,8 @@
   --fs-xs: 12px; --fs-sm: 13px; --fs-md: 15px; --fs-lg: 17px; --fs-xl: 20px; --fs-2xl: 24px;
   --lh: 1.5;
 
+  /* 포커스 표시가 차지하는 바깥 폭(가장 두꺼운 outline 3px + offset 2px + 여유 1px). 내부 스크롤 영역이 이만큼 여백을 둬야 잘리지 않는다. */
+  --focus-ring-space: 6px;
   --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-5: 20px; --sp-6: 24px; --sp-8: 32px;
   --r-sm: 8px; --r-md: 12px; --r-lg: 16px; --r-pill: 999px;
   --shadow-bar: 0 -1px 0 var(--c-line);

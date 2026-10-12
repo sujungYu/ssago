@@ -34,7 +34,8 @@ export function ToggleCapsule({ label, pressed, onToggle }: { label: string; pre
 export function Choice({ name, checked, onChange, children, hint }: { name: string; checked: boolean; onChange: () => void; children: string; hint?: string }) {
   return (
     <label className={`choice${checked ? ' choice--on' : ''}`}>
-      <input type="radio" name={name} checked={checked} onChange={onChange} />
+      {/* 키보드로 옮겨 온 항목을 포커스 표시까지 보이게 스크롤한다(브라우저는 작은 라디오만 보이게 맞춘다) */}
+      <input type="radio" name={name} checked={checked} onChange={onChange} onFocus={(e) => e.currentTarget.closest('label')?.scrollIntoView({ block: 'nearest' })} />
       <span className="grow">{children}{hint && <span className="choice__hint">{hint}</span>}</span>
       {checked && <span className="choice__mark" aria-hidden>선택됨</span>}
     </label>
