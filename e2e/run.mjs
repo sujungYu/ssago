@@ -263,6 +263,183 @@ await test('요청: 비교 묶음에서 업체별 승인 조건 비교', async (
   await waitText(page, '하나를 예약하면 나머지 요청은 종료돼요');
 });
 
+// ───────── 업체 찾기: 공동 예약 한 줄 안내 + 이용 방법 ─────────
+const guideBtn = (page) => page.getByRole('button', { name: '공동 예약 이용 방법' });
+const guideDlg = (page) => page.getByRole('dialog', { name: '싸고 공동 예약이란?' });
+const activeInDialog = (page) => page.evaluate(() => !!document.activeElement?.closest('[role="dialog"]'));
+const activeLabel = (page) => page.evaluate(() => document.activeElement?.getAttribute('aria-label') ?? document.activeElement?.textContent?.trim());
+
+/** 카테고리 제목·안내 문구·이용 방법 버튼의 위치 */
+/** 카테고리 제목·안내 문구(줄별)·정보 아이콘·버튼(터치 영역)의 위치 */
+async function hintLayout(page) {
+  return page.evaluate(() => {
+    const r = (b) => ({ x: b.left, y: b.top, r: b.right, b: b.bottom, w: b.width, h: b.height, cy: b.top + b.height / 2 });
+    const h = [...document.querySelectorAll('h2')].find((x) => x.textContent === '어떤 수리가 필요하세요?');
+    const hint = document.querySelector('.coop-hint');
+    const btn = hint.querySelector('button');
+    const icon = btn.querySelector('svg');
+    const range = document.createRange();
+    range.setStart(hint, 0); range.setEndBefore(btn);
+    const lines = [...range.getClientRects()].filter((x) => x.width > 0);
+    const last = lines.reduce((a, b) => (b.bottom > a.bottom || (b.bottom === a.bottom && b.right > a.right) ? b : a));
+    const head = h.parentElement;
+    return {
+      head: r(head.getBoundingClientRect()), h: r(h.getBoundingClientRect()), btn: r(btn.getBoundingClientRect()), icon: r(icon.getBoundingClientRect()),
+      textLeft: Math.min(...lines.map((x) => x.left)), textTop: Math.min(...lines.map((x) => x.top)), last: r(last), inHead: head.contains(hint),
+      vw: document.documentElement.clientWidth, sw: document.documentElement.scrollWidth,
+      textColor: getComputedStyle(hint).color, btnColor: getComputedStyle(btn).color, fontSize: parseFloat(getComputedStyle(hint).fontSize),
+      hintCount: document.querySelectorAll('.coop-hint').length, name: btn.getAttribute('aria-label'),
+    };
+  });
+}
+
+await test('업체 찾기: 공동 예약 안내는 카테고리 제목 영역에만(지역 아래 중복 없음), 큰 카드 없음, 자동으로 띄우지 않음', async (page) => {
+  await start(page, { path: '/' });
+  await waitText(page, '이웃과 같은 날 예약하면 출장비를 나눠 내요.');
+  eq(await page.locator('main .guide, main ol, main .banner .coop-hint').count(), 0, '큰 설명 카드·단계 목록·배너');
+  eq(await guideDlg(page).count(), 0, '자동으로 열리지 않음');
+  const L = await hintLayout(page);
+  eq(L.hintCount, 1, '안내는 한 번만');
+  eq(L.inHead, true, '카테고리 제목 영역 안');
+  const area = (await page.getByRole('heading', { name: '지역·건물 주소' }).boundingBox()).y;
+  truthy(area < L.h.y, '지역·건물 주소가 위');
+  truthy(L.h.y < 330, `카테고리 제목이 첫 화면 위쪽(${L.h.y}px)`);
+  truthy(L.textColor !== L.btnColor, '안내(회색)와 이용 방법(블루) 색 구분');
+  // 키보드 포커스 표시
+  await guideBtn(page).focus();
+  const outline = await guideBtn(page).evaluate((el) => getComputedStyle(el).outlineStyle);
+  truthy(outline !== 'none', '이용 방법 포커스 표시');
+  // 카테고리·지역 설정 동작 유지
+  await page.getByRole('link', { name: /수전·샤워기/ }).click();
+  await page.waitForURL((u) => u.pathname === '/providers');
+  await waitText(page, '공동 예약 후보');
+});
+
+for (const w of [320, 360, 390, 768, 1280]) {
+  await test(`업체 찾기: 카테고리 제목·안내 배치 ${w}px(겹침·잘림·가로 스크롤 없음)`, async (page) => {
+    await start(page, { path: '/' });
+    await waitText(page, '이웃과 같은 날 예약하면 출장비를 나눠 내요.');
+    const L = await hintLayout(page);
+    truthy(L.sw <= L.vw, '가로 스크롤');
+    truthy(L.btn.r <= L.vw && L.textLeft >= 0 && L.head.r <= L.vw, '잘림');
+    truthy(L.fontSize >= 13, `글자 축소 없음(${L.fontSize}px)`);
+    eq(L.name, '공동 예약 이용 방법', '접근성 이름');
+    truthy(Math.round(L.icon.w) === 20 && Math.round(L.icon.h) === 20, `아이콘 20px(${L.icon.w}×${L.icon.h})`);
+    truthy(L.btn.w >= 44 && L.btn.h >= 44, `터치 영역 44px 이상(${L.btn.w}×${L.btn.h})`);
+    truthy(Math.abs(L.icon.cy - L.last.cy) < 6, `아이콘이 문구 마지막 줄과 같은 줄(아이콘 ${L.icon.cy} / 문구 ${L.last.cy})`);
+    truthy(Math.abs(L.icon.x - L.last.r - 8) <= 2, `문구와 아이콘 간격 8px(${(L.icon.x - L.last.r).toFixed(1)}px)`);
+    if (w >= 720) {
+      truthy(Math.abs(L.h.cy - L.icon.cy) < 6, `같은 줄 수직 중앙(제목 ${L.h.cy} / 아이콘 ${L.icon.cy})`);
+      truthy(L.textLeft - L.h.r >= 24, `제목과 안내 사이 간격(${L.textLeft - L.h.r}px)`);
+      truthy(Math.abs(L.icon.r - L.head.r) <= 1, `아이콘이 오른쪽 끝(${L.icon.r} / ${L.head.r})`);
+    } else {
+      truthy(L.textTop >= L.h.b - 1, `안내가 제목 다음 줄(${L.textTop} / ${L.h.b})`);
+      truthy(Math.abs(L.textLeft - L.h.x) <= 1, `왼쪽 정렬(${L.textLeft} / ${L.h.x})`);
+    }
+    if (process.env.E2E_SHOTS !== '0') {
+      await guideBtn(page).hover(); await page.waitForTimeout(200);
+      const tb = await page.locator('.info-btn__tip').boundingBox();
+      truthy(tb.x >= 0 && tb.x + tb.width <= w, `툴팁이 화면 안(${JSON.stringify(tb)})`);
+      const hb = await page.locator('.section__head--hint').boundingBox();
+      await page.screenshot({ path: join(ROOT, `e2e/screens/${w}_home_hint_tooltip.png`), clip: { x: 0, y: Math.max(0, hb.y - 50), width: w, height: hb.height + 70 } });
+      await page.mouse.move(1, 1);
+    }
+    await guideBtn(page).click();
+    await guideDlg(page).waitFor();
+    await guideDlg(page).getByRole('button', { name: '확인' }).click();
+    await guideDlg(page).waitFor({ state: 'detached' });
+  }, { width: w });
+}
+
+await test('업체 찾기: 정보 아이콘 툴팁(호버·키보드 포커스)과 클릭·Enter로 이용 방법 열기', async (page) => {
+  await start(page, { path: '/' });
+  await waitText(page, '이웃과 같은 날 예약하면 출장비를 나눠 내요.');
+  const tip = page.locator('.info-btn__tip');
+  const tipShown = () => tip.evaluate((el) => getComputedStyle(el).visibility === 'visible');
+  eq(await tipShown(), false, '평소에는 툴팁 숨김');
+  await guideBtn(page).hover();
+  await page.waitForTimeout(200);
+  eq(await tipShown(), true, '호버 시 툴팁');
+  eq((await tip.innerText()).trim(), '공동 예약 이용 방법', '툴팁 문구');
+  const tb = await tip.boundingBox();
+  truthy(tb.x >= 0 && tb.x + tb.width <= 390, `툴팁이 화면 안(${JSON.stringify(tb)})`);
+  await page.mouse.move(5, 5);
+  await page.waitForTimeout(200);
+  eq(await tipShown(), false, '호버 해제 시 숨김');
+  // 키보드: Tab으로 포커스 → 툴팁 + 포커스 표시, Enter로 열기
+  await page.getByRole('link', { name: /지역·건물 주소 변경/ }).focus();
+  for (let i = 0; i < 6 && (await page.evaluate(() => document.activeElement?.getAttribute('aria-label'))) !== '공동 예약 이용 방법'; i++) await page.keyboard.press('Tab');
+  eq(await page.evaluate(() => document.activeElement?.getAttribute('aria-label')), '공동 예약 이용 방법', 'Tab으로 정보 아이콘 도달');
+  await page.waitForTimeout(200);
+  eq(await tipShown(), true, '키보드 포커스 시 툴팁');
+  truthy((await guideBtn(page).evaluate((el) => getComputedStyle(el).outlineStyle)) !== 'none', '포커스 표시');
+  await page.keyboard.press('Enter');
+  await guideDlg(page).waitFor();
+  await page.keyboard.press('Escape');
+  await guideDlg(page).waitFor({ state: 'detached' });
+  // 마우스 클릭
+  await guideBtn(page).click();
+  await guideDlg(page).waitFor();
+  await guideDlg(page).getByRole('button', { name: '확인' }).click();
+});
+
+await test('업체 찾기: 이용 방법(모바일 하단 시트) 포커스 이동·가두기·Escape·복귀, 배경 스크롤 잠금·위치 유지', async (page) => {
+  await page.setViewportSize({ width: 390, height: 600 });
+  await start(page, { path: '/' });
+  await waitText(page, '이웃과 같은 날 예약하면 출장비를 나눠 내요.');
+  await page.evaluate(() => window.scrollTo(0, 120));
+  await page.waitForTimeout(100);
+  const y0 = await page.evaluate(() => window.scrollY);
+  await guideBtn(page).click();
+  await guideDlg(page).waitFor();
+  const t = await guideDlg(page).innerText();
+  for (const part of ['같은 업체를 같은 날 가까운 이웃과 함께 예약하면, 출장비를 마감 시 확정된 세대 수로 나눠 내요.', '참여 가능한 공동 날짜를 선택해 수리를 요청해요.', '업체가 승인하면 조건을 확인하고 예약금을 결제해요.', '마감 시 세대별 출장비가 확정되고, 작업 완료 후 최종 정산해요.']) truthy(t.includes(part), `내용: ${part}`);
+  truthy(!/수리비[^.]*마감/.test(t), '마감에 전체 수리비가 확정되는 것처럼 설명');
+  eq(await activeInDialog(page), true, '열리면 내부로 포커스');
+  eq(await page.evaluate(() => getComputedStyle(document.documentElement).overflow), 'hidden', '배경 스크롤 잠금');
+  const box = await page.locator('.dialog').boundingBox();
+  truthy(Math.abs(box.y + box.height - 600) < 2, `모바일은 하단 시트(${JSON.stringify(box)})`);
+  for (let i = 0; i < 4; i++) { await page.keyboard.press('Tab'); eq(await activeInDialog(page), true, `Tab ${i + 1} 후에도 내부`); }
+  await page.keyboard.press('Shift+Tab'); eq(await activeInDialog(page), true, 'Shift+Tab 후에도 내부');
+  await page.keyboard.press('Escape');
+  await guideDlg(page).waitFor({ state: 'detached' });
+  eq(await activeLabel(page), '공동 예약 이용 방법', 'Escape 후 이용 방법 버튼으로 복귀');
+  eq(await page.evaluate(() => window.scrollY), y0, 'Escape 후 스크롤 위치 유지');
+  eq(await page.evaluate(() => document.documentElement.style.overflow), '', '닫으면 스크롤 잠금 해제');
+  // 닫기 버튼·확인 버튼
+  await guideBtn(page).click();
+  await guideDlg(page).getByRole('button', { name: '닫기' }).click();
+  await guideDlg(page).waitFor({ state: 'detached' });
+  eq(await activeLabel(page), '공동 예약 이용 방법', '닫기 후 복귀');
+  await guideBtn(page).click();
+  await guideDlg(page).getByRole('button', { name: '확인' }).click();
+  await guideDlg(page).waitFor({ state: 'detached' });
+  eq(await page.evaluate(() => window.scrollY), y0, '확인 후 스크롤 위치 유지');
+  eq(await activeLabel(page), '공동 예약 이용 방법', '확인 후 복귀');
+});
+
+await test('업체 찾기: 이용 방법 데스크톱은 가운데 모달 · 작은 화면은 본문만 스크롤되고 확인 버튼이 보임', async (page) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await start(page, { path: '/' });
+  await guideBtn(page).click();
+  const b = await page.locator('.dialog').boundingBox();
+  truthy(b.y > 40 && b.y + b.height < 760 && Math.abs(b.x + b.width / 2 - 640) < 4, `데스크톱 가운데 모달(${JSON.stringify(b)})`);
+  await page.keyboard.press('Escape');
+  await page.setViewportSize({ width: 360, height: 380 });
+  await guideBtn(page).click();
+  const ok = guideDlg(page).getByRole('button', { name: '확인' });
+  const okBox = await ok.boundingBox();
+  truthy(okBox.y + okBox.height <= 380, `작은 화면에서 확인 버튼이 화면 안(${JSON.stringify(okBox)})`);
+  const body = page.locator('.dialog__body');
+  const scrollable = await body.evaluate((el) => el.scrollHeight > el.clientHeight);
+  truthy(scrollable, '작은 화면에서는 본문 내부 스크롤');
+  await body.evaluate((el) => el.scrollTo(0, el.scrollHeight));
+  await guideDlg(page).getByText('마감 시 세대별 출장비가 확정되고').waitFor();
+  const lastBox = await guideDlg(page).getByText('마감 시 세대별 출장비가 확정되고').boundingBox();
+  truthy(lastBox.y + lastBox.height <= okBox.y, '마지막 단계가 확인 버튼에 가리지 않음');
+  await ok.click();
+});
+
 // ───────── 주소: 탐색 주소 / 재사용 방문 주소 / 요청·예약 방문 주소 ─────────
 const detailInput = (page) => page.getByLabel('상세 주소', { exact: true });
 const saveBox = (page) => page.getByRole('checkbox', { name: /다음 신청에도 이 주소 사용/ });
@@ -1087,7 +1264,7 @@ await test('인증: 회원가입 → 가입 완료 → 로그인 화면 → 로�
   await field(page, '비밀번호').fill('newpass-01');
   await field(page, '비밀번호').press('Enter'); // Enter 제출
   await waitPath(page, '/');
-  await waitText(page, '싸고 공동 예약이란?');
+  await waitText(page, '이웃과 같은 날 예약하면 출장비를 나눠 내요.');
   truthy(!(await storageDump(page)).includes('newpass-01'), '브라우저 저장소에 비밀번호가 남음');
 });
 
@@ -1158,7 +1335,7 @@ await test('인증: 새로고침해도 세션 유지, 세션이 무효면 로그
   await signInUi(page, E2E_USER);
   await waitPath(page, '/');
   await page.reload();
-  await waitText(page, '싸고 공동 예약이란?');
+  await waitText(page, '이웃과 같은 날 예약하면 출장비를 나눠 내요.');
   eq(pathOf(page), '/', '새로고침 후 위치');
   await page.goto(`${BASE}/bookings/bk-k2`);
   await waitText(page, '예약 상세').catch(() => {});
@@ -1174,7 +1351,7 @@ await test('인증: 시작할 때 네트워크가 끊겨도 저장된 세션으�
   await start(page, { path: '/' });
   page.fake.offline = true;
   await page.reload();
-  await waitText(page, '싸고 공동 예약이란?');
+  await waitText(page, '이웃과 같은 날 예약하면 출장비를 나눠 내요.');
   eq(pathOf(page), '/', '오프라인 시작 위치');
 });
 
@@ -1316,7 +1493,9 @@ await test('브랜드: 탭 제목·파비콘·헤더 로고(싸고 홈)·인증 
   const home = page.getByRole('link', { name: '싸고 홈', exact: true });
   await home.waitFor();
   eq(await home.locator('svg[aria-hidden="true"]').count(), 1, '헤더 심볼은 스크린리더에서 숨김');
-  await page.locator('.guide__art[aria-hidden="true"]').waitFor();
+  await page.getByRole('button', { name: '공동 예약 이용 방법' }).click();
+  await page.locator('.dialog .guide__art[aria-hidden="true"]').waitFor(); // 공동 방문 일러스트는 이용 방법 안에서만
+  await page.getByRole('button', { name: '확인' }).click();
   const bad = [];
   for (const r of ROUTES) {
     await page.goto(`${BASE}${r}`); await page.waitForTimeout(250);
@@ -1385,10 +1564,10 @@ if (!only || '데모 로그인'.includes(only) || only.includes('데모')) {
     await f('비밀번호').fill('demo-pass-1');
     await page.getByRole('button', { name: '로그인', exact: true }).click();
     await page.waitForURL((u) => u.pathname === '/');
-    await waitText(page, '싸고 공동 예약이란?');
+    await waitText(page, '이웃과 같은 날 예약하면 출장비를 나눠 내요.');
     truthy(!(await page.evaluate(() => JSON.stringify({ ...localStorage }))).includes('demo-pass-1'), '비밀번호 원문 저장');
     await page.reload();
-    await waitText(page, '싸고 공동 예약이란?');
+    await waitText(page, '이웃과 같은 날 예약하면 출장비를 나눠 내요.');
     await page.goto(`${DEMO_BASE}/me`);
     await waitText(page, 'first-time@ongimae.test');
     await page.getByRole('button', { name: '로그아웃' }).click();

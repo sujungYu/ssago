@@ -63,12 +63,12 @@ export function KV({ rows }: { rows: { k: ReactNode; v: ReactNode; total?: boole
     </dl>
   );
 }
-export function Section({ title, aside, children, id }: { title?: ReactNode; aside?: ReactNode; children: ReactNode; id?: string }) {
+export function Section({ title, aside, children, id, headClassName }: { title?: ReactNode; aside?: ReactNode; children: ReactNode; id?: string; /** 제목 영역 배치 변형(예: section__head--hint) */ headClassName?: string }) {
   const hid = useId();
   return (
     <section className="section" aria-labelledby={title ? hid : undefined} id={id}>
       {title && (
-        <div className="section__head">
+        <div className={`section__head${headClassName ? ` ${headClassName}` : ''}`}>
           <h2 id={hid}>{title}</h2>
           {aside}
         </div>
@@ -158,7 +158,11 @@ export function PasswordInput(props: Omit<InputHTMLAttributes<HTMLInputElement>,
 }
 
 // ───────── 대화상자 ─────────
-/** 확인 대화상자. 좁은 화면에서는 하단 시트, 넓은 화면에서는 가운데 대화상자. closeLabel을 주면 제목 옆에 닫기 버튼을 둔다. */
+/**
+ * 확인 대화상자. 좁은 화면에서는 하단 시트, 넓은 화면에서는 가운데 대화상자. closeLabel을 주면 제목 옆에 닫기 버튼을 둔다.
+ * 열리면 내부로 포커스를 옮기고 Tab을 안에 가두며 Escape로 닫는다. 열린 동안 배경 스크롤을 잠그고,
+ * 닫으면 연 버튼으로 포커스를 돌려준다(스크롤 위치는 그대로). 본문만 내부 스크롤되어 하단 버튼이 내용을 가리지 않는다.
+ */
 export function Dialog({ title, onClose, children, actions, closeLabel }: { title: string; onClose: () => void; children: ReactNode; actions: ReactNode; closeLabel?: string }) {
   const ref = useRef<HTMLDivElement>(null);
   const tid = useId();
@@ -166,8 +170,12 @@ export function Dialog({ title, onClose, children, actions, closeLabel }: { titl
   closeRef.current = onClose;
   useEffect(() => {
     const prev = document.activeElement as HTMLElement | null;
+    const scrollY = window.scrollY;
+    const html = document.documentElement;
+    const prevOverflow = html.style.overflow;
+    html.style.overflow = 'hidden'; // 배경 스크롤 잠금(스크롤 위치는 유지됨)
     const first = ref.current?.querySelector<HTMLElement>('button, [href], input, textarea, select');
-    first?.focus();
+    first?.focus({ preventScroll: true });
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') closeRef.current();
       if (e.key === 'Tab' && ref.current) {
@@ -179,7 +187,12 @@ export function Dialog({ title, onClose, children, actions, closeLabel }: { titl
       }
     };
     document.addEventListener('keydown', onKey);
-    return () => { document.removeEventListener('keydown', onKey); prev?.focus(); };
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      html.style.overflow = prevOverflow;
+      prev?.focus({ preventScroll: true });
+      if (window.scrollY !== scrollY) window.scrollTo(0, scrollY);
+    };
   }, []);
   return (
     <div className="dialog-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
@@ -190,25 +203,51 @@ export function Dialog({ title, onClose, children, actions, closeLabel }: { titl
             <button type="button" className="icon-btn" aria-label={closeLabel} onClick={onClose}><Icon name="close" /></button>
           </div>
         ) : <h2 id={tid}>{title}</h2>}
-        <div className="stack">{children}</div>
-        <div className="stack--sm stack">{actions}</div>
+        <div className="stack dialog__body">{children}</div>
+        {actions && <div className="stack--sm stack dialog__actions">{actions}</div>}
       </div>
     </div>
   );
 }
 
 // ───────── 싸고 공동 예약이란? ─────────
-export function GuideCard({ illustrated }: { /** 공동 방문 일러스트 표시(업체 찾기에서만) */ illustrated?: boolean }) {
+/**
+ * 업체 찾기 ‘어떤 수리가 필요하세요?’ 제목 영역의 한 줄 안내 + 원형 정보 아이콘 버튼(접근성 이름 ‘공동 예약 이용 방법’).
+ * 마지막 어절과 아이콘을 줄바꿈 없이 묶어 아이콘만 다음 줄로 떨어지지 않게 한다. 호버·키보드 포커스 시 같은 문구의 툴팁을 보여준다. 누르면 상세 안내(모바일 하단 시트, 데스크톱 모달)를 연다.
+ * 자동으로 띄우거나 확인을 강제하지 않는다. 출장비만 마감 때 확정되며 수리비는 작업 완료 후 최종 정산된다.
+ */
+export function CoopGuideHint() {
+  const [open, setOpen] = useState(false);
+  const tipRef = useRef<HTMLSpanElement>(null);
+  const [tipStart, setTipStart] = useState(false);
+  // 툴팁이 화면 왼쪽 밖으로 나가면 아이콘 왼쪽 기준으로 펼친다
+  const placeTip = (btn: HTMLElement) => setTipStart(btn.getBoundingClientRect().right - (tipRef.current?.offsetWidth ?? 0) < 8);
   return (
-    <section className="guide" aria-labelledby="guide-t">
-      {illustrated && <CoopVisitIllustration className="guide__art" />}
-      <h2 className="guide__title" id="guide-t" style={{ fontSize: 'var(--fs-md)' }}><Icon name="users" size={22} />싸고 공동 예약이란?</h2>
-      <p className="guide__body small">같은 업체를 같은 날 가까운 이웃과 함께 예약하면, 업체의 출장비를 확정된 세대 수만큼 나눠 내요.</p>
-      <ol className="guide__steps">
-        <li className="guide__step"><b>1</b><span>참여할 수 있는 공동 날짜를 골라 요청해요</span></li>
-        <li className="guide__step"><b>2</b><span>업체가 승인하면 예약금을 내고 예약을 확정해요</span></li>
-        <li className="guide__step"><b>3</b><span>마감 뒤 확정 세대 수로 나눈 출장비를 정산해요</span></li>
-      </ol>
-    </section>
+    <>
+      <p className="coop-hint">
+        이웃과 같은 날 예약하면 출장비를 나눠{' '}
+        <span className="nowrap">
+          내요.
+          <button type="button" className={`info-btn${tipStart ? ' info-btn--tip-start' : ''}`} aria-label="공동 예약 이용 방법" aria-haspopup="dialog"
+            onClick={() => setOpen(true)} onMouseEnter={(e) => placeTip(e.currentTarget)} onFocus={(e) => placeTip(e.currentTarget)}>
+            <Icon name="info" size={20} />
+            {/* 시각용 툴팁(이름은 aria-label로 이미 같은 문구라 중복해서 읽히지 않게 숨김) */}
+            <span ref={tipRef} className="info-btn__tip" aria-hidden>공동 예약 이용 방법</span>
+          </button>
+        </span>
+      </p>
+      {open && (
+        <Dialog title="싸고 공동 예약이란?" onClose={() => setOpen(false)} closeLabel="닫기"
+          actions={<Button variant="primary" block onClick={() => setOpen(false)}>확인</Button>}>
+          <CoopVisitIllustration className="guide__art" />
+          <p>같은 업체를 같은 날 가까운 이웃과 함께 예약하면, 출장비를 마감 시 확정된 세대 수로 나눠 내요.</p>
+          <ol className="guide-steps">
+            <li><b aria-hidden>1</b><span>참여 가능한 공동 날짜를 선택해 수리를 요청해요.</span></li>
+            <li><b aria-hidden>2</b><span>업체가 승인하면 조건을 확인하고 예약금을 결제해요.</span></li>
+            <li><b aria-hidden>3</b><span>마감 시 세대별 출장비가 확정되고, 작업 완료 후 최종 정산해요.</span></li>
+          </ol>
+        </Dialog>
+      )}
+    </>
   );
 }

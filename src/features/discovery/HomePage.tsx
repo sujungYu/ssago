@@ -3,7 +3,7 @@ import { Page } from '../../app/Page';
 import { useAppState, useRepo } from '../../app/context';
 import { useAsync } from '../../app/hooks';
 import { Icon } from '../../components/Icon';
-import { AsyncView, Banner, GuideCard, LinkButton, Section, Skeleton } from '../../components/ui';
+import { AsyncView, Banner, CoopGuideHint, LinkButton, Section, Skeleton } from '../../components/ui';
 
 export function HomePage() {
   const repo = useRepo();
@@ -35,9 +35,8 @@ export function HomePage() {
         )}
       </Section>
 
-      <GuideCard illustrated />
-
-      <Section title="어떤 수리가 필요하세요?">
+      {/* 공동 예약 안내는 카테고리 제목 영역에 둔다: 넓은 화면은 제목 오른쪽 끝, 좁은 화면은 제목 아래 줄. 상세는 ‘이용 방법’ */}
+      <Section title="어떤 수리가 필요하세요?" aside={<CoopGuideHint />} headClassName="section__head--hint">
         <AsyncView state={cats} loading={<Skeleton h={60} n={5} />}>
           {(list) => (
             <ul className="cat-grid">
