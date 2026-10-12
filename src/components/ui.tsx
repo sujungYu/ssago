@@ -129,7 +129,8 @@ export function AsyncView<T>({ state, children, loading }: { state: AsyncState<T
 }
 
 // ───────── 입력 ─────────
-export function Field({ label, hint, error, children, id }: { label: string; hint?: string; error?: string | null; children: (p: { id: string; 'aria-describedby'?: string; 'aria-invalid'?: boolean }) => ReactNode; id?: string }) {
+/** liveError=false: 오류 문구를 즉시 낭독하지 않는다(폼이 제출 실패를 한 번만 알리고, 포커스가 옮겨지면 연결된 오류가 읽힌다) */
+export function Field({ label, hint, error, children, id, liveError = true }: { label: string; hint?: string; error?: string | null; children: (p: { id: string; 'aria-describedby'?: string; 'aria-invalid'?: boolean }) => ReactNode; id?: string; liveError?: boolean }) {
   const auto = useId();
   const fid = id ?? auto;
   const desc = [hint && `${fid}-hint`, error && `${fid}-err`].filter(Boolean).join(' ') || undefined;
@@ -138,7 +139,7 @@ export function Field({ label, hint, error, children, id }: { label: string; hin
       <label className="field__label" htmlFor={fid}>{label}</label>
       {children({ id: fid, 'aria-describedby': desc, 'aria-invalid': error ? true : undefined })}
       {hint && <span className="field__hint" id={`${fid}-hint`}>{hint}</span>}
-      {error && <span className="field__error" id={`${fid}-err`} role="alert">{error}</span>}
+      {error && <span className="field__error" id={`${fid}-err`} role={liveError ? 'alert' : undefined}>{error}</span>}
     </div>
   );
 }

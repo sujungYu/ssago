@@ -157,7 +157,7 @@ await test('요청: 공동 날짜로 복수 작업 요청서 제출', async (pag
   await waitText(page, '수리 요청서');
   await waitText(page, '고객 가능 시간');
   await page.getByRole('button', { name: '요청 보내기' }).click();
-  await waitText(page, '작업 내용을 입력해 주세요'); // 검증 메시지
+  await waitText(page, '작업 1에 어떤 수리가 필요한지 입력해 주세요'); // 검증 메시지(고치는 방법 안내)
   await page.getByLabel('어떤 작업인가요?').fill('주방 수전 교체');
   await page.getByRole('button', { name: '작업 추가하기' }).click();
   await page.getByLabel('어떤 작업인가요?').nth(1).fill('배수 트랩 교체');
@@ -2011,6 +2011,140 @@ for (const w of [360, 1280]) {
     }
   }, { width: w });
 }
+
+// ───────── 요청서 제출 오류 → 첫 오류로 스크롤·포커스 ─────────
+/** 현재 포커스 대상과 가림 여부(상단 헤더 아래·하단 버튼 영역 위에 라벨·오류까지 보이는지) */
+const focusInfo = (page) => page.evaluate(() => {
+  const el = document.activeElement;
+  const region = el.closest('[data-err-region]') ?? el.closest('.field') ?? el;
+  const r = region.getBoundingClientRect();
+  const h = document.querySelector('.app-header').getBoundingClientRect();
+  const bar = document.querySelector('.action-bar').getBoundingClientRect();
+  const errId = (el.getAttribute('aria-describedby') ?? '').split(' ').find((id) => id.endsWith('-err'));
+  return {
+    target: el.dataset.errTarget ?? el.tagName, invalid: el.getAttribute('aria-invalid'),
+    error: errId ? document.getElementById(errId)?.textContent : null,
+    visible: r.top >= h.bottom - 0.5 && r.bottom <= bar.top + 0.5, top: Math.round(r.top), headerBottom: Math.round(h.bottom), bottom: Math.round(r.bottom), barTop: Math.round(bar.top),
+  };
+});
+/** 스크롤이 멈출 때까지 기다린다(부드러운 스크롤 포함) */
+const settle = (page) => page.evaluate(() => new Promise((res) => { let last = -1, same = 0; const tick = () => { const y = Math.round(scrollY); same = y === last ? same + 1 : 0; last = y; if (same >= 4) res(); else requestAnimationFrame(tick); }; tick(); }));
+const sendBtn = (page) => page.getByRole('button', { name: '요청 보내기' });
+const noSaved = (d) => { d.savedVisitAddress = null; };
+
+await test('요청서 오류 이동: 여러 항목이 비면 화면 순서상 첫 오류로 이동 → 고칠 때마다 다음 오류로, 오류 해제, 정상 요청은 한 번만', async (page) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.setViewportSize({ width: 390, height: 700 });
+  await start(page, { path: '/providers/p1/request?new=1', patch: noSaved });
+  await waitText(page, '수리 요청서');
+  eq(await page.locator('.field__error').count(), 0, '제출 전에는 오류 없음');
+  const req0 = (await db(page)).requests.length;
+  await sendBtn(page).click();
+  await settle(page);
+  let fi = await focusInfo(page);
+  truthy(fi.target.startsWith('task-') && fi.invalid === 'true' && fi.error.includes('작업 1에 어떤 수리가 필요한지 입력해 주세요'), `첫 오류=작업: ${JSON.stringify(fi)}`);
+  truthy(fi.visible, `헤더·하단 버튼에 가리지 않음 ${JSON.stringify(fi)}`);
+  eq(await page.locator('.field__error').count(), 4, '모든 오류를 항목 가까이에 표시(작업·상세 주소·날짜·시간)');
+  truthy((await page.locator('form p.sr-only[role="status"]').innerText()).includes('고칠 항목 4개 중 첫 항목으로 이동'), '제출 실패 한 번 알림');
+  eq(await page.locator('.field__error[role="alert"]').count(), 0, '오류 문구 개별 낭독 없음');
+  await page.keyboard.type('주방 수전 교체');
+  eq(await page.locator('.field__error').count(), 3, '고친 항목 오류 해제');
+  await sendBtn(page).click(); await settle(page);
+  fi = await focusInfo(page);
+  truthy(fi.target === 'detail' && fi.error.includes('상세 주소') && fi.visible, `다음 오류=상세 주소 ${JSON.stringify(fi)}`);
+  await page.keyboard.type('301동 1204호');
+  await sendBtn(page).click(); await settle(page);
+  fi = await focusInfo(page);
+  truthy(fi.target === 'date' && fi.error.includes('희망 방문 날짜') && fi.visible, `다음 오류=날짜 ${JSON.stringify(fi)}`);
+  await page.locator('[data-err-target="date"]').fill('2026-10-22');
+  await sendBtn(page).click(); await settle(page);
+  fi = await focusInfo(page);
+  truthy(fi.target === 'slots' && fi.error.includes('방문받을 수 있는 시간을 하나 이상 선택해 주세요') && fi.visible, `다음 오류=시간(첫 선택 버튼) ${JSON.stringify(fi)}`);
+  await page.keyboard.press('Space'); // 포커스된 시간 버튼을 키보드로 선택
+  eq(await page.locator('.field__error').count(), 0, '모든 오류 해제');
+  eq((await db(page)).requests.length, req0, '오류 동안 제출 없음');
+  await sendBtn(page).dblclick();
+  await waitText(page, '요청을 보냈어요');
+  eq((await db(page)).requests.length, req0 + 1, '한 번만 제출');
+});
+
+await test('요청서 오류 이동: 복수 작업 중 비어 있는 작업, Enter 제출, 첨부 사진·입력 유지', async (page) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await start(page, { path: '/providers/p1/request?group=g1' });
+  await page.getByLabel('어떤 작업인가요?').fill('주방 수전 교체');
+  await page.locator('input[type="file"]').first().setInputFiles({ name: 'faucet.jpg', mimeType: 'image/jpeg', buffer: Buffer.from('x') });
+  await page.getByRole('button', { name: '작업 추가하기' }).click();
+  await page.getByRole('button', { name: '작업 추가하기' }).click();
+  await page.getByLabel('어떤 작업인가요?').nth(2).fill('배수 트랩 교체');
+  await page.getByLabel('자세한 설명').nth(2).click();
+  // Enter 제출: 입력란에서 Enter → 같은 검증·이동
+  await page.getByLabel('어떤 작업인가요?').nth(2).press('Enter');
+  await settle(page);
+  const fi = await focusInfo(page);
+  eq(fi.error, '작업 2에 어떤 수리가 필요한지 입력해 주세요. 예: 주방 수전 교체', '비어 있는 두 번째 작업으로');
+  truthy(fi.visible, `가림 없음 ${JSON.stringify(fi)}`);
+  eq(await page.getByLabel('어떤 작업인가요?').first().inputValue(), '주방 수전 교체', '입력 유지');
+  await waitText(page, 'faucet.jpg');
+});
+
+await test('요청서 오류 이동: 건물 주소가 없으면 주소 선택 버튼으로 이동', async (page) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await start(page, { path: '/providers/p1/request?new=1', address: null, patch: [(d) => { d.exploreAddressId = null; }, (d) => { d.savedVisitAddress = null; }] });
+  await waitText(page, '수리 요청서');
+  await page.getByLabel('어떤 작업인가요?').fill('주방 수전 교체');
+  await sendBtn(page).click(); await settle(page);
+  const fi = await page.evaluate(() => ({ target: document.activeElement.dataset.errTarget, text: document.activeElement.textContent, desc: document.getElementById(document.activeElement.getAttribute('aria-describedby') ?? '')?.textContent }));
+  eq(fi.target, 'base', '주소 선택 버튼');
+  truthy(fi.desc.includes('방문할 건물 주소를 선택해 주세요'), `버튼과 오류 연결: ${JSON.stringify(fi)}`);
+});
+
+await test('요청서 오류 이동: 360×560 작은 화면·부드러운 스크롤에서도 첫 오류가 헤더·하단 버튼에 가리지 않음(한 번만 이동)', async (page) => {
+  await page.setViewportSize({ width: 360, height: 560 });
+  await start(page, { path: '/providers/p1/request?new=1', patch: noSaved });
+  await page.getByLabel('어떤 작업인가요?').fill('주방 수전 교체');
+  await page.getByLabel('상세 주소', { exact: true }).fill('301동 1204호');
+  await page.locator('[data-err-target="date"]').fill('2026-10-22');
+  await page.evaluate(() => window.scrollTo(0, 0));
+  const ys = [];
+  await sendBtn(page).click();
+  for (let k = 0; k < 30; k++) { ys.push(await page.evaluate(() => Math.round(scrollY))); await page.waitForTimeout(30); }
+  await settle(page);
+  const fi = await focusInfo(page);
+  truthy(fi.target === 'slots' && fi.visible, `시간 선택이 가리지 않음 ${JSON.stringify(fi)}`);
+  // 한 번만 이동: 스크롤 위치가 한 방향으로만 변한다(위아래로 튀지 않음)
+  const diffs = ys.slice(1).map((y, k) => Math.sign(y - ys[k])).filter(Boolean);
+  truthy(new Set(diffs).size <= 1, `스크롤이 튐 ${ys.join(',')}`);
+  // 모션 줄이기: 애니메이션 없이 즉시 위치
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.locator('.chip').first().click(); // 시간 선택 → 오류 해제
+  await page.getByLabel('어떤 작업인가요?').fill('');
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  await sendBtn(page).click();
+  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => r())));
+  const fi2 = await focusInfo(page);
+  truthy(fi2.target.startsWith('task-') && fi2.visible, `모션 줄이기: 즉시 이동 ${JSON.stringify(fi2)}`);
+});
+
+await test('요청서 오류 이동: 네트워크·처리 실패는 입력란으로 이동하지 않고 폼 수준 안내·다시 보내기, 입력 유지·한 번만 제출', async (page) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await start(page, { path: '/providers/p1/request?group=g1' });
+  await page.getByLabel('어떤 작업인가요?').fill('주방 수전 교체');
+  await page.getByLabel('상세 주소', { exact: true }).fill('301동 1204호');
+  await page.getByRole('button', { name: '09:00~12:00' }).click();
+  const req0 = (await db(page)).requests.length;
+  await page.waitForFunction(() => !!window.__sagoDev);
+  await page.evaluate(() => { window.__sagoDev.db.settings.failNextWrite = true; });
+  await sendBtn(page).click();
+  await waitText(page, '입력한 내용은 그대로 있어요');
+  const active = await page.evaluate(() => document.activeElement?.dataset?.errTarget ?? null);
+  eq(active, null, '임의 입력란으로 포커스 이동 없음');
+  eq(await page.locator('.field__error').count(), 0, '필드 오류로 표시하지 않음');
+  eq(await page.getByLabel('어떤 작업인가요?').inputValue(), '주방 수전 교체', '입력 유지');
+  eq((await db(page)).requests.length, req0, '실패 시 요청 없음');
+  await page.getByRole('button', { name: '다시 보내기' }).click();
+  await waitText(page, '요청을 보냈어요');
+  eq((await db(page)).requests.length, req0 + 1, '재시도로 한 번만 제출');
+});
 
 // ───────── 탐색 주소 공유(업체 찾기 ↔ 카테고리별 업체 목록) ─────────
 const region = (page) => page.locator('.region-card');

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useBackTo } from '../../app/backNav';
+import { focusFirstError } from '../../app/focusFirstError';
 import { describeError } from '../../domain/errors';
 import { FORM_PROGRESS } from '../../domain/progressStep';
 import { ProgressSteps } from '../../components/ProgressSteps';
@@ -55,6 +56,14 @@ export function RequestFormPage() {
   const [baseChanged, setBaseChanged] = useState(false);
   const [touched, setTouched] = useState(false);
   const prefilled = useRef(false);
+  // 제출 오류 → 첫 오류로 이동: 제출할 때마다 증가시키고, 오류 문구가 렌더링된 뒤(effect) 화면 순서상 첫 오류로 한 번만 이동한다
+  const formRef = useRef<HTMLFormElement>(null);
+  const errOrder = useRef<string[]>([]);
+  const [focusTick, setFocusTick] = useState(0);
+  const [errCount, setErrCount] = useState(0);
+  useEffect(() => {
+    if (focusTick && formRef.current) focusFirstError(formRef.current, errOrder.current);
+  }, [focusTick]);
   const filledFor = useRef<string | null>(null);
 
   // 같은 건물(건물 식별자 + 기본 주소 일치)일 때만 저장한 상세 주소를 자동 입력한다. 고객은 제출 전에 확인·수정할 수 있다.
@@ -108,18 +117,30 @@ export function RequestFormPage() {
           const slotOptions = group?.slots ?? DEFAULT_SLOTS;
           const apartment = address.data?.kind === 'apartment';
 
+          const taskErr = (i: number, t: TaskDraft) => (!t.title.trim() ? `작업 ${i + 1}에 어떤 수리가 필요한지 입력해 주세요. 예: 주방 수전 교체` : null);
           const err = {
             tasks: tasks.some((t) => !t.title.trim()) ? '작업 내용을 입력해 주세요.' : null,
-            slots: slots.length === 0 ? '고객 가능 시간을 하나 이상 선택해 주세요.' : null,
+            slots: slots.length === 0 ? '방문받을 수 있는 시간을 하나 이상 선택해 주세요.' : null,
             date: !joint && !newDate ? '희망 방문 날짜를 선택해 주세요.' : !joint && newDate < minDate ? `${formatDate(minDate)} 이후 날짜를 선택해 주세요.` : null,
             base: !address.data ? '방문할 건물 주소를 선택해 주세요.' : null,
             detail: address.data ? detailError(address.data.kind, detail) : null,
           };
           const valid = !Object.values(err).some(Boolean) && !groupMissing;
+          // 화면 순서대로의 오류 대상(작업 → 건물 주소 → 상세 주소 → 희망 날짜 → 가능 시간). 안내 문구는 오류가 아니다
+          errOrder.current = [
+            ...tasks.filter((t) => !t.title.trim()).map((t) => `task-${t.key}`),
+            ...(err.base ? ['base'] : []), ...(err.detail ? ['detail'] : []), ...(err.date ? ['date'] : []), ...(err.slots ? ['slots'] : []),
+          ];
 
           const submit = () => {
             setTouched(true);
-            if (!valid) return;
+            if (!valid) {
+              // 제출 중단: 입력값·사진은 그대로 두고, 렌더링 뒤 첫 오류로 이동한다(Enter 제출도 같은 경로)
+              setErrCount(errOrder.current.length);
+              setFocusTick((n) => n + 1);
+              return;
+            }
+            setErrCount(0);
             void action.run(async () => {
               const r = await repo.createRequest({
                 providerId: p.id, groupId: joint ? groupId : null, newDateWish: joint ? undefined : newDate, slots,
@@ -136,7 +157,9 @@ export function RequestFormPage() {
           };
 
           return (
-            <form className="stack stack--lg" noValidate onSubmit={(e) => { e.preventDefault(); submit(); }}>
+            <form ref={formRef} className="stack stack--lg" noValidate onSubmit={(e) => { e.preventDefault(); submit(); }}>
+              {/* 제출 실패를 한 번만 알린다(각 오류 문구는 낭독하지 않고 입력과 연결 — 포커스가 옮겨지면 읽힌다) */}
+              <p className="sr-only" role="status">{touched && errCount > 0 && errOrder.current.length > 0 ? `요청을 보내지 못했어요. 고칠 항목 ${errOrder.current.length}개 중 첫 항목으로 이동했어요.` : ''}</p>
               <div className="card">
                 <KV rows={[
                   { k: '업체', v: p.name },
@@ -160,8 +183,8 @@ export function RequestFormPage() {
                       <h3>작업 {i + 1}</h3>
                       {tasks.length > 1 && <Button variant="ghost" sm onClick={() => setTasks(tasks.filter((x) => x.key !== t.key))}>삭제</Button>}
                     </div>
-                    <Field label="어떤 작업인가요?" error={touched && !t.title.trim() ? '작업 내용을 입력해 주세요.' : null}>
-                      {(fp) => <input {...fp} className="input" value={t.title} maxLength={40} placeholder="예: 주방 수전 교체" onChange={(e) => setTasks(tasks.map((x) => x.key === t.key ? { ...x, title: e.target.value } : x))} />}
+                    <Field label="어떤 작업인가요?" error={touched ? taskErr(i, t) : null} liveError={false}>
+                      {(fp) => <input {...fp} data-err-target={`task-${t.key}`} className="input" value={t.title} maxLength={40} placeholder="예: 주방 수전 교체" onChange={(e) => setTasks(tasks.map((x) => x.key === t.key ? { ...x, title: e.target.value } : x))} />}
                     </Field>
                     <Field label="자세한 설명" hint="증상, 크기, 모델명을 알려주시면 정확한 승인에 도움이 돼요.">
                       {(fp) => <textarea {...fp} className="textarea" value={t.description} maxLength={500} onChange={(e) => setTasks(tasks.map((x) => x.key === t.key ? { ...x, description: e.target.value } : x))} />}
@@ -189,10 +212,10 @@ export function RequestFormPage() {
                           <Button variant="secondary" sm onClick={() => setPicking(true)}>다른 주소</Button>
                         </div>
                       ) : (
-                        <>
-                          <Button variant="primary" block onClick={() => setPicking(true)}><Icon name="pin" size={18} />방문할 건물 주소 선택</Button>
-                          {touched && err.base && <p className="field__error" role="alert">{err.base}</p>}
-                        </>
+                        <div className="stack--sm stack" data-err-region>
+                          <Button variant="primary" block onClick={() => setPicking(true)} data-err-target="base" aria-describedby={touched && err.base ? 'req-base-err' : undefined}><Icon name="pin" size={18} />방문할 건물 주소 선택</Button>
+                          {touched && err.base && <p className="field__error" id="req-base-err">{err.base}</p>}
+                        </div>
                       )}
                     </AsyncView>
                     {baseId && baseId !== addressId && <p className="xs muted">이 신청에만 쓰는 주소예요. 업체 찾기의 지역·건물 주소는 그대로예요.</p>}
@@ -200,9 +223,9 @@ export function RequestFormPage() {
                   {baseChanged && !detail && <Banner tone="info" title="건물 주소가 바뀌어 상세 주소를 비웠어요">새 주소의 상세 주소를 다시 확인해 주세요.</Banner>}
                   {autofilled !== null && <Banner tone="info" title={SAVED_ADDRESS_LOADED}>{detail !== autofilled ? '저장한 주소와 다르게 수정했어요. 아래에서 저장을 선택하면 다음 신청에 바뀐 주소를 써요.' : undefined}</Banner>}
                   {saved.error !== undefined && <p className="xs muted">저장한 주소를 불러오지 못했어요. 상세 주소를 직접 입력해 주세요.</p>}
-                  <Field label={apartment ? '상세 주소' : '상세 주소 (선택)'} error={touched ? err.detail : null}
+                  <Field label={apartment ? '상세 주소' : '상세 주소 (선택)'} error={touched ? err.detail : null} liveError={false}
                     hint="동·호수, 층 등 방문에 필요한 정보예요. 요청을 받은 업체와 나만 볼 수 있어요.">
-                    {(fp) => <input {...fp} className="input" value={detail} maxLength={60} autoComplete="off" disabled={!address.data}
+                    {(fp) => <input {...fp} data-err-target="detail" className="input" value={detail} maxLength={60} autoComplete="off" disabled={!address.data}
                       onChange={(e) => setDetail(e.target.value)} placeholder={apartment ? '예: 301동 1204호' : '예: 2층, 대문 옆 초인종'} />}
                   </Field>
                   <label className="save-address">
@@ -223,22 +246,30 @@ export function RequestFormPage() {
 
               <Section title="고객 가능 시간">
                 {!joint && (
-                  <Field label="희망 방문 날짜" error={touched ? err.date : null} hint="새 날짜로 요청하면 업체가 승인하면서 접수 마감을 정해요.">
-                    {(fp) => <input {...fp} type="date" className="input" min={minDate} value={newDate} onChange={(e) => setNewDate(e.target.value)} />}
+                  <Field label="희망 방문 날짜" error={touched ? err.date : null} liveError={false} hint="새 날짜로 요청하면 업체가 승인하면서 접수 마감을 정해요.">
+                    {(fp) => <input {...fp} data-err-target="date" type="date" className="input" min={minDate} value={newDate} onChange={(e) => setNewDate(e.target.value)} />}
                   </Field>
                 )}
                 <p className="small muted">방문받을 수 있는 시간 범위를 골라 주세요. 업체가 이 범위 안에서 방문(도착) 시각을 제안하고, 예약금을 결제하면 그 시각으로 예약이 확정돼요.</p>
-                <div role="group" aria-label="고객 가능 시간 (여러 개 선택 가능)" className="chips">
-                  {slotOptions.map((s) => (
-                    <button key={s} type="button" className="chip" aria-pressed={slots.includes(s)} onClick={() => setSlots(slots.includes(s) ? slots.filter((x) => x !== s) : [...slots, s])}>
+                <div data-err-region className="stack--sm stack">
+                <div role="group" aria-label="고객 가능 시간 (여러 개 선택 가능)" className="chips" aria-describedby={touched && err.slots ? 'req-slots-err' : undefined}>
+                  {slotOptions.map((s, si) => (
+                    <button key={s} type="button" className="chip" aria-pressed={slots.includes(s)} data-err-target={si === 0 ? 'slots' : undefined}
+                      aria-describedby={si === 0 && touched && err.slots ? 'req-slots-err' : undefined} onClick={() => setSlots(slots.includes(s) ? slots.filter((x) => x !== s) : [...slots, s])}>
                       {slots.includes(s) && <Icon name="check" size={16} />}{formatSlot(s)}
                     </button>
                   ))}
                 </div>
-                {touched && err.slots && <p className="field__error" role="alert">{err.slots}</p>}
+                {touched && err.slots && <p className="field__error" id="req-slots-err">{err.slots}</p>}
+                </div>
               </Section>
 
-              {action.error && <Banner tone="danger" title={action.error.title}>{action.error.hint}</Banner>}
+              {action.error && (
+                <div className="stack--sm stack">
+                  <Banner tone="danger" title={action.error.title}>{action.error.hint} 입력한 내용은 그대로 있어요.</Banner>
+                  <Button variant="secondary" block busy={action.busy} onClick={submit}>다시 보내기</Button>
+                </div>
+              )}
               <ActionBar note="요청만으로는 예약이 확정되지 않아요. 업체 승인 후 예약금을 결제해야 확정돼요.">
                 <Button variant="primary" block type="submit" busy={action.busy} disabled={groupMissing}>요청 보내기</Button>
               </ActionBar>
