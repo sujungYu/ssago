@@ -203,3 +203,20 @@ a.list-row:hover { background: #fafbfd; }
 .dev-panel .btn { min-height: 36px; font-size: var(--fs-xs); padding: 0 10px; border-radius: 8px; }
 .dev-panel select { min-height: 36px; padding: 4px 8px; border: 1px solid var(--c-line-strong); border-radius: 8px; max-width: 100%; background: #fff; }
 .dev-log { background: #20242c; color: #d7dbe3; border-radius: 8px; padding: 8px 10px; max-height: 140px; overflow: auto; font-size: 12px; }
+
+/* ───────── 인증 화면 ───────── */
+.auth { width: 100%; max-width: 420px; margin: 0 auto; }
+.auth__logo { margin: 0; font-size: var(--fs-2xl); font-weight: 800; color: var(--c-primary); letter-spacing: -0.02em; }
+.auth__links { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: var(--sp-1) var(--sp-2); font-size: var(--fs-sm); color: var(--c-text-2); }
+.auth__links a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 var(--sp-2); font-weight: 600; }
+.auth__icon { width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center; background: var(--c-info-bg); color: var(--c-primary); }
+.auth__icon--success { background: var(--c-success-bg); color: var(--c-success); }
+.auth__icon--warn { background: var(--c-warn-bg); color: var(--c-warn); }
+.pw { position: relative; }
+.pw__input { padding-right: 52px; }
+.pw__toggle { position: absolute; top: 2px; right: 2px; width: 44px; height: 44px; border: 0; border-radius: var(--r-sm); background: transparent; color: var(--c-text-2); display: grid; place-items: center; }
+.pw__toggle:hover { background: var(--c-neutral-bg); }
+.pw__toggle[aria-pressed='true'] { color: var(--c-primary); }
+.boot { min-height: 100dvh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--sp-5); padding: var(--sp-6) var(--sp-4); text-align: center; }
+.boot__body { width: 100%; max-width: 420px; align-items: center; }
+.boot .btn__spin { width: 28px; height: 28px; border-width: 3px; color: var(--c-primary); }

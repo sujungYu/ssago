@@ -11,7 +11,7 @@ const TABS = [
 ];
 
 /** 헤더 + 본문 + (최상위 화면에서만) 하단 탭. 고정 하단 버튼은 ActionBar로 흐름 안에 둔다. */
-export function Page({ title, back, tabs, children }: { title: string; back?: string; tabs?: boolean; children: ReactNode }) {
+export function Page({ title, back, tabs, focus, children }: { title: string; back?: string; tabs?: boolean; /** 인증 화면: 메뉴·하단 탭을 숨기고 폼에 집중 */ focus?: boolean; children: ReactNode }) {
   const loc = useLocation();
   const nav = useNavigate();
   const notice = (loc.state as { notice?: string } | null)?.notice;
@@ -25,14 +25,18 @@ export function Page({ title, back, tabs, children }: { title: string; back?: st
             <button type="button" className="icon-btn" aria-label="뒤로 가기" onClick={() => ((window.history.state?.idx ?? 0) > 0 ? nav(-1) : nav('/'))}><Icon name="back" /></button>
           ) : back ? (
             <Link to={back} className="icon-btn" aria-label="뒤로 가기"><Icon name="back" /></Link>
+          ) : focus ? (
+            <span className="app-header__brand">온김에</span>
           ) : (
             <Link to="/" className="app-header__brand" aria-label="온김에 홈">온김에</Link>
           )}
           {back && <h1 className="app-header__title" style={{ fontSize: 'var(--fs-lg)' }}>{title}</h1>}
           {!back && <h1 className="sr-only">{title}</h1>}
-          <nav className="top-nav" aria-label="주요 메뉴">
-            {TABS.map((t) => <NavLink key={t.to} to={t.to} end={t.end}>{t.label}</NavLink>)}
-          </nav>
+          {!focus && (
+            <nav className="top-nav" aria-label="주요 메뉴">
+              {TABS.map((t) => <NavLink key={t.to} to={t.to} end={t.end}>{t.label}</NavLink>)}
+            </nav>
+          )}
         </div>
       </header>
       <main id="main" className={`main${tabs ? ' main--tabs' : ''}`}>
@@ -42,7 +46,7 @@ export function Page({ title, back, tabs, children }: { title: string; back?: st
           {children}
         </div>
       </main>
-      {tabs && (
+      {tabs && !focus && (
         <nav className="tabbar" aria-label="하단 메뉴">
           <ul>
             {TABS.map((t) => (

@@ -295,7 +295,7 @@ addStatement('bk-k14', 'settled', [{ kind: 'labor', label: '작업비', amount: 
 addRefund('bk-k14', 7500, '최종 금액 정산 · 선결제 초과분', 'completed', '10-10');
 
 const db: MockDb = {
-  version: 1, now: MOCK_NOW, seq: 100,
+  version: 1, now: MOCK_NOW, seq: 100, ownerAccountId: null,
   customer: { id: 'cu1', name: '김온다 (가상 고객)', phoneMasked: '010-****-0000', addresses: addressBook.slice(0, 1) },
   addressBook, categories: CATEGORIES, providers, groups, requests, approvals, bookings, transactions, refunds, deductions,
   proposals: [

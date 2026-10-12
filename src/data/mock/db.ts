@@ -41,6 +41,8 @@ export interface MockDb {
   version: number;
   now: string;
   seq: number;
+  /** 이 목업 상태를 쓰는 로그인 계정(Supabase user id). 계정이 바뀌거나 로그아웃하면 새 데모 상태로 초기화한다. */
+  ownerAccountId: string | null;
   customer: CustomerProfile;
   addressBook: AddressRecord[];
   categories: Category[];

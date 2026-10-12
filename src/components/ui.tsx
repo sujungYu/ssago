@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode } from 'react';
 import { Link, type LinkProps } from 'react-router-dom';
 import { describeError } from '../domain/errors';
 import { formatWon } from '../domain/money';
@@ -138,6 +138,20 @@ export function Field({ label, hint, error, children, id }: { label: string; hin
       {children({ id: fid, 'aria-describedby': desc, 'aria-invalid': error ? true : undefined })}
       {hint && <span className="field__hint" id={`${fid}-hint`}>{hint}</span>}
       {error && <span className="field__error" id={`${fid}-err`} role="alert">{error}</span>}
+    </div>
+  );
+}
+
+/** 비밀번호 입력 + 표시·숨기기 버튼. Field의 render prop(id·aria-*)을 그대로 받는다. */
+export function PasswordInput(props: Omit<InputHTMLAttributes<HTMLInputElement>, 'type'>) {
+  const [shown, setShown] = useState(false);
+  return (
+    <div className="pw">
+      <input {...props} type={shown ? 'text' : 'password'} className="input pw__input" autoCapitalize="none" autoCorrect="off" spellCheck={false} />
+      <button type="button" className="pw__toggle" aria-label={shown ? '비밀번호 숨기기' : '비밀번호 표시'} aria-pressed={shown}
+        aria-controls={props.id} onClick={() => setShown((v) => !v)}>
+        <Icon name={shown ? 'eyeOff' : 'eye'} size={20} />
+      </button>
     </div>
   );
 }

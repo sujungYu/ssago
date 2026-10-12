@@ -30,5 +30,13 @@
 | S-01 | 결제 진행·결과(모의) | `/pay/:txId` (진행은 각 화면의 버튼 상태) | payment/PaymentResultPage |
 | S-02 | 알림 진입 | `/notice/:id` | system/SystemPages |
 | S-03 | 약관·개인정보·이용 안내 | `/guide` | SystemPages (요약만) |
-| S-04 | 로그인·등록 | **미구현**(방식 미정, 가상 고객) | — |
+| S-04a | 로그인 | `/login` | features/auth/AuthPages (LoginPage) |
+| S-04b | 회원가입 | `/signup` | SignUpPage |
+| S-04c | 가입 완료(확인 메일 필요 시 안내) | `/signup/done` | SignUpDonePage |
+| S-04d | 비밀번호 재설정 요청 | `/password/reset` | ResetRequestPage |
+| S-04e | 재설정 안내 | `/password/reset/sent` | ResetSentPage |
+| S-04f | 새 비밀번호(메일 링크 복구 세션) | `/password/new` | NewPasswordPage |
 | S-05 | 상태·접근 안내 | `*`, 조회 실패 | SystemPages, ErrorState |
+
+S-04는 Supabase Auth 이메일·비밀번호로 실제 동작한다. 인증 화면은 하단 탭·상단 메뉴를 숨긴다.
+S-04를 뺀 모든 경로(C-01~C-25, S-01~S-03, S-05, `*`)는 `RequireAuth` 아래에 있어 비로그인이면 `/login`으로 이동한다. C-24 내 정보에 로그인 이메일·로그아웃이 있다.

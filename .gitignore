@@ -6,3 +6,4 @@ dist
 e2e/output
 *.tsbuildinfo
 dist-prod
+dist-demo-auth

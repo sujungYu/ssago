@@ -42,6 +42,7 @@ export class DevController {
     const settings = { ...this.db.settings };
     const next = createSeed(preset);
     next.settings = settings;
+    next.ownerAccountId = this.db.ownerAccountId; // 로그인한 계정의 상태로 유지
     this.repo.__replace(next);
     return ok(`시나리오를 '${preset}'로 초기화했어요.`);
   }

@@ -166,3 +166,24 @@ describe('추가 작업·리뷰', () => {
     expect(await code(r.createReview({ bookingId: 'bk-k13', rating: 5, body: '좋아요', photoNames: [], idempotencyKey: 'rv1' }))).toBe('ok');
   });
 });
+
+describe('계정별 목업 상태', () => {
+  it('다른 계정으로 바뀌면 이전 계정이 만든 요청이 남지 않고, 같은 계정이면 유지된다', async () => {
+    const r = repo();
+    r.__switchOwner('user-a');
+    const created = await r.createRequest({ providerId: 'p1', groupId: 'g1', slots: ['09:00–12:00'], tasks: [{ title: 'A의 요청', description: '', photoNames: [] }], addressId: 'ad-apt', addressDetail: '1동 1호', idempotencyKey: 'own-1' });
+    r.__switchOwner('user-a');
+    expect((await r.getRequest(created.id)).request.tasks[0].title).toBe('A의 요청');
+    r.__switchOwner(null); // 로그아웃
+    expect(await code(r.getRequest(created.id))).toBe('not_found');
+    r.__switchOwner('user-b');
+    const titles = (await r.listRequests()).flatMap((b) => b.taskTitles);
+    expect(titles).not.toContain('A의 요청');
+    expect(r.__db().ownerAccountId).toBe('user-b');
+  });
+  it('계정 전환 시 목업 설정은 유지한다', () => {
+    const r = repo(); r.__db().settings.payOutcome = 'fail';
+    r.__switchOwner('user-a');
+    expect(r.__db().settings.payOutcome).toBe('fail');
+  });
+});

@@ -1,14 +1,20 @@
 import { Link } from 'react-router-dom';
+import { useAuth } from '../../app/auth';
 import { Page } from '../../app/Page';
 import { useRepo } from '../../app/context';
-import { useAsync } from '../../app/hooks';
+import { useAction, useAsync } from '../../app/hooks';
 import { Icon } from '../../components/Icon';
-import { AsyncView, Banner, Section } from '../../components/ui';
+import { AsyncView, Banner, Button, Section } from '../../components/ui';
 
-/** C-24 내 정보. 인증·수정·탈퇴는 미정이라 가상 고객 정보만 보여준다. */
+/** C-24 내 정보. 로그인 계정(Supabase Auth) 이메일과 로그아웃. 이름·연락처·주소는 목업 가상 고객 정보이며 계정 정보 수정·탈퇴는 미정. */
 export function MePage() {
   const repo = useRepo();
   const q = useAsync(() => repo.getProfile(), [repo]);
+  const { auth, state } = useAuth();
+  const email = state.status === 'signedIn' ? state.session.email : '';
+  const action = useAction();
+  // 로그아웃하면 인증 상태가 바뀌어 로그인 화면으로 이동하고, 목업 상태·화면 캐시가 초기화된다.
+  const signOut = () => void action.run(() => auth.signOut());
   return (
     <Page title="내 정보" tabs>
       <h2 style={{ fontSize: 'var(--fs-xl)' }}>내 정보</h2>
@@ -17,7 +23,7 @@ export function MePage() {
           <>
             <div className="card row">
               <span className="avatar" aria-hidden><Icon name="user" /></span>
-              <div className="grow"><p className="strong">{p.name}</p><p className="small muted">{p.phoneMasked}</p></div>
+              <div className="grow"><p className="strong">{email}</p><p className="small muted">데모 프로필: {p.name} · {p.phoneMasked}</p></div>
             </div>
             <Section title="저장된 주소">
               <ul className="card card--flush divided">
@@ -35,7 +41,10 @@ export function MePage() {
           <li><Link className="list-row" to="/guide"><Icon name="info" /><span className="list-row__main"><span className="list-row__title">이용 안내·약관·개인정보</span></span><Icon name="chevron" size={18} /></Link></li>
         </ul>
       </Section>
-      <Banner tone="info" title="연습용 화면이에요">로그인 방식과 계정 정보 수정·탈퇴는 아직 정해지지 않아 가상 고객으로 이용 중이에요. 결제·환불·알림도 모두 모의예요.</Banner>
+      {action.error && <Banner tone="danger" title={action.error.title}>{action.error.hint}</Banner>}
+      <Button variant="secondary" block busy={action.busy} onClick={signOut}>로그아웃</Button>
+      {auth.kind === 'demo' && <Banner tone="warn" title="데모 로그인 · 실제 계정이 아니에요">Supabase 연결 전 임시 로그인이에요. 이 계정은 이 브라우저에만 저장돼 있어요.</Banner>}
+      <Banner tone="info" title="데모 화면이에요">요청·예약·결제 내역과 주소는 가상 데모 데이터예요. 결제·환불·알림은 모두 모의이고, 계정 정보 수정·탈퇴는 아직 정해지지 않았어요.</Banner>
     </Page>
   );
 }

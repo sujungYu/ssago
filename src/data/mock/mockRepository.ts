@@ -49,6 +49,18 @@ export class MockRepository implements Repository {
   __db(): MockDb { return this.db; }
   __replace(next: MockDb): void { this.db = next; this.commit(); }
   __commit(): void { this.commit(); }
+  /**
+   * 로그인 계정이 바뀌면(로그아웃 포함) 목업 상태를 새 데모 시드로 초기화한다. 이전 계정이 만든 요청·예약·거래가 남지 않게 한다.
+   * 같은 계정이면(새로고침 후 세션 복원 등) 진행 중이던 목업 상태를 유지한다. 목업 설정은 유지한다.
+   * 실제 데이터 연결 후에는 이 교체가 아니라 서버·RLS가 본인 데이터만 돌려줘야 한다.
+   */
+  __switchOwner(accountId: string | null): void {
+    if (this.db.ownerAccountId === accountId) return;
+    const next = createSeed('full');
+    next.ownerAccountId = accountId;
+    next.settings = { ...this.db.settings };
+    this.__replace(next);
+  }
 
   private load(): MockDb | null {
     try {
