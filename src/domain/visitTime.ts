@@ -11,7 +11,6 @@ import type { IsoDate, TimeSlot, VisitTime } from './types';
 
 export const VISIT_TIME_MISSING = '방문 시각 확인 필요';
 export const DURATION_NOTE = '작업 소요 시간은 수리 내용에 따라 달라집니다.';
-export const ARRIVAL_NOTE = '방문 시각은 업체의 도착 예정 시각이에요.';
 
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
 

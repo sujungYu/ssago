@@ -7,7 +7,7 @@ import { availablePrepaid, previewCancellation, previewDateChange, type CancelPr
 import type {
   Approval, Booking, CancelCause, GroupRecord, MockNotice, PublicGroup, Refund, RepairRequest, Transaction, Won,
 } from '../../domain/types';
-import type { MockDb, ProviderRecord } from './db';
+import type { MockDb } from './db';
 import type { PrepaidSummary } from '../repositories/types';
 
 export function nid(db: MockDb, prefix: string): string {
@@ -23,12 +23,6 @@ export function toPublicGroup(g: GroupRecord): PublicGroup {
     id: g.id, providerId: g.providerId, date: g.date, slots: [...g.slots], closeAt: g.closeAt, totalTripFee: g.totalTripFee,
     capacity: g.capacity, confirmedHouseholds: g.confirmedHouseholds, pendingSeats: g.pendingSeats, scopeType: g.scopeType,
   };
-}
-
-export function providerOf(db: MockDb, id: string): ProviderRecord {
-  const p = byId(db.providers, id);
-  if (!p) throw new Error(`provider ${id}`);
-  return p;
 }
 
 export function addressAnchors(db: MockDb, addressId: string): string[] {

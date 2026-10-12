@@ -6,7 +6,6 @@
  * - simple: 창문 생략, 선을 조금 굵게, 렌치 입구를 조금 넓게. 32px 미만·파비콘에서 사용.
  */
 
-export const BRAND_BLUE = '#315DA8';
 export const SYMBOL_VIEWBOX = '0 0 48 48';
 /** 이 크기(px) 미만이면 단순형 심볼을 쓴다 */
 export const SIMPLE_BELOW = 32;

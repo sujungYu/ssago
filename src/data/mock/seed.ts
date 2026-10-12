@@ -14,16 +14,16 @@ const k = (md: string, hm = '00:00') => `2026-${md}T${hm}:00+09:00`;
 const ymd = (md: string) => `2026-${md}`;
 
 export const CATEGORIES: Category[] = [
-  { id: 'c1', name: '방충망 수리·교체', icon: 'screen' },
-  { id: 'c2', name: '수전·샤워기·배수 부품', icon: 'drop' },
-  { id: 'c3', name: '문손잡이·경첩·문', icon: 'door' },
-  { id: 'c4', name: '수납장·서랍 수리', icon: 'drawer' },
-  { id: 'c5', name: '창문 부속·틈새 보수', icon: 'window' },
-  { id: 'c6', name: '조명·스위치·콘센트', icon: 'bulb' },
-  { id: 'c7', name: '커튼·블라인드·선반 설치', icon: 'shelf' },
-  { id: 'c8', name: '생활 부속품 설치·교체', icon: 'tool' },
-  { id: 'c9', name: '실리콘·줄눈 보수', icon: 'seal' },
-  { id: 'c10', name: '기타 수리·교체·설치', icon: 'more' },
+  { id: 'c1', name: '방충망 수리·교체' },
+  { id: 'c2', name: '수전·샤워기·배수 부품' },
+  { id: 'c3', name: '문손잡이·경첩·문' },
+  { id: 'c4', name: '수납장·서랍 수리' },
+  { id: 'c5', name: '창문 부속·틈새 보수' },
+  { id: 'c6', name: '조명·스위치·콘센트' },
+  { id: 'c7', name: '커튼·블라인드·선반 설치' },
+  { id: 'c8', name: '생활 부속품 설치·교체' },
+  { id: 'c9', name: '실리콘·줄눈 보수' },
+  { id: 'c10', name: '기타 수리·교체·설치' },
 ];
 
 const addressBook: AddressRecord[] = [

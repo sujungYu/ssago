@@ -142,7 +142,6 @@ a.list-row:hover { background: #fafbfd; }
 .kv__row--total .kv__k { color: var(--c-text); font-weight: 700; }
 .kv__row--total .kv__v { font-size: var(--fs-lg); font-weight: 800; }
 .money { white-space: nowrap; font-variant-numeric: tabular-nums; }
-.money--neg { color: var(--c-danger); }
 
 /* ───────── 가이드 카드 ("싸고 공동 예약이란?") ───────── */
 .guide__art { display: block; width: 100%; max-width: 248px; height: auto; margin: 0 auto; }
@@ -233,13 +232,8 @@ a.list-row:hover { background: #fafbfd; }
 .brand-symbol { flex: none; display: block; }
 .brand__text { display: flex; flex-direction: column; }
 .brand__name { font-weight: 800; letter-spacing: -0.02em; }
-.brand__tagline { font-weight: 600; color: var(--c-text-2); letter-spacing: -0.01em; }
 .brand--sm { gap: 6px; }
 .brand--sm .brand__name { font-size: 20px; }
-.brand--lg { gap: 10px; }
-.brand--lg .brand__text { gap: 4px; }
-.brand--lg .brand__name { font-size: 28px; }
-.brand--lg .brand__tagline { font-size: var(--fs-sm); }
 
 /* ───────── 목록 필터 (내 요청) ───────── */
 .request-list[aria-busy] { opacity: .55; transition: opacity .15s; }

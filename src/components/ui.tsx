@@ -1,7 +1,6 @@
 import { useEffect, useId, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import { Link, type LinkProps } from 'react-router-dom';
 import { describeError } from '../domain/errors';
-import { formatWon } from '../domain/money';
 import type { Tone } from '../domain/rules';
 import { Icon } from './Icon';
 import { CoopVisitIllustration } from './brand/CoopVisitIllustration';
@@ -35,9 +34,6 @@ export function PhoneButton({ phone, name }: { phone: string; name: string }) {
 // ───────── 표시 ─────────
 export function Badge({ tone = 'neutral', children }: { tone?: Tone; children: ReactNode }) {
   return <span className={`badge badge--${tone}`}>{children}</span>;
-}
-export function Money({ value, negative, className }: { value: number; negative?: boolean; className?: string }) {
-  return <span className={['money', negative && 'money--neg', className].filter(Boolean).join(' ')}>{negative ? '−' : ''}{formatWon(value)}</span>;
 }
 export function Banner({ tone = 'info', title, children, icon }: { tone?: 'info' | 'warn' | 'danger' | 'success'; title?: string; children?: ReactNode; icon?: string }) {
   const ic = icon ?? (tone === 'danger' || tone === 'warn' ? 'warn' : tone === 'success' ? 'check' : 'info');

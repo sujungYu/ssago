@@ -10,13 +10,6 @@ export function perHouseholdFee(totalTripFee: Won, households: number): Won | nu
   return Math.floor(totalTripFee / households);
 }
 
-/** 원 단위 잔액(업체가 감수) */
-export function remainderWon(totalTripFee: Won, households: number): Won {
-  const fee = perHouseholdFee(totalTripFee, households);
-  if (fee === null) return 0;
-  return totalTripFee - fee * households;
-}
-
 /** 새로 참여하는 고객 기준의 예상 분담액. 결제 대기 자리는 세대 수에 넣지 않는다. */
 export function expectedFeeForJoiner(totalTripFee: Won, confirmedHouseholds: number): Won {
   return perHouseholdFee(totalTripFee, confirmedHouseholds + 1) ?? totalTripFee;

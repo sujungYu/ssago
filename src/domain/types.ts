@@ -10,7 +10,6 @@ export type IsoDate = string;
 export interface Category {
   id: string;
   name: string;
-  icon: string;
 }
 
 /** 지역·건물(기본) 주소. 도로명·지번 + 건물명. 동·호수 같은 상세 주소는 포함하지 않는다. */
