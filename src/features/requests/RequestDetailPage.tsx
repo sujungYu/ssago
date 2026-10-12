@@ -10,7 +10,8 @@ import { Icon } from '../../components/Icon';
 import { AsyncView, Banner, Button, Dialog, KV, LinkButton, PhoneButton, Section } from '../../components/ui';
 import type { RequestDetail } from '../../data/repositories/types';
 import { RequestBadge } from './RequestsPage';
-import { slotsText } from '../shared';
+import { VisitText, slotsText } from '../shared';
+import { DURATION_NOTE } from '../../domain/visitTime';
 
 function Body({ d, now }: { d: RequestDetail; now: string }) {
   const repo = useRepo();
@@ -42,12 +43,15 @@ function Body({ d, now }: { d: RequestDetail; now: string }) {
         <div className="card stack">
           <h3>업체가 승인했어요</h3>
           <KV rows={[
-            { k: '방문', v: <span>{formatDate(ap.visitDate)} {ap.visitWindow}</span> },
+            ap.recheck
+              ? { k: '업체가 제안한 방문 시각', v: <VisitText date={ap.recheck.newVisitDate} time={ap.recheck.newVisitTime} strong /> }
+              : { k: '업체가 제안한 방문 시각', v: <VisitText date={ap.visitDate} time={ap.visitTime} strong /> },
+            { k: '고객 가능 시간', v: slotsText(r.slots) },
             { k: '결제 기한', v: <span className="nowrap">{formatDateTime(ap.paymentDeadline)}</span> },
             { k: '남은 시간', v: formatRemaining(now, ap.paymentDeadline) },
             { k: '예약금', v: <span className="money strong">{formatWon(ap.recheck?.newDepositAmount ?? ap.depositAmount)}</span> },
           ]} />
-          <p className="xs muted">승인만으로는 예약이 확정되지 않아요. 결제 기한 안에 예약금을 결제하면 확정돼요.</p>
+          <p className="xs muted">승인만으로는 예약이 확정되지 않아요. 결제 기한 안에 예약금을 결제하면 업체가 제안한 방문 시각으로 확정돼요. 방문 시각은 도착 예정 시각이며, {DURATION_NOTE}</p>
         </div>
       )}
       {r.status === 'booked' && r.bookingId && (
@@ -75,7 +79,7 @@ function Body({ d, now }: { d: RequestDetail; now: string }) {
           <KV rows={[
             { k: '요청 방식', v: d.group ? '공동 예약 날짜 참여' : '새 날짜 요청' },
             ...(d.group ? [{ k: '방문 날짜', v: formatDate(d.group.date) }] : r.newDateWish ? [{ k: '희망 날짜', v: formatDate(r.newDateWish) }] : []),
-            { k: '가능 시간대', v: slotsText(r.slots) },
+            { k: '고객 가능 시간', v: slotsText(r.slots) },
             { k: '방문 주소', v: <span>{d.address.line1}<br />{d.addressDetail}</span> },
           ]} />
           <p className="xs muted">정확한 주소와 작업 내용은 나와 요청을 받은 업체만 볼 수 있어요.</p>

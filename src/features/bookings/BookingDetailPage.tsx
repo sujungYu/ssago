@@ -8,7 +8,9 @@ import { tripFeeSavings } from '../../domain/pricing';
 import { Icon } from '../../components/Icon';
 import { AsyncView, Badge, Banner, KV, LinkButton, PhoneButton, Section } from '../../components/ui';
 import type { BookingDetail } from '../../data/repositories/types';
-import { PAYMENT_STATUS, REFUND_STATUS, TX_KIND_LABEL, bookingBadge } from '../shared';
+import { PAYMENT_STATUS, REFUND_STATUS, TX_KIND_LABEL, VisitText, bookingBadge, slotsText } from '../shared';
+import { DURATION_NOTE, formatVisit } from '../../domain/visitTime';
+import { visitLabel } from './BookingsPage';
 
 function ActionRow({ to, title, desc, tone = 'action' }: { to: string; title: string; desc?: string; tone?: 'action' | 'warn' }) {
   return (
@@ -25,7 +27,7 @@ function Attention({ d }: { d: BookingDetail }) {
   const rows: React.ReactNode[] = [];
   if (b.status === 'confirmed') {
     if (d.delay) rows.push(<ActionRow key="dl" tone="warn" to={`/delays/${d.delay.id}`} title="방문이 지연되고 있어요" desc="기다리기, 무료 변경, 무료 취소 중에서 선택해 주세요" />);
-    for (const p of d.proposals.filter((x) => x.status === 'proposed')) rows.push(<ActionRow key={p.id} to={`/proposals/${p.id}`} title={p.origin === 'provider' ? '업체가 일정 변경을 제안했어요' : '업체가 변경에 동의했어요 · 최종 확인이 필요해요'} desc={`${formatDate(p.oldVisit.date)} → ${formatDate(p.newVisit.date)}`} />);
+    for (const p of d.proposals.filter((x) => x.status === 'proposed')) rows.push(<ActionRow key={p.id} to={`/proposals/${p.id}`} title={p.origin === 'provider' ? '업체가 일정 변경을 제안했어요' : '업체가 변경에 동의했어요 · 최종 확인이 필요해요'} desc={`${formatVisit(p.oldVisit.date, p.oldVisit.time)} → ${formatVisit(p.newVisit.date, p.newVisit.time)}`} />);
     for (const p of d.proposals.filter((x) => x.status === 'requested')) rows.push(<ActionRow key={p.id} to={`/proposals/${p.id}`} title="변경 요청 · 업체 응답을 기다리고 있어요" desc="합의 전까지 기존 일정이 유지돼요" />);
     for (const m of d.materials.filter((x) => x.paymentStatus === 'none')) rows.push(<ActionRow key={m.id} to={`/materials/${m.id}`} title="자재 주문 조건을 확인해 주세요" desc={`${m.name} · ${formatWon(m.price)}`} />);
     for (const m of d.materials.filter((x) => x.paymentStatus === 'processing' || x.paymentStatus === 'unknown')) rows.push(<ActionRow key={m.id} tone="warn" to={`/materials/${m.id}`} title="자재비 결제 결과를 확인 중이에요" desc="다시 결제하지 말고 결과를 확인해 주세요" />);
@@ -70,11 +72,32 @@ function Body({ d }: { d: BookingDetail }) {
       <Section title="방문 일정·진행">
         <div className="card stack">
           <KV rows={[
-            { k: '방문', v: <span>{formatDate(b.visitDate)}{delayed && <> <Badge tone="warn">지연 중</Badge></>}<br />{b.visitWindow}</span> },
+            { k: visitLabel(b), v: <span><VisitText date={b.visitDate} time={b.visitTime} strong />{delayed && <> <Badge tone="warn">지연 안내</Badge></>}</span> },
+            // 지연 안내의 변경 도착 예상은 예약 방문 시각을 덮어쓰지 않고 따로 보여준다
+            ...(d.delay ? [{ k: '변경 도착 예상', v: <span className="nowrap">{formatDateTime(d.delay.newEta)}</span> }] : []),
+            // 변경 제안은 고객이 수락하기 전까지 예약에 반영하지 않고 따로 보여준다
+            ...d.proposals.filter((p) => p.status === 'proposed' && p.newVisit.time).map((p) => (
+              { key: p.id, k: '변경 제안 · 확인 대기', v: <span><VisitText date={p.newVisit.date} time={p.newVisit.time} /><br /><span className="xs muted">수락하기 전까지 위 방문 일정이 유지돼요</span></span> }
+            )),
+            ...(b.customerSlots.length ? [{ k: '요청 시 고객 가능 시간', v: <span className="muted">{slotsText(b.customerSlots)}</span> }] : []),
             { k: '진행 상태', v: bookingBadge(b) },
             ...(b.followUp ? [{ k: '후속 방문', v: <span>{formatDate(b.followUp.date)}<br />{b.followUp.window}</span> }] : []),
           ]} />
           {b.followUp && <p className="small muted">{b.followUp.note}</p>}
+          <p className="xs muted">방문 시각은 업체의 도착 예정 시각이에요. {DURATION_NOTE}</p>
+          {(b.scheduleChanges ?? []).length > 0 && (
+            <div className="stack--sm stack">
+              <h3 className="small">일정 변경 기록</h3>
+              <ul className="stack--sm stack">
+                {(b.scheduleChanges ?? []).map((c) => (
+                  <li key={c.proposalId} className="small">
+                    <span className="nowrap">{formatVisit(c.from.date, c.from.time)}</span> → <span className="nowrap strong">{formatVisit(c.to.date, c.to.time)}</span>
+                    <br /><span className="xs muted">사유: {c.reason} · 고객 동의 {formatDateTime(c.consentedAt)}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           <PhoneButton phone={d.provider.phone} name={d.provider.name} />
         </div>
       </Section>

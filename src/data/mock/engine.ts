@@ -2,6 +2,7 @@
  * 목업 상태 변경 규칙. repository(사용자 동작)와 개발용 시나리오 도구(업체·시간 이벤트)가 함께 사용한다.
  * 가격 계산과 상태 규칙은 domain/에 두고, 여기서는 저장 상태를 일관되게 갱신하는 일만 한다.
  */
+import { formatVisit } from '../../domain/visitTime';
 import { availablePrepaid, previewCancellation, previewDateChange, type CancelPreview } from '../../domain/pricing';
 import type {
   Approval, Booking, CancelCause, GroupRecord, MockNotice, PublicGroup, Refund, RepairRequest, Transaction, Won,
@@ -67,9 +68,13 @@ export function materialDeductionOf(db: MockDb, bookingId: string): Won {
 export function freeCancelReasonOf(db: MockDb, booking: Booking): string | null {
   if (booking.freeCancelReason) return booking.freeCancelReason;
   const delay = db.delays.find((d) => d.bookingId === booking.id && d.status === 'open');
-  if (delay) return '방문이 확정 시간대를 넘겨 지연되고 있어요. 무료 취소가 적용돼요.';
+  // 몇 분 지연부터 무료 변경·취소를 줄지는 미정이다. 목업은 업체가 지연을 알린 예약에 선택지를 보여줄 뿐 분 단위 기준을 적용하지 않는다.
+  if (delay) return '업체가 방문 지연을 알렸어요. 무료 취소를 선택할 수 있어요.';
   const prop = db.proposals.find((p) => p.bookingId === booking.id && p.origin === 'provider' && p.status === 'proposed');
   if (prop) return '업체 사유 일정 변경 제안이 있어요. 무료 취소가 적용돼요.';
+  // 업체 사유 변경 제안을 거절해도 예약은 자동 취소되지 않는다. 고객이 원하면 업체 사유 무료 취소를 선택할 수 있다.
+  const lastProvider = db.proposals.filter((p) => p.bookingId === booking.id && p.origin === 'provider').at(-1);
+  if (lastProvider?.status === 'rejected') return '업체가 제안한 일정 변경을 거절했어요. 업체 사유로 무료 취소할 수 있어요.';
   return null;
 }
 
@@ -111,7 +116,9 @@ export function endGroup(db: MockDb, g: GroupRecord): void {
     db.groups.push(newGroup);
     ap.recheck = {
       endedGroupNote: '함께 예약했던 세대가 모두 취소해 기존 공동 예약이 종료됐어요.',
-      newGroupId: newGroup.id, newVisitDate: g.date, newVisitWindow: g.slots[0] ?? '09:00–12:00',
+      newGroupId: newGroup.id, newVisitDate: g.date,
+      // 같은 업체·같은 날짜의 새 그룹이므로 업체가 제안했던 방문 시각을 그대로 둔다(없으면 비워 둔다 — 추정하지 않음)
+      newVisitTime: ap.visitTime,
       newCloseAt: g.closeAt, newTotalTripFee: g.totalTripFee, newDepositAmount: g.totalTripFee,
     };
     g.pendingSeats = Math.max(0, g.pendingSeats - 1);
@@ -136,7 +143,6 @@ export function createBookingFromRequest(db: MockDb, tx: Transaction): Booking {
     group.date = recheck.newVisitDate;
     group.closeAt = recheck.newCloseAt;
     group.totalTripFee = recheck.newTotalTripFee;
-    group.slots = [recheck.newVisitWindow];
     prevGroup.pendingSeats = Math.max(0, prevGroup.pendingSeats - 1);
   } else {
     group.pendingSeats = Math.max(0, group.pendingSeats - 1);
@@ -145,7 +151,9 @@ export function createBookingFromRequest(db: MockDb, tx: Transaction): Booking {
   const booking: Booking = {
     id: nid(db, 'bk'), requestId: req.id, providerId: req.providerId, groupId: group.id, addressId: req.addressId,
     status: 'confirmed', workStatus: 'scheduled',
-    visitDate: recheck ? recheck.newVisitDate : ap.visitDate, visitWindow: recheck ? recheck.newVisitWindow : ap.visitWindow,
+    // 예약금 결제 성공 → 업체가 제안한 방문 시각으로 확정. 범위에서 추정하지 않는다.
+    visitDate: recheck ? recheck.newVisitDate : ap.visitDate, visitTime: recheck ? recheck.newVisitTime : ap.visitTime,
+    customerSlots: [...req.slots],
     tasks: req.tasks, createdAt: db.now,
   };
   db.bookings.push(booking);
@@ -163,6 +171,7 @@ export function createBookingFromRequest(db: MockDb, tx: Transaction): Booking {
     other.status = 'closed_other_booking';
     other.updatedAt = db.now;
   }
+  notify(db, `예약이 확정됐어요 · 방문 예정 ${formatVisit(booking.visitDate, booking.visitTime)}`, `/bookings/${booking.id}`, { type: 'booking', id: booking.id, state: `${booking.status}:${booking.workStatus}` });
   return booking;
 }
 
@@ -224,9 +233,14 @@ export function finalizeProposalAccept(db: MockDb, p: import('../../domain/types
     }
   }
   if (free && feeBefore !== null) b.lockedTripFee = feeBefore; // 변경을 수락해도 확정 출장비 유지
+  // 고객이 수락한 경우에만 예약 방문 일정을 바꾸고 기록을 남긴다. 고객 가능 시간(customerSlots)은 수정하지 않는다.
+  b.scheduleChanges = [...(b.scheduleChanges ?? []), {
+    proposalId: p.id, from: { date: b.visitDate, time: b.visitTime }, to: { date: p.newVisit.date, time: p.newVisit.time }, reason: p.reason, consentedAt: db.now,
+  }];
   b.visitDate = p.newVisit.date;
-  b.visitWindow = p.newVisit.window;
+  b.visitTime = p.newVisit.time;
   p.status = 'accepted';
+  notify(db, `일정 변경이 확정됐어요 · 방문 예정 ${formatVisit(b.visitDate, b.visitTime)}`, `/bookings/${b.id}`, { type: 'booking', id: b.id, state: `${b.status}:${b.workStatus}` });
   const delay = db.delays.find((d) => d.bookingId === b.id && d.status === 'open');
   if (delay && p.free === 'delay') { delay.status = 'resolved'; delay.choice = 'free_change'; delay.respondedAt = db.now; }
 }

@@ -1,4 +1,6 @@
-import type { Booking, PaymentStatus, RefundStatus, TimeSlot } from '../domain/types';
+import type { Booking, IsoDate, PaymentStatus, RefundStatus, TimeSlot, VisitTime } from '../domain/types';
+import { formatDate } from '../domain/time';
+import { VISIT_TIME_MISSING, formatSlots, isValidVisitTime } from '../domain/visitTime';
 import type { Tone } from '../domain/rules';
 import { Badge } from '../components/ui';
 
@@ -36,6 +38,20 @@ export const REFUND_STATUS: Record<RefundStatus, { label: string; tone: Tone; hi
 
 export const TX_KIND_LABEL = { deposit: '예약금', material_prepay: '자재비 선결제', change_shortfall: '일정 변경 부족분', balance: '최종 잔금' } as const;
 
-export const slotsText = (slots: TimeSlot[]) => slots.join(', ');
+/** 고객 가능 시간 표시(13:00~16:00). 방문 시각으로 쓰지 않는다. */
+export const slotsText = (slots: TimeSlot[]) => formatSlots(slots);
+
+/**
+ * 방문 일정(날짜 + 단일 방문 시각) 표시. 날짜와 시각이 각각 줄바꿈되지 않게 묶는다.
+ * 시각이 없으면 추정하지 않고 ‘방문 시각 확인 필요’를 보여준다.
+ */
+export function VisitText({ date, time, strong }: { date: IsoDate; time?: VisitTime | null; strong?: boolean }) {
+  return (
+    <span className={strong ? 'strong' : undefined}>
+      <span className="nowrap">{formatDate(date)}</span>{' '}
+      {isValidVisitTime(time) ? <span className="nowrap">{time}</span> : <Badge tone="warn">{VISIT_TIME_MISSING}</Badge>}
+    </span>
+  );
+}
 
 export function initialOf(name: string) { return name.slice(0, 1); }

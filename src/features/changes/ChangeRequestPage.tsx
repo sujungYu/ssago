@@ -7,6 +7,8 @@ import { addHours, formatDate, formatDateTime, seoulYmd } from '../../domain/tim
 import { formatWon } from '../../domain/money';
 import type { DateChangePreview } from '../../domain/pricing';
 import { AsyncView, Banner, Button, Field, KV, Section } from '../../components/ui';
+import { formatSlot } from '../../domain/visitTime';
+import { VisitText } from '../shared';
 
 const SLOTS = ['09:00–12:00', '13:00–16:00', '16:00–19:00'];
 
@@ -53,10 +55,10 @@ export function ChangeRequestPage() {
           const o = opts.data ?? [];
           const group = o.find((x) => x.group.id === groupId);
           const minDate = seoulYmd(addHours(repo.now(), 48));
-          const slotChoices = mode === 'group' ? (group?.group.slots ?? []) : SLOTS.filter((s) => mode !== 'time' || s !== b.visitWindow);
+          const slotChoices = mode === 'group' ? (group?.group.slots ?? []) : SLOTS;
           const errs = {
             target: mode === 'group' && !groupId ? '변경할 공동 날짜를 선택해 주세요.' : mode === 'new' && (!newDate || newDate < minDate) ? `${formatDate(minDate)} 이후 날짜를 선택해 주세요.` : null,
-            slot: !slot ? '시간대를 선택해 주세요.' : null,
+            slot: !slot ? '새로 가능한 시간을 선택해 주세요.' : null,
             reason: !free && !reason.trim() ? '변경 사유를 입력해 주세요.' : null,
           };
           const valid = !Object.values(errs).some(Boolean);
@@ -77,7 +79,7 @@ export function ChangeRequestPage() {
               <Banner tone="info" title="합의 전까지 기존 일정이 유지돼요">업체가 동의하고 내가 최종 확인하기 전에는 지금 예약이 그대로예요.</Banner>
               {free && <Banner tone="success" title="방문 지연으로 인한 무료 변경이에요">변경 수수료 없이 확정 출장비가 유지돼요.</Banner>}
               <div className="card"><KV rows={[
-                { k: '지금 일정', v: <span>{formatDate(b.visitDate)}<br />{b.visitWindow}</span> },
+                { k: '지금 예약 방문 시각', v: <VisitText date={b.visitDate} time={b.visitTime} strong /> },
                 { k: '공동 예약 마감', v: <span className="nowrap">{formatDateTime(d.group.closeAt)} {d.groupClosed ? '(마감됨)' : ''}</span> },
               ]} /></div>
 
@@ -85,7 +87,7 @@ export function ChangeRequestPage() {
                 <div className="stack--sm stack" role="radiogroup" aria-label="변경 방식">
                   <label className="radio-card"><input type="radio" name="mode" checked={mode === 'group'} onChange={() => { setMode('group'); setSlot(''); }} /><span className="grow"><b>다른 공동 날짜로</b><br /><span className="small muted">참여할 수 있는 다른 날짜로 옮겨요.</span></span></label>
                   <label className="radio-card"><input type="radio" name="mode" checked={mode === 'new'} onChange={() => { setMode('new'); setSlot(''); }} /><span className="grow"><b>새 날짜로</b><br /><span className="small muted">원하는 날짜를 제안하면 업체가 조건을 알려줘요.</span></span></label>
-                  <label className="radio-card"><input type="radio" name="mode" checked={mode === 'time'} onChange={() => { setMode('time'); setSlot(''); }} /><span className="grow"><b>같은 날 시간만</b><br /><span className="small muted">방문 날짜는 그대로 시간대만 바꿔요.</span></span></label>
+                  <label className="radio-card"><input type="radio" name="mode" checked={mode === 'time'} onChange={() => { setMode('time'); setSlot(''); }} /><span className="grow"><b>같은 날 시간만</b><br /><span className="small muted">방문 날짜는 그대로 방문 시각만 바꿔요.</span></span></label>
                 </div>
               </Section>
 
@@ -118,10 +120,11 @@ export function ChangeRequestPage() {
               )}
               {mode === 'time' && <Banner tone="info" title="같은 날 시간 변경은 업체가 승인하면 무료예요" />}
 
-              <Section title="희망 시간대">
+              <Section title="새로 가능한 시간">
+                <p className="small muted">가능한 시간 범위를 고르면 업체가 그 안에서 새 방문 시각을 제안해요. 내가 수락해야만 예약이 바뀌고, 처음 요청서에 낸 가능 시간은 그대로 둬요.</p>
                 {slotChoices.length === 0 ? <p className="small muted">먼저 변경할 날짜를 선택해 주세요.</p> : (
-                  <div className="chips" role="group" aria-label="희망 시간대">
-                    {slotChoices.map((s) => <button key={s} type="button" className="chip" aria-pressed={slot === s} onClick={() => setSlot(s)}>{s}</button>)}
+                  <div className="chips" role="group" aria-label="새로 가능한 시간">
+                    {slotChoices.map((s) => <button key={s} type="button" className="chip" aria-pressed={slot === s} onClick={() => setSlot(s)}>{formatSlot(s)}</button>)}
                   </div>
                 )}
                 {touched && errs.slot && <p className="field__error" role="alert">{errs.slot}</p>}

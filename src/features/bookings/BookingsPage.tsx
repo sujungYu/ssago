@@ -3,14 +3,16 @@ import { Link } from 'react-router-dom';
 import { Page } from '../../app/Page';
 import { useRepo } from '../../app/context';
 import { useAsync } from '../../app/hooks';
-import { formatDate } from '../../domain/time';
 import { formatWon } from '../../domain/money';
 import { Icon } from '../../components/Icon';
 import { AsyncView, EmptyState, LinkButton } from '../../components/ui';
 import type { BookingListItem } from '../../data/repositories/types';
-import { bookingBadge } from '../shared';
+import { VisitText, bookingBadge } from '../shared';
 
 const TRIP_LABEL = { expected: '마감 전 예상 출장비', confirmed: '확정 출장비', locked: '유지되는 확정 출장비' } as const;
+
+/** 예약 방문 시각 라벨. 고객 가능 시간 범위가 아니라 확정된 방문 시각을 보여준다. */
+export const visitLabel = (b: BookingListItem['booking']) => (b.status === 'confirmed' && b.workStatus === 'scheduled' ? '방문 예정' : '방문 일정');
 
 export function BookingCard({ it }: { it: BookingListItem }) {
   const b = it.booking;
@@ -21,7 +23,7 @@ export function BookingCard({ it }: { it: BookingListItem }) {
         {bookingBadge(b)}
       </div>
       <p>{b.tasks.map((t) => t.title).join(' · ')}</p>
-      <p className="small">{formatDate(b.visitDate)} · <span className="nowrap">{b.visitWindow}</span></p>
+      <p className="small">{visitLabel(b)} · <VisitText date={b.visitDate} time={b.visitTime} /></p>
       {b.status === 'confirmed' && it.tripFee.amount !== null && (
         <p className="small muted">{TRIP_LABEL[it.tripFee.kind]} <span className="money">{formatWon(it.tripFee.amount)}</span></p>
       )}

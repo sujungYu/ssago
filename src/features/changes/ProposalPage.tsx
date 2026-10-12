@@ -3,13 +3,15 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Page } from '../../app/Page';
 import { useRepo } from '../../app/context';
 import { useAction, useAsync, useAttemptKey } from '../../app/hooks';
-import { formatDate } from '../../domain/time';
 import { formatWon } from '../../domain/money';
 import { AsyncView, Badge, Banner, Button, Dialog, KV, LinkButton, MockPayNotice, Section } from '../../components/ui';
 import type { ProposalView } from '../../data/repositories/types';
 import { ActionBar } from '../../app/Page';
+import { PhoneButton } from '../../components/ui';
+import { formatSlot, isWithinSlots } from '../../domain/visitTime';
+import { VisitText, slotsText } from '../shared';
 
-const STATUS = { requested: '업체 응답 대기', proposed: '확인 필요', accepted: '수락됨', rejected: '거절됨', withdrawn: '철회됨' } as const;
+const STATUS = { requested: '업체 응답 대기', proposed: '변경 제안 · 확인 대기', accepted: '수락됨', rejected: '거절됨', withdrawn: '철회됨' } as const;
 
 function Body({ v }: { v: ProposalView }) {
   const repo = useRepo();
@@ -20,6 +22,9 @@ function Body({ v }: { v: ProposalView }) {
   const p = v.proposal;
   const fromProvider = p.origin === 'provider';
   const shortfall = p.cost.additionalDeposit;
+  const bookingActive = v.booking.status === 'confirmed';
+  // 처음 요청서에 낸 가능 시간 밖의 새 시각이면 알린다. 기존 범위는 고치지 않고 이 제안에 대한 동의로만 처리한다.
+  const outside = !!p.newVisit.time && v.booking.customerSlots.length > 0 && !isWithinSlots(p.newVisit.time, v.booking.customerSlots);
 
   const accept = () => void action.run(async () => {
     const res = await repo.respondToProposal(p.id, 'accept', key.get());
@@ -34,16 +39,20 @@ function Body({ v }: { v: ProposalView }) {
         <h2 style={{ fontSize: 'var(--fs-xl)' }}>{fromProvider ? '업체의 일정 변경 제안' : '내 일정 변경 요청'}</h2>
         <Badge tone={p.status === 'proposed' ? 'action' : p.status === 'accepted' ? 'success' : 'neutral'}>{STATUS[p.status]}</Badge>
       </div>
-      <p className="small muted">{v.providerName} · 합의 전까지 기존 일정이 유지돼요.</p>
+      <p className="small muted">{v.providerName} · 내가 수락하기 전까지 기존 예약 방문 시각이 유지돼요. 응답하지 않아도 바뀌지 않아요.</p>
       {p.free === 'delay' && <Banner tone="success" title="방문 지연에 따른 무료 변경이에요" />}
       {fromProvider && <Banner tone="info" title="업체 사유 변경이에요">{p.reason}</Banner>}
       {!fromProvider && <Banner tone="info" title="변경 사유">{p.reason}</Banner>}
 
       <Section title="일정 비교">
         <div className="card"><KV rows={[
-          { k: '기존 일정', v: <span>{formatDate(p.oldVisit.date)}<br />{p.oldVisit.window}</span> },
-          { k: '새 일정', v: <span className="strong">{formatDate(p.newVisit.date)}<br />{p.newVisit.window}</span> },
-        ]} /></div>
+          { k: '기존 방문 시각', v: <VisitText date={p.oldVisit.date} time={p.oldVisit.time} /> },
+          p.newVisit.time
+            ? { k: fromProvider ? '제안된 새 방문 시각' : '업체가 제안한 새 방문 시각', v: <VisitText date={p.newVisit.date} time={p.newVisit.time} strong /> }
+            : { k: '새로 가능한 시간', v: <span><span className="nowrap">{p.newVisit.wishSlot ? formatSlot(p.newVisit.wishSlot) : '-'}</span><br /><span className="xs muted">업체가 이 안에서 새 방문 시각을 제안하면 확인할 수 있어요</span></span> },
+        ]} />
+        {outside && <p className="xs muted" style={{ marginTop: 'var(--sp-2)' }}>처음 요청서에 낸 가능 시간({slotsText(v.booking.customerSlots)}) 밖의 시각이에요. 기존 가능 시간은 바뀌지 않고, 내가 수락해야만 예약이 이 시각으로 바뀌어요.</p>}
+        </div>
       </Section>
 
       <Section title="비용">
@@ -63,27 +72,33 @@ function Body({ v }: { v: ProposalView }) {
       {(p.status === 'requested' || p.status === 'proposed') && !fromProvider && (
         <Button variant="ghost" block onClick={() => setDlg('withdraw')}>변경 요청 철회하기</Button>
       )}
+      {p.status === 'rejected' && fromProvider && bookingActive && (
+        <div className="card stack">
+          <Banner tone="info" title="변경을 거절했어요 · 기존 예약이 유지돼요">자동으로 바뀌거나 취소되지 않아요. 업체에 전화해 다른 일정을 협의하거나, 업체 사유로 무료 취소할 수 있어요.</Banner>
+          <PhoneButton phone={v.providerPhone} name={v.providerName} />
+          <LinkButton to={`/bookings/${p.bookingId}/cancel`} variant="secondary" block>업체 사유 무료 취소 · 환불 금액 확인</LinkButton>
+        </div>
+      )}
       {p.status === 'accepted' && <LinkButton to={`/bookings/${p.bookingId}`} variant="primary" block>예약 상세 보기</LinkButton>}
       {p.status !== 'accepted' && <LinkButton to={`/bookings/${p.bookingId}`} variant="secondary" block>예약 상세로</LinkButton>}
 
       {p.status === 'proposed' && (
         <ActionBar note={shortfall > 0 ? `수락하면 ${formatWon(shortfall)}을 모의 결제해요` : '수락하면 일정이 바뀌어요'}>
           <Button variant="primary" block busy={action.busy} onClick={accept}>{shortfall > 0 ? `수락하고 ${formatWon(shortfall)} 모의 결제` : '변경 수락하기'}</Button>
-          <Button variant="secondary" block onClick={() => setDlg('reject')}>{fromProvider ? '수락하지 않고 환불받으며 취소하기' : '변경하지 않기'}</Button>
+          <Button variant="secondary" block onClick={() => setDlg('reject')}>{fromProvider ? '변경 거절하기 (기존 예약 유지)' : '변경하지 않기'}</Button>
         </ActionBar>
       )}
 
       {dlg === 'reject' && (
-        <Dialog title={fromProvider ? '수락하지 않고 예약을 취소할까요?' : '변경하지 않을까요?'} onClose={() => setDlg(null)}
+        <Dialog title={fromProvider ? '일정 변경을 거절할까요?' : '변경하지 않을까요?'} onClose={() => setDlg(null)}
           actions={<>
-            <Button variant={fromProvider ? 'danger' : 'primary'} block busy={action.busy} onClick={reject}>{fromProvider ? '환불받으며 취소하기' : '변경하지 않기'}</Button>
+            <Button variant="primary" block busy={action.busy} onClick={reject}>{fromProvider ? '변경 거절하기' : '변경하지 않기'}</Button>
             <Button block onClick={() => setDlg(null)}>돌아가기</Button>
           </>}>
           {fromProvider ? (
             <>
-              <p>업체 사유 변경이라 수수료와 공제 없이 해당 선결제 전체가 환불 대상이에요.</p>
-              <KV rows={[{ k: '환불 요청 금액', v: <span className="money strong">{formatWon(v.cancelPreview.refundTotal)}</span> }]} />
-              <p className="xs muted">환불은 ‘처리 요청’이 접수되는 것이고, 카드·계좌에 실제 반영되는 시점은 결제수단에 따라 달라요.</p>
+              <p>거절해도 기존 예약(<VisitText date={p.oldVisit.date} time={p.oldVisit.time} />)은 그대로예요. 자동으로 취소되지 않아요.</p>
+              <p className="small">거절한 뒤 업체와 다른 일정을 협의하거나, 원하면 업체 사유로 무료 취소할 수 있어요. 업체 사유 취소는 공제 없이 해당 선결제 전체(<span className="money">{formatWon(v.cancelPreview.refundTotal)}</span>)가 환불 대상이에요.</p>
             </>
           ) : <p>제안된 변경을 받아들이지 않고 기존 일정을 유지해요.</p>}
         </Dialog>

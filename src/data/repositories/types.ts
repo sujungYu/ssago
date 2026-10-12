@@ -192,7 +192,8 @@ export interface ProposalView {
   providerName: string;
   groupClosed: boolean;
   preview: DateChangePreview | null;
-  /** 업체 사유 거절 시 환불 미리보기 */
+  providerPhone: string;
+  /** 업체 사유 무료 취소(제안 중이거나 거절한 뒤) 환불 미리보기 */
   cancelPreview: CancelPreview;
 }
 

@@ -140,7 +140,7 @@ function request(r: Partial<RepairRequest> & Pick<RepairRequest, 'id' | 'provide
   };
 }
 
-function approval(a: Partial<Approval> & Pick<Approval, 'requestId' | 'groupId' | 'approvedAt' | 'groupCloseAt' | 'visitDate' | 'visitWindow' | 'totalTripFee' | 'tasks'>): Approval {
+function approval(a: Partial<Approval> & Pick<Approval, 'requestId' | 'groupId' | 'approvedAt' | 'groupCloseAt' | 'visitDate' | 'totalTripFee' | 'tasks'>): Approval {
   return {
     id: `ap-${a.requestId}`, version: 1,
     paymentDeadline: paymentDeadline(a.approvedAt, a.groupCloseAt),
@@ -179,39 +179,42 @@ requests.push(
 );
 
 approvals.push(
-  approval({ requestId: 'rq-3', groupId: 'g1', approvedAt: k('10-13', '15:00'), groupCloseAt: k('10-15', '18:00'), visitDate: ymd('10-16'), visitWindow: '09:00–12:00', totalTripFee: 50000,
+  approval({ requestId: 'rq-3', groupId: 'g1', approvedAt: k('10-13', '15:00'), groupCloseAt: k('10-15', '18:00'), visitDate: ymd('10-16'), visitTime: '10:00', totalTripFee: 50000,
     tasks: [{ title: '욕실 세면대 수전 교체', note: '수전 본체와 급수 호스 교체', estimate: 50000 }, { title: '배수 트랩 교체', note: '트랩과 연결 부품 교체', estimate: 30000 }],
     materialNote: '일반 기성 부품은 최종 정산 때 합산해요. 맞춤 자재가 필요하면 별도 안내 후 동의를 받아요.' }),
-  approval({ requestId: 'rq-4', groupId: 'g4', approvedAt: k('10-13', '17:00'), groupCloseAt: k('10-15', '18:00'), visitDate: ymd('10-16'), visitWindow: '13:00–16:00', totalTripFee: 60000, partsEstimate: 25000,
+  approval({ requestId: 'rq-4', groupId: 'g4', approvedAt: k('10-13', '17:00'), groupCloseAt: k('10-15', '18:00'), visitDate: ymd('10-16'), visitTime: '14:00', totalTripFee: 60000, partsEstimate: 25000,
     tasks: [{ title: '욕실 세면대 수전 교체', note: '수전 본체 교체', estimate: 40000 }, { title: '배수 트랩 교체', note: '트랩 교체', estimate: 30000 }],
     discountNote: '두 작업을 함께 맡기면 작업비 5,000원 할인 (다른 할인과 중복 적용 불가)' }),
-  approval({ requestId: 'rq-7', groupId: 'g7', approvedAt: k('10-11', '09:00'), groupCloseAt: k('10-12', '18:00'), visitDate: ymd('10-13'), visitWindow: '09:00–12:00', totalTripFee: 30000, partsEstimate: 5000,
+  approval({ requestId: 'rq-7', groupId: 'g7', approvedAt: k('10-11', '09:00'), groupCloseAt: k('10-12', '18:00'), visitDate: ymd('10-13'), visitTime: '10:00', totalTripFee: 30000, partsEstimate: 5000,
     tasks: [{ title: '욕실 실리콘 보수', note: '기존 실리콘 제거 후 재시공', estimate: 40000 }] }),
-  approval({ requestId: 'rq-10', groupId: 'g8', approvedAt: k('10-13', '13:00'), groupCloseAt: k('10-15', '18:00'), visitDate: ymd('10-16'), visitWindow: '09:00–12:00', totalTripFee: 50000, partsEstimate: 15000,
+  approval({ requestId: 'rq-10', groupId: 'g8', approvedAt: k('10-13', '13:00'), groupCloseAt: k('10-15', '18:00'), visitDate: ymd('10-16'), visitTime: '10:30', totalTripFee: 50000, partsEstimate: 15000,
     tasks: [{ title: '거실 선반 설치', note: '벽걸이 선반 2개 설치', estimate: 45000 }],
     recheck: {
       endedGroupNote: '함께 예약했던 세대가 모두 취소해 기존 공동 예약이 종료됐어요.',
-      newGroupId: 'g9', newVisitDate: ymd('10-19'), newVisitWindow: '09:00–12:00', newCloseAt: k('10-18', '18:00'), newTotalTripFee: 60000, newDepositAmount: 60000,
+      newGroupId: 'g9', newVisitDate: ymd('10-19'), newVisitTime: '10:00', newCloseAt: k('10-18', '18:00'), newTotalTripFee: 60000, newDepositAmount: 60000,
     } }),
 );
 
 // ───────── 예약 ─────────
 interface BookingSeed {
-  id: string; req: string; provider: string; group: string; visit: string; window: string; tasks: TaskItem[];
+  id: string; req: string; provider: string; group: string; visit: string;
+  /** 고객 가능 시간(요청서) */ window: string;
+  /** 업체 제안 → 예약금 결제로 확정된 방문 시각. 가능 시간 안 */ time: string;
+  tasks: TaskItem[];
   work?: Booking['workStatus']; status?: Booking['status']; address?: string; labor?: number; parts?: number; deposit: Won;
   cancelledAt?: string; cancelCause?: Booking['cancelCause']; followUp?: Booking['followUp']; created?: string;
 }
 function addBooking(b: BookingSeed) {
-  requests.push(request({ id: b.req, providerId: b.provider, groupId: b.group, status: 'booked', tasks: b.tasks, bookingId: b.id, addressId: b.address ?? 'ad-apt', createdAt: k('10-08', '10:00'), updatedAt: k('10-09', '10:00') }));
+  requests.push(request({ id: b.req, providerId: b.provider, groupId: b.group, slots: [b.window], status: 'booked', tasks: b.tasks, bookingId: b.id, addressId: b.address ?? 'ad-apt', createdAt: k('10-08', '10:00'), updatedAt: k('10-09', '10:00') }));
   const grp = groups.find((g) => g.id === b.group)!;
   approvals.push(approval({
-    requestId: b.req, groupId: b.group, approvedAt: k('10-09', '09:00'), groupCloseAt: grp.closeAt, visitDate: b.visit, visitWindow: b.window,
+    requestId: b.req, groupId: b.group, approvedAt: k('10-09', '09:00'), groupCloseAt: grp.closeAt, visitDate: b.visit, visitTime: b.time,
     totalTripFee: grp.totalTripFee, partsEstimate: b.parts ?? 20000,
     tasks: b.tasks.map((t, i) => ({ title: t.title, note: '업체 승인 범위', estimate: i === 0 ? (b.labor ?? 50000) : 30000 })),
   }));
   bookings.push({
     id: b.id, requestId: b.req, providerId: b.provider, groupId: b.group, addressId: b.address ?? 'ad-apt',
-    status: b.status ?? 'confirmed', workStatus: b.work ?? 'scheduled', visitDate: b.visit, visitWindow: b.window, tasks: b.tasks,
+    status: b.status ?? 'confirmed', workStatus: b.work ?? 'scheduled', visitDate: b.visit, visitTime: b.time, customerSlots: [b.window], tasks: b.tasks,
     createdAt: b.created ?? k('10-09', '11:00'), cancelledAt: b.cancelledAt, cancelCause: b.cancelCause, followUp: b.followUp,
   });
   addTx(b.id, 'deposit', b.deposit, 'success', b.req);
@@ -237,26 +240,26 @@ function addStatement(bookingId: string, status: FinalStatement['status'], items
 }
 
 // 진행 중
-addBooking({ id: 'bk-k1', req: 'rq-k1', provider: 'p3', group: 'g5', visit: ymd('10-17'), window: '13:00–16:00', tasks: [tk('거실 조명 교체', '거실 등 두 개')], deposit: 40000, labor: 45000, parts: 15000 });
-addBooking({ id: 'bk-k2', req: 'rq-k2', provider: 'p1', group: 'gc-p1', visit: ymd('10-14'), window: '09:00–12:00', tasks: T_FAUCET(), deposit: 50000, labor: 50000, parts: 20000 });
-addBooking({ id: 'bk-k3', req: 'rq-k3', provider: 'p4', group: 'gc-p4', visit: ymd('10-13'), window: '13:00–16:00', tasks: [tk('현관문 손잡이 교체', '손잡이가 헐겁습니다.')], deposit: 45000, labor: 35000, parts: 12000 });
-addBooking({ id: 'bk-k4', req: 'rq-k4', provider: 'p5', group: 'gc-p5', visit: ymd('10-14'), window: '13:00–16:00', tasks: [tk('욕실 실리콘 보수', '곰팡이 제거 후 재시공')], deposit: 50000, labor: 40000, parts: 5000 });
-addBooking({ id: 'bk-k5', req: 'rq-k5', provider: 'p6', group: 'gc-p6', visit: ymd('10-14'), window: '09:00–12:00', tasks: [tk('서랍장 도어 교체', '맞춤 크기 도어로 바꾸고 싶어요.')], deposit: 50000, labor: 60000, parts: 80000 });
-addBooking({ id: 'bk-k6', req: 'rq-k6', provider: 'p3', group: 'gc-p3', visit: ymd('10-14'), window: '09:00–12:00', tasks: [tk('스위치·콘센트 교체', '거실 스위치가 자주 나갑니다.')], work: 'in_progress', deposit: 40000, labor: 30000, parts: 8000 });
-addBooking({ id: 'bk-k7', req: 'rq-k7', provider: 'p3', group: 'gc-p3', visit: ymd('10-14'), window: '09:00–12:00', tasks: [tk('주방 조명 교체', '레일 조명 설치')], work: 'followup_waiting',
+addBooking({ id: 'bk-k1', req: 'rq-k1', provider: 'p3', group: 'g5', visit: ymd('10-17'), window: '13:00–16:00', time: '14:00', tasks: [tk('거실 조명 교체', '거실 등 두 개')], deposit: 40000, labor: 45000, parts: 15000 });
+addBooking({ id: 'bk-k2', req: 'rq-k2', provider: 'p1', group: 'gc-p1', visit: ymd('10-14'), window: '09:00–12:00', time: '10:00', tasks: T_FAUCET(), deposit: 50000, labor: 50000, parts: 20000 });
+addBooking({ id: 'bk-k3', req: 'rq-k3', provider: 'p4', group: 'gc-p4', visit: ymd('10-13'), window: '13:00–16:00', time: '14:00', tasks: [tk('현관문 손잡이 교체', '손잡이가 헐겁습니다.')], deposit: 45000, labor: 35000, parts: 12000 });
+addBooking({ id: 'bk-k4', req: 'rq-k4', provider: 'p5', group: 'gc-p5', visit: ymd('10-14'), window: '13:00–16:00', time: '14:00', tasks: [tk('욕실 실리콘 보수', '곰팡이 제거 후 재시공')], deposit: 50000, labor: 40000, parts: 5000 });
+addBooking({ id: 'bk-k5', req: 'rq-k5', provider: 'p6', group: 'gc-p6', visit: ymd('10-14'), window: '09:00–12:00', time: '10:00', tasks: [tk('서랍장 도어 교체', '맞춤 크기 도어로 바꾸고 싶어요.')], deposit: 50000, labor: 60000, parts: 80000 });
+addBooking({ id: 'bk-k6', req: 'rq-k6', provider: 'p3', group: 'gc-p3', visit: ymd('10-14'), window: '09:00–12:00', time: '10:00', tasks: [tk('스위치·콘센트 교체', '거실 스위치가 자주 나갑니다.')], work: 'in_progress', deposit: 40000, labor: 30000, parts: 8000 });
+addBooking({ id: 'bk-k7', req: 'rq-k7', provider: 'p3', group: 'gc-p3', visit: ymd('10-14'), window: '09:00–12:00', time: '10:00', tasks: [tk('주방 조명 교체', '레일 조명 설치')], work: 'followup_waiting',
   followUp: { date: ymd('10-20'), window: '09:00–12:00', note: '배선 정리 후 조명을 달기로 업체와 합의했어요.' }, deposit: 40000, labor: 50000, parts: 10000 });
 // 최종 정산
-addBooking({ id: 'bk-k9', req: 'rq-k9', provider: 'p1', group: 'gp-p1', visit: ymd('10-09'), window: '09:00–12:00', tasks: T_FAUCET(), work: 'final_confirm_waiting', deposit: 50000, created: k('10-04', '10:00') });
-addBooking({ id: 'bk-k10', req: 'rq-k10', provider: 'p1', group: 'gp-p1', visit: ymd('10-09'), window: '13:00–16:00', tasks: [tk('주방 수전 교체', '')], work: 'final_confirm_waiting', deposit: 50000, created: k('10-04', '10:00') });
-addBooking({ id: 'bk-k11', req: 'rq-k11', provider: 'p2', group: 'gp-p2', visit: ymd('10-09'), window: '09:00–12:00', tasks: [tk('문손잡이 교체', '')], work: 'final_confirm_waiting', deposit: 50000, created: k('10-04', '10:00') });
-addBooking({ id: 'bk-k12', req: 'rq-k12', provider: 'p2', group: 'gp-p2', visit: ymd('10-09'), window: '13:00–16:00', tasks: [tk('서랍 레일 수리', '')], work: 'stopped_settlement_waiting', deposit: 50000, created: k('10-04', '10:00') });
-addBooking({ id: 'bk-k13', req: 'rq-k13', provider: 'p3', group: 'gp-p3', visit: ymd('10-09'), window: '09:00–12:00', tasks: [tk('거실 조명 교체', '')], work: 'completed', deposit: 40000, created: k('10-04', '10:00') });
-addBooking({ id: 'bk-k14', req: 'rq-k14', provider: 'p1', group: 'gp-p1', visit: ymd('10-09'), window: '09:00–12:00', tasks: [tk('욕실 수전 교체', '')], work: 'completed', deposit: 50000, created: k('10-04', '10:00') });
+addBooking({ id: 'bk-k9', req: 'rq-k9', provider: 'p1', group: 'gp-p1', visit: ymd('10-09'), window: '09:00–12:00', time: '10:00', tasks: T_FAUCET(), work: 'final_confirm_waiting', deposit: 50000, created: k('10-04', '10:00') });
+addBooking({ id: 'bk-k10', req: 'rq-k10', provider: 'p1', group: 'gp-p1', visit: ymd('10-09'), window: '13:00–16:00', time: '14:00', tasks: [tk('주방 수전 교체', '')], work: 'final_confirm_waiting', deposit: 50000, created: k('10-04', '10:00') });
+addBooking({ id: 'bk-k11', req: 'rq-k11', provider: 'p2', group: 'gp-p2', visit: ymd('10-09'), window: '09:00–12:00', time: '10:00', tasks: [tk('문손잡이 교체', '')], work: 'final_confirm_waiting', deposit: 50000, created: k('10-04', '10:00') });
+addBooking({ id: 'bk-k12', req: 'rq-k12', provider: 'p2', group: 'gp-p2', visit: ymd('10-09'), window: '13:00–16:00', time: '14:00', tasks: [tk('서랍 레일 수리', '')], work: 'stopped_settlement_waiting', deposit: 50000, created: k('10-04', '10:00') });
+addBooking({ id: 'bk-k13', req: 'rq-k13', provider: 'p3', group: 'gp-p3', visit: ymd('10-09'), window: '09:00–12:00', time: '10:00', tasks: [tk('거실 조명 교체', '')], work: 'completed', deposit: 40000, created: k('10-04', '10:00') });
+addBooking({ id: 'bk-k14', req: 'rq-k14', provider: 'p1', group: 'gp-p1', visit: ymd('10-09'), window: '09:00–12:00', time: '10:00', tasks: [tk('욕실 수전 교체', '')], work: 'completed', deposit: 50000, created: k('10-04', '10:00') });
 // 취소
-addBooking({ id: 'bk-k15', req: 'rq-k15', provider: 'p5', group: 'g7', visit: ymd('10-16'), window: '09:00–12:00', tasks: [tk('욕실 실리콘 보수', '')], status: 'cancelled', cancelledAt: k('10-12', '11:00'), cancelCause: 'customer', deposit: 30000, address: 'ad-apt2' });
-addBooking({ id: 'bk-k16', req: 'rq-k16', provider: 'p5', group: 'gc-p5', visit: ymd('10-14'), window: '13:00–16:00', tasks: [tk('줄눈 보수', '')], status: 'cancelled', cancelledAt: k('10-13', '18:30'), cancelCause: 'customer', deposit: 50000 });
-addBooking({ id: 'bk-k17', req: 'rq-k17', provider: 'p4', group: 'gc-p4', visit: ymd('10-13'), window: '13:00–16:00', tasks: [tk('방충망 교체', '')], status: 'cancelled', cancelledAt: k('10-12', '19:00'), cancelCause: 'provider', deposit: 45000 });
-addBooking({ id: 'bk-k18', req: 'rq-k18', provider: 'p6', group: 'gc-p6', visit: ymd('10-14'), window: '09:00–12:00', tasks: [tk('맞춤 선반 도어 교체', '')], status: 'cancelled', cancelledAt: k('10-13', '18:45'), cancelCause: 'customer', deposit: 50000 });
+addBooking({ id: 'bk-k15', req: 'rq-k15', provider: 'p5', group: 'g7', visit: ymd('10-16'), window: '09:00–12:00', time: '10:00', tasks: [tk('욕실 실리콘 보수', '')], status: 'cancelled', cancelledAt: k('10-12', '11:00'), cancelCause: 'customer', deposit: 30000, address: 'ad-apt2' });
+addBooking({ id: 'bk-k16', req: 'rq-k16', provider: 'p5', group: 'gc-p5', visit: ymd('10-14'), window: '13:00–16:00', time: '14:00', tasks: [tk('줄눈 보수', '')], status: 'cancelled', cancelledAt: k('10-13', '18:30'), cancelCause: 'customer', deposit: 50000 });
+addBooking({ id: 'bk-k17', req: 'rq-k17', provider: 'p4', group: 'gc-p4', visit: ymd('10-13'), window: '13:00–16:00', time: '14:00', tasks: [tk('방충망 교체', '')], status: 'cancelled', cancelledAt: k('10-12', '19:00'), cancelCause: 'provider', deposit: 45000 });
+addBooking({ id: 'bk-k18', req: 'rq-k18', provider: 'p6', group: 'gc-p6', visit: ymd('10-14'), window: '09:00–12:00', time: '10:00', tasks: [tk('맞춤 선반 도어 교체', '')], status: 'cancelled', cancelledAt: k('10-13', '18:45'), cancelCause: 'customer', deposit: 50000 });
 
 requests.find((r) => r.id === 'rq-k1')!.bundleId = 'b-lamp';
 
@@ -301,13 +304,14 @@ const db: MockDb = {
   proposals: [
     {
       id: 'pr-k4', bookingId: 'bk-k4', origin: 'provider', status: 'proposed', free: 'provider',
-      oldVisit: { date: ymd('10-14'), window: '13:00–16:00' }, newVisit: { date: ymd('10-19'), window: '09:00–12:00', groupId: 'gn-p5' },
+      // 고객 가능 시간(13:00~16:00) 밖의 새 시각 — 기존 범위는 고치지 않고, 이 제안에 고객이 동의해야만 바뀐다
+      oldVisit: { date: ymd('10-14'), time: '14:00' }, newVisit: { date: ymd('10-19'), time: '10:00', groupId: 'gn-p5' },
       reason: '이전 작업이 길어져 같은 날 방문이 어려워졌어요.',
       cost: { tripFeeCharged: 0, additionalDeposit: 0, note: '업체 사유 변경이라 변경 수수료가 없어요. 수락하면 확정 출장비 16,666원이 유지돼요.' },
       createdAt: k('10-13', '16:00'),
     },
   ],
-  delays: [{ id: 'dl-k3', bookingId: 'bk-k3', originalDate: ymd('10-13'), originalWindow: '13:00–16:00', newEta: k('10-13', '17:20'), status: 'open' }],
+  delays: [{ id: 'dl-k3', bookingId: 'bk-k3', originalDate: ymd('10-13'), originalVisitTime: '14:00', newEta: k('10-13', '14:20'), status: 'open' }],
   materials,
   additionalWorks: [
     { id: 'aw-1', bookingId: 'bk-k6', reason: '배선이 낡아 스위치 박스까지 교체해야 안전해요.', scope: '스위치 박스 1개 교체 및 배선 정리', amount: 25000, status: 'proposed' },

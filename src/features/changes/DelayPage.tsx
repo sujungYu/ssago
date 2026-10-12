@@ -2,12 +2,17 @@ import { useParams } from 'react-router-dom';
 import { Page } from '../../app/Page';
 import { useRepo } from '../../app/context';
 import { useAction, useAsync } from '../../app/hooks';
-import { formatDate, formatDateTime } from '../../domain/time';
+import { formatDateTime } from '../../domain/time';
+import { VisitText } from '../shared';
 import { AsyncView, Banner, Button, KV, LinkButton, PhoneButton, Section } from '../../components/ui';
 
 const CHOICE = { wait: '기다리기를 선택했어요', free_change: '무료 일정 변경을 요청했어요', free_cancel: '무료 취소를 선택했어요' } as const;
 
-/** C-18 지연 안내·대응 선택. 세 선택지는 동등하게 보여주고, 추천하거나 미리 선택하지 않는다. */
+/**
+ * C-18 지연 안내·대응 선택. 세 선택지는 동등하게 보여주고, 추천하거나 미리 선택하지 않는다.
+ * 변경 도착 예상은 예약 방문 시각과 따로 보여주며 예약 시각을 덮어쓰지 않는다. 무응답은 어떤 선택으로도 처리하지 않는다.
+ * 몇 분 지연부터 무료 변경·취소를 줄지는 미정이라(spec 15장) 화면에 분 단위 기준을 적용했다고 표시하지 않는다.
+ */
 export function DelayPage() {
   const { id = '' } = useParams();
   const repo = useRepo();
@@ -21,9 +26,10 @@ export function DelayPage() {
             <Banner tone="warn" title={`${providerName}의 방문이 늦어지고 있어요`}>아래 세 가지 중에서 직접 선택해 주세요. 어느 쪽도 추천하거나 자동으로 선택하지 않아요.</Banner>
             <div className="card stack">
               <KV rows={[
-                { k: '원래 시간대', v: <span>{formatDate(delay.originalDate)}<br />{delay.originalWindow}</span> },
-                { k: '변경된 도착 예상', v: <span className="nowrap strong">{formatDateTime(delay.newEta)}</span> },
+                { k: '예약 방문 예정', v: <VisitText date={delay.originalDate} time={delay.originalVisitTime} /> },
+                { k: '변경 도착 예상', v: <span className="nowrap strong">{formatDateTime(delay.newEta)}</span> },
               ]} />
+              <p className="xs muted">지연 안내만으로 예약 방문 시각은 바뀌지 않아요. 응답하지 않아도 일정 변경이나 취소로 처리하지 않아요.</p>
               <PhoneButton phone={providerPhone} name={providerName} />
             </div>
             {delay.status === 'resolved' ? (

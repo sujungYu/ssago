@@ -21,7 +21,10 @@ export interface Address {
   kind: 'apartment' | 'house';
 }
 
-export type TimeSlot = string; // 예: "09:00–12:00"
+/** 고객 가능 시간 범위(요청서). 예: "09:00–12:00". 방문 시각이 아니다. */
+export type TimeSlot = string;
+/** 방문 시각(도착 예정, 한국 시간 HH:MM). 작업 소요 시간이 아니다. src/domain/visitTime.ts */
+export type VisitTime = string;
 
 // ───────── 업체·공동 날짜 ─────────
 export interface ProviderSummary {
@@ -99,6 +102,7 @@ export interface RepairRequest {
   providerId: string;
   groupId: string | null; // null = 새 날짜 요청
   newDateWish?: IsoDate;
+  /** 고객 가능 시간(요청서에서 제출한 범위) */
   slots: TimeSlot[];
   tasks: TaskItem[];
   addressId: string;
@@ -125,7 +129,11 @@ export interface Approval {
   groupCloseAt: IsoDateTime;
   paymentDeadline: IsoDateTime; // min(승인+24h, 그룹 마감)
   visitDate: IsoDate;
-  visitWindow: TimeSlot;
+  /**
+   * 업체 제안 방문 시각. 고객 가능 시간(요청 slots) 안이어야 한다(proposedVisitTimeError).
+   * 없으면 화면에 ‘방문 시각 확인 필요’로 표시하고 추정하지 않는다.
+   */
+  visitTime?: VisitTime;
   totalTripFee: Won;
   depositAmount: Won; // = 그룹 총 출장비
   tasks: ApprovedTask[];
@@ -144,7 +152,8 @@ export interface Recheck {
   endedGroupNote: string;
   newGroupId: string;
   newVisitDate: IsoDate;
-  newVisitWindow: TimeSlot;
+  /** 새 조건의 업체 제안 방문 시각. 없으면 ‘방문 시각 확인 필요’ */
+  newVisitTime?: VisitTime;
   newCloseAt: IsoDateTime;
   newTotalTripFee: Won;
   newDepositAmount: Won;
@@ -170,7 +179,12 @@ export interface Booking {
   status: BookingStatus;
   workStatus: WorkStatus;
   visitDate: IsoDate;
-  visitWindow: TimeSlot;
+  /** 예약 방문 시각(예약금 결제로 확정된 업체 제안 시각, 변경은 고객이 수락해야만 바뀐다). 없으면 ‘방문 시각 확인 필요’ */
+  visitTime?: VisitTime;
+  /** 참고용: 고객이 요청서에 제출한 가능 시간. 일정이 바뀌어도 수정하지 않는다 */
+  customerSlots: TimeSlot[];
+  /** 수락된 일정 변경 기록(기존 일정·새 일정·사유·고객 동의 시각) */
+  scheduleChanges?: ScheduleChange[];
   tasks: TaskItem[];
   cancelledAt?: IsoDateTime;
   cancelCause?: CancelCause;
@@ -180,6 +194,14 @@ export interface Booking {
   freeCancelReason?: string;
   followUp?: { date: IsoDate; window: TimeSlot; note: string };
   createdAt: IsoDateTime;
+}
+
+export interface ScheduleChange {
+  proposalId: string;
+  from: { date: IsoDate; time?: VisitTime };
+  to: { date: IsoDate; time?: VisitTime };
+  reason: string;
+  consentedAt: IsoDateTime;
 }
 
 export type CancelCause = 'customer' | 'provider' | 'policy_free';
@@ -245,8 +267,13 @@ export interface ChangeProposal {
   bookingId: string;
   origin: 'customer' | 'provider';
   status: ProposalStatus;
-  oldVisit: { date: IsoDate; window: TimeSlot };
-  newVisit: { date: IsoDate; window: TimeSlot; groupId?: string };
+  /** 제안 시점의 예약 방문 일정 */
+  oldVisit: { date: IsoDate; time?: VisitTime };
+  /**
+   * 새 방문 일정. time = 업체가 제안(동의)한 새 방문 시각. 고객 요청 단계(requested)에서는 비어 있고,
+   * 고객이 원하는 가능 시간은 wishSlot에 둔다. 고객 가능 시간 밖이어도 되며, 고객이 수락해야만 예약에 반영된다.
+   */
+  newVisit: { date: IsoDate; time?: VisitTime; wishSlot?: TimeSlot; groupId?: string };
   reason: string;
   /** 지연·업체 사유 등 무료 변경이면 표시. 이 경우 변경 수수료 없이 기존 확정 출장비를 유지한다 */
   free?: 'delay' | 'provider';
@@ -259,8 +286,10 @@ export type DelayChoice = 'wait' | 'free_change' | 'free_cancel';
 export interface DelayNotice {
   id: string;
   bookingId: string;
-  originalWindow: TimeSlot;
+  /** 지연 안내 시점의 예약 방문 일정. 지연 안내는 예약 방문 시각을 바꾸지 않는다 */
   originalDate: IsoDate;
+  originalVisitTime?: VisitTime;
+  /** 변경 도착 예상(당일). 예약 방문 시각과 별개 */
   newEta: IsoDateTime;
   status: 'open' | 'resolved';
   choice?: DelayChoice;

@@ -2,11 +2,11 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Page } from '../../app/Page';
 import { useAppState, useRepo } from '../../app/context';
 import { useAsync } from '../../app/hooks';
-import { formatDate, formatDateTime, formatRemaining } from '../../domain/time';
+import { formatDateTime, formatRemaining } from '../../domain/time';
 import { formatWon } from '../../domain/money';
 import { AsyncView, Banner, Button, KV, Section } from '../../components/ui';
 import { RequestBadge } from './RequestsPage';
-import { slotsText } from '../shared';
+import { VisitText, slotsText } from '../shared';
 
 /** C-07 비교 요청 묶음 상세: 같은 작업에 대한 업체별 승인 조건을 나란히 본다. */
 export function BundlePage() {
@@ -35,7 +35,7 @@ export function BundlePage() {
                       <div className="row row--between row--wrap"><h3>{d.provider.name}</h3><RequestBadge status={d.request.status} recheck={!!ap?.recheck} /></div>
                       {ap && !ended ? (
                         <KV rows={[
-                          { k: '방문', v: <span>{formatDate(ap.visitDate)}<br />{ap.visitWindow}</span> },
+                          { k: '업체가 제안한 방문 시각', v: <VisitText date={ap.visitDate} time={ap.visitTime} strong /> },
                           { k: '결제 기한', v: <span>{formatDateTime(ap.paymentDeadline)}<br /><span className="muted xs">{formatRemaining(repo.now(), ap.paymentDeadline)}</span></span> },
                           { k: '업체 견적(작업비)', v: <span className="money">{formatWon(est)}</span> },
                           { k: '부품·자재 예상', v: <span className="money">{formatWon(ap.partsEstimate)}</span> },
@@ -46,7 +46,7 @@ export function BundlePage() {
                       ) : (
                         <p className="small muted">{d.request.status === 'reviewing' ? '업체가 아직 검토 중이에요. 승인 조건이 오면 여기에서 비교할 수 있어요.' : d.request.status === 'needs_info' ? '업체가 추가 정보를 요청했어요.' : d.request.rejectionReason ?? '이 요청은 종료되었어요.'}</p>
                       )}
-                      <p className="xs muted">가능 시간대 {slotsText(d.request.slots)}</p>
+                      <p className="xs muted">고객 가능 시간 · {slotsText(d.request.slots)}</p>
                       <Link className={`btn ${ap && !ended && d.request.status === 'approved_pending_payment' ? 'btn--primary' : 'btn--secondary'} btn--block`}
                         to={d.request.status === 'approved_pending_payment' ? (ap?.recheck ? `/requests/${d.request.id}/recheck` : `/requests/${d.request.id}/approval`) : `/requests/${d.request.id}`}>
                         {d.request.status === 'approved_pending_payment' ? '승인 조건 확인하기' : '요청 상세 보기'}

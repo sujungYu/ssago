@@ -8,7 +8,8 @@ import { formatWon } from '../../domain/money';
 import { expectedFeeForJoiner } from '../../domain/pricing';
 import type { ApprovalView } from '../../data/repositories/types';
 import { AsyncView, Banner, Button, KV, LinkButton, MockPayNotice, Section } from '../../components/ui';
-import { PAYMENT_STATUS } from '../shared';
+import { PAYMENT_STATUS, VisitText, slotsText } from '../shared';
+import { DURATION_NOTE } from '../../domain/visitTime';
 
 function Panel({ v, reload }: { v: ApprovalView; reload: () => void }) {
   const repo = useRepo();
@@ -55,7 +56,7 @@ function Panel({ v, reload }: { v: ApprovalView; reload: () => void }) {
       {rc ? (
         <Banner tone="warn" title="기존 공동 예약이 종료됐어요">{rc.endedGroupNote} 아래 새 조건을 확인하고 동의해야 결제할 수 있어요.</Banner>
       ) : (
-        <Banner tone="info" title="승인만으로는 예약이 확정되지 않아요">예약금을 결제하면 예약이 확정돼요. 결제하기 전에 아래 조건을 확인해 주세요.</Banner>
+        <Banner tone="info" title="승인만으로는 예약이 확정되지 않아요">예약금을 결제하면 업체가 제안한 방문 시각으로 예약이 확정돼요. 결제하기 전에 아래 조건을 확인해 주세요.</Banner>
       )}
       {inflight && (
         <Banner tone="warn" title={PAYMENT_STATUS[inflight.status].label}>
@@ -67,14 +68,17 @@ function Panel({ v, reload }: { v: ApprovalView; reload: () => void }) {
         <div className="card">
           <KV rows={rc ? [
             { k: '이전 일정', v: <span>{formatDate(ap.visitDate)} <span className="muted">(종료됨)</span></span> },
-            { k: '새 방문', v: <span>{formatDate(rc.newVisitDate)}<br />{rc.newVisitWindow}</span> },
+            { k: '업체가 제안한 새 방문 시각', v: <VisitText date={rc.newVisitDate} time={rc.newVisitTime} strong /> },
+            { k: '고객 가능 시간', v: slotsText(v.request.slots) },
             { k: '새 접수 마감', v: <span className="nowrap">{formatDateTime(rc.newCloseAt)}</span> },
             { k: '결제 기한', v: <span className="nowrap">{formatDateTime(ap.paymentDeadline)}</span> },
           ] : [
-            { k: '방문', v: <span>{formatDate(ap.visitDate)}<br />{ap.visitWindow}</span> },
+            { k: '업체가 제안한 방문 시각', v: <VisitText date={ap.visitDate} time={ap.visitTime} strong /> },
+            { k: '고객 가능 시간', v: slotsText(v.request.slots) },
             { k: '접수 마감', v: <span className="nowrap">{formatDateTime(ap.groupCloseAt)}</span> },
             { k: '결제 기한', v: <span><span className="nowrap">{formatDateTime(ap.paymentDeadline)}</span><br /><span className="muted xs">{formatRemaining(now, ap.paymentDeadline)}</span></span> },
           ]} />
+          <p className="xs muted" style={{ marginTop: 'var(--sp-2)' }}>방문 시각은 업체의 도착 예정 시각이에요. {DURATION_NOTE} 결제 기한·접수 마감은 방문 시각과 별개예요.</p>
         </div>
       </Section>
 

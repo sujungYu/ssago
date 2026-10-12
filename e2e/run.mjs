@@ -14,7 +14,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = 4174;
 const BASE = `http://localhost:${PORT}`;
 const CHROME = process.env.CHROME_PATH || (existsSync('/opt/pw-browsers/chromium') ? '/opt/pw-browsers/chromium' : undefined);
-const DB_KEY = 'on-gimae/mock-db/v1';
+const DB_KEY = 'on-gimae/mock-db/v2';
 const APP_KEY = 'on-gimae/app-state/v1';
 
 // e2e는 실제 Supabase 프로젝트 대신 아래 가짜 Supabase Auth 서버(브라우저 요청 가로채기)로 인증 흐름을 확인한다.
@@ -223,13 +223,14 @@ await test('요청: 공동 날짜로 복수 작업 요청서 제출', async (pag
   await page.locator('input[name="slot"]').first().check();
   await page.getByRole('link', { name: '이 날짜로 수리 요청하기' }).click();
   await waitText(page, '수리 요청서');
+  await waitText(page, '고객 가능 시간');
   await page.getByRole('button', { name: '요청 보내기' }).click();
   await waitText(page, '작업 내용을 입력해 주세요'); // 검증 메시지
   await page.getByLabel('어떤 작업인가요?').fill('주방 수전 교체');
   await page.getByRole('button', { name: '작업 추가하기' }).click();
   await page.getByLabel('어떤 작업인가요?').nth(1).fill('배수 트랩 교체');
   await page.getByLabel('동·호수').fill('301동 1204호');
-  await page.getByRole('button', { name: '09:00–12:00' }).click();
+  await page.getByRole('button', { name: '09:00~12:00' }).click();
   await page.getByRole('button', { name: '요청 보내기' }).dblclick(); // 연타해도 한 번만
   await waitText(page, '요청을 보냈어요');
   await waitText(page, '업체 검토 중');
@@ -238,13 +239,14 @@ await test('요청: 공동 날짜로 복수 작업 요청서 제출', async (pag
   eq(mine.length, 1, '연타 후 생성된 요청 수');
   eq(mine[0].status, 'reviewing', '요청 상태');
   eq(mine[0].bookingId, undefined, '요청만으로 예약이 생기지 않음');
+  eq(JSON.stringify(mine[0].slots), '["09:00–12:00"]', '고객 가능 시간 범위 저장');
 });
 
 await test('요청: 새 날짜 요청은 희망 날짜가 필요하다', async (page) => {
   await start(page, { path: '/providers/p1/request?new=1' });
   await page.getByLabel('어떤 작업인가요?').fill('욕실 수전 교체');
   await page.getByLabel('동·호수').fill('301동 1204호');
-  await page.getByRole('button', { name: '09:00–12:00' }).click();
+  await page.getByRole('button', { name: '09:00~12:00' }).click();
   await page.getByRole('button', { name: '요청 보내기' }).click();
   await waitText(page, '희망 방문 날짜를 선택해 주세요');
   await page.getByLabel('희망 방문 날짜').fill('2026-10-21');
@@ -549,8 +551,15 @@ await test('개발 도구: 업체 승인 이벤트 → 알림 진입(S-02) → �
   await start(page, { path: '/requests/rq-1' });
   await page.getByRole('button', { name: '개발용 시나리오 도구 열기' }).click();
   await page.locator('select[aria-label="요청 선택"]').selectOption('rq-1');
+  await page.getByRole('button', { name: '업체 승인' }).click(); // 방문 시각 없이 승인하면 거절
+  await waitText(page, '업체 제안 방문 시각이 필요해요');
+  await page.getByLabel('업체 제안 방문 시각').fill('20:00'); // 고객 가능 시간 밖
+  await page.getByRole('button', { name: '업체 승인' }).click();
+  await waitText(page, '고객 가능 시간(09:00~12:00, 13:00~16:00) 안의 시각이어야 해요');
+  await page.getByLabel('업체 제안 방문 시각').fill('10:30');
   await page.getByRole('button', { name: '업체 승인' }).click();
   await waitText(page, '승인했어요');
+  eq((await db(page)).approvals.find((a) => a.requestId === 'rq-1').visitTime, '10:30', '업체 제안 방문 시각');
   const noticeId = (await db(page)).notices[0].id;
   await page.getByRole('button', { name: '닫기' }).click();
   await page.getByRole('button', { name: '개발용 시나리오 도구 열기' }).click();
@@ -621,28 +630,55 @@ await test('지연: 기다리기·무료 변경·무료 취소를 동등하게 �
   eq((await db(page)).delays[0].choice, 'wait', '기록된 선택');
 });
 
+await test('지연: 변경 도착 예상은 예약 방문 시각과 따로 표시(덮어쓰지 않음)', async (page) => {
+  await start(page, { path: '/delays/dl-k3' });
+  await waitText(page, '예약 방문 예정');
+  const main = await page.locator('main').innerText();
+  truthy(main.includes('10월 13일 (화) 14:00'), '예약 방문 예정 14:00');
+  truthy(/변경 도착 예상[\s\S]*14:20/.test(main), '변경 도착 예상 14:20');
+  truthy(main.includes('응답하지 않아도 일정 변경이나 취소로 처리하지 않아요'), '무응답 안내');
+  truthy(!/\d+분 (이상|넘게) 지연/.test(main), '확정되지 않은 분 단위 기준 표시 없음');
+  await page.goto(`${BASE}/bookings/bk-k3`);
+  await waitText(page, '변경 도착 예상');
+  eq((await db(page)).bookings.find((b) => b.id === 'bk-k3').visitTime, '14:00', '예약 방문 시각 유지');
+});
+
 await test('지연: 무료 변경 요청 → 변경 수수료 없음 · 합의 전 기존 일정 유지', async (page) => {
   await start(page, { path: '/delays/dl-k3' });
   await page.getByRole('link', { name: '일정 변경 요청하기' }).click();
   await waitText(page, '방문 지연으로 인한 무료 변경이에요');
   await page.getByLabel('같은 날 시간만').check();
-  await page.getByRole('button', { name: '16:00–19:00' }).click();
+  await page.getByRole('button', { name: '16:00~19:00' }).click();
   await page.getByRole('button', { name: '변경 요청 보내기' }).click();
-  await waitText(page, '기존 일정이 유지돼요');
+  await page.waitForURL((u) => u.pathname.startsWith('/proposals/'));
+  await waitText(page, '업체 응답 대기');
   const d = await db(page);
-  eq(d.bookings.find((b) => b.id === 'bk-k3').visitWindow, '13:00–16:00', '합의 전 일정 유지');
+  const k3 = d.bookings.find((b) => b.id === 'bk-k3');
+  eq(`${k3.visitDate} ${k3.visitTime}`, '2026-10-13 14:00', '합의 전 예약 방문 시각 유지');
+  eq(d.proposals.find((p) => p.bookingId === 'bk-k3').newVisit.time, undefined, '고객 요청 단계에는 새 방문 시각 없음');
 });
 
-await test('변경(업체 제안): 수락하면 확정 출장비 유지 · 거절하면 전액 환불 취소', async (page) => {
+await test('변경(업체 제안): 수락 전 기존 시각 유지 · 거절해도 자동 취소 없음 → 업체 사유 무료 취소를 직접 선택', async (page) => {
   await start(page, { path: '/proposals/pr-k4' });
   await waitText(page, '업체 사유 변경이에요');
-  await page.getByRole('button', { name: '수락하지 않고 환불받으며 취소하기' }).click();
-  await waitText(page, '수수료와 공제 없이 해당 선결제 전체가 환불 대상이에요');
-  await page.getByRole('button', { name: '환불받으며 취소하기', exact: true }).click();
-  await waitText(page, '거절됨');
-  const d = await db(page);
-  eq(d.bookings.find((b) => b.id === 'bk-k4').status, 'cancelled', '예약 취소');
-  eq(d.bookings.find((b) => b.id === 'bk-k4').cancelCause, 'provider', '업체 사유');
+  await waitText(page, '기존 방문 시각'); await waitText(page, '제안된 새 방문 시각');
+  await waitText(page, '처음 요청서에 낸 가능 시간(13:00~16:00) 밖의 시각이에요');
+  await page.goto(`${BASE}/bookings/bk-k4`);
+  await waitText(page, '변경 제안 · 확인 대기');
+  truthy((await page.locator('main').innerText()).includes('10월 14일 (수) 14:00'), '수락 전 예약 방문 시각 유지');
+  await page.goto(`${BASE}/proposals/pr-k4`);
+  await page.getByRole('button', { name: '변경 거절하기 (기존 예약 유지)' }).click();
+  await waitText(page, '자동으로 취소되지 않아요');
+  await page.getByRole('button', { name: '변경 거절하기', exact: true }).click();
+  await waitText(page, '변경을 거절했어요 · 기존 예약이 유지돼요');
+  let d = await db(page);
+  const k4 = d.bookings.find((b) => b.id === 'bk-k4');
+  eq(`${k4.status} ${k4.visitDate} ${k4.visitTime}`, 'confirmed 2026-10-14 14:00', '거절 후 예약 유지');
+  eq(d.refunds.filter((x) => x.bookingId === 'bk-k4').length, 0, '자동 환불 없음');
+  await page.getByRole('link', { name: '업체 사유 무료 취소 · 환불 금액 확인' }).click();
+  await waitText(page, '업체가 제안한 일정 변경을 거절했어요');
+  await page.getByRole('button', { name: /취소/ }).last().waitFor();
+  d = await db(page);
   eq(d.deductions.filter((x) => x.bookingId === 'bk-k4').length, 0, '공제 없음');
 });
 await test('변경(업체 제안): 수락', async (page) => {
@@ -651,6 +687,46 @@ await test('변경(업체 제안): 수락', async (page) => {
   await waitText(page, '수락됨');
   const b = (await db(page)).bookings.find((x) => x.id === 'bk-k4');
   eq(b.visitDate, '2026-10-19', '새 날짜'); truthy(b.lockedTripFee !== undefined, '확정 출장비 유지');
+  eq(b.visitTime, '10:00', '새 방문 시각');
+  eq(JSON.stringify(b.customerSlots), '["13:00–16:00"]', '고객 가능 시간은 그대로');
+  eq(b.scheduleChanges.length, 1, '변경 기록'); eq(b.scheduleChanges[0].from.time, '14:00', '기존 시각 기록'); truthy(b.scheduleChanges[0].consentedAt, '동의 시각 기록');
+  await page.getByRole('link', { name: '예약 상세 보기' }).click();
+  await waitText(page, '일정 변경 기록');
+  await waitText(page, '10월 19일 (월) 10:00');
+});
+
+await test('방문 시각: 요청(가능 시간) → 승인(제안 시각) → 결제 → 내 예약 목록·상세·알림이 같은 시각', async (page) => {
+  await start(page, { path: '/requests/rq-4' });
+  await waitText(page, '업체가 제안한 방문 시각');
+  let main = await page.locator('main').innerText();
+  truthy(main.includes('10월 16일 (금) 14:00'), '결제 전 제안 시각');
+  truthy(main.includes('13:00~16:00'), '고객 가능 시간 표시');
+  truthy(main.includes('승인만으로는 예약이 확정되지 않아요'), '승인 ≠ 예약 확정');
+  await page.goto(`${BASE}/requests/rq-4/approval`);
+  await waitText(page, '작업 소요 시간은 수리 내용에 따라 달라집니다.');
+  truthy((await page.locator('main').innerText()).includes('10월 16일 (금) 14:00'), '승인 확인 화면 제안 시각');
+  await page.getByRole('checkbox').check();
+  await page.getByRole('button', { name: /모의 결제하기/ }).click();
+  await waitText(page, '예약이 확정됐어요');
+  const d = await db(page);
+  const bk = d.bookings.find((b) => b.requestId === 'rq-4');
+  eq(bk.visitTime, '14:00', '결제 후 확정 시각');
+  truthy(d.notices[0].title.includes('방문 예정 10월 16일 (금) 14:00'), `알림: ${d.notices[0].title}`);
+  await page.goto(`${BASE}/bookings/${bk.id}`);
+  await waitText(page, '방문 예정');
+  main = await page.locator('main').innerText();
+  truthy(main.includes('10월 16일 (금) 14:00'), '예약 상세 방문 시각');
+  await page.goto(`${BASE}/bookings`);
+  await page.getByText('방문 예정 · 10월 16일 (금) 14:00').first().waitFor();
+  truthy(!(await page.locator('main').innerText()).includes('13:00~16:00'), '목록에 가능 시간 범위를 방문 시각으로 표시하지 않음');
+});
+
+await test('방문 시각: 데이터에 없으면 추정하지 않고 ‘방문 시각 확인 필요’', async (page) => {
+  await start(page, { path: '/bookings/bk-k1', patch: (d) => { delete d.bookings.find((b) => b.id === 'bk-k1').visitTime; } });
+  await waitText(page, '방문 시각 확인 필요');
+  truthy(!(await page.locator('main').innerText()).includes('10월 17일 (토) 13:00'), '범위 시작값으로 추정하지 않음');
+  await page.goto(`${BASE}/bookings`);
+  await waitText(page, '방문 시각 확인 필요');
 });
 
 await test('변경(고객 요청): 마감 후 변경은 기존 확정 출장비 몫을 비용으로 안내', async (page) => {
@@ -659,7 +735,7 @@ await test('변경(고객 요청): 마감 후 변경은 기존 확정 출장비 
   await page.locator('input[name="grp"]').first().check();
   await waitText(page, '변경 비용(기존 확정 출장비 몫)');
   await waitText(page, '12,500원');
-  await page.getByRole('button', { name: /^\d\d:\d\d–\d\d:\d\d$/ }).first().click();
+  await page.getByRole('button', { name: /^\d\d:\d\d~\d\d:\d\d$/ }).first().click();
   await page.getByLabel('변경 사유').fill('일정이 바뀌었어요');
   await page.getByRole('button', { name: '변경 요청 보내기' }).click();
   await waitText(page, '업체가 동의하기 전까지 기존 일정이 유지돼요');
@@ -944,7 +1020,7 @@ await test('인증: 계정 전환 시 이전 사용자의 요청·예약·방문
   await start(page, { path: '/providers/p1/request?group=g1' });
   await page.getByLabel('어떤 작업인가요?').fill('계정A 전용 작업');
   await page.getByLabel('동·호수').fill('101동 101호');
-  await page.getByRole('button', { name: '09:00–12:00' }).click();
+  await page.getByRole('button', { name: '09:00~12:00' }).click();
   await page.getByRole('button', { name: '요청 보내기' }).click();
   await waitText(page, '요청을 보냈어요');
   const ownerA = (await db(page)).ownerAccountId;

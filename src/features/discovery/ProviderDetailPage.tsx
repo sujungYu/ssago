@@ -4,6 +4,7 @@ import { ActionBar, Page } from '../../app/Page';
 import { useAppState, useRepo } from '../../app/context';
 import { useAsync } from '../../app/hooks';
 import { formatDate, formatDateTime, formatRemaining } from '../../domain/time';
+import { formatSlot } from '../../domain/visitTime';
 import { formatWon } from '../../domain/money';
 import { expectedFeeForJoiner, tripFeeSavings } from '../../domain/pricing';
 import { seatsLeft } from '../../domain/rules';
@@ -24,7 +25,7 @@ function GroupOption({ g, now, checked, onChange }: { g: PublicGroup; now: strin
           <span className="strong">{formatDate(g.date)}</span>
           <Badge tone="info">{g.scopeType === 'complex' ? '같은 단지' : '가까운 이웃'}</Badge>
         </div>
-        <p className="small">방문 시간대 <span className="nowrap">{g.slots.join(' / ')}</span></p>
+        <p className="small">고를 수 있는 가능 시간 <span className="nowrap">{g.slots.map(formatSlot).join(' / ')}</span></p>
         <p className="small">접수 마감 <span className="nowrap">{formatDateTime(g.closeAt)}</span> <span className="muted">({formatRemaining(now, g.closeAt)})</span></p>
         <KV rows={[
           { k: '확정 세대', v: `${g.confirmedHouseholds}세대` },

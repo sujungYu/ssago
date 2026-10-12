@@ -32,6 +32,10 @@ export default function DevPanel() {
   const [grp, setGrp] = useState('g1');
   const [bk, setBk] = useState('bk-k1');
   const [rf, setRf] = useState('');
+  // 업체가 제안하는 방문 시각(모의 입력). 범위에서 자동으로 정하지 않는다.
+  const [apTime, setApTime] = useState('');
+  const [chDate, setChDate] = useState('');
+  const [chTime, setChTime] = useState('');
 
   useEffect(() => {
     if (!open) return;
@@ -76,7 +80,8 @@ export default function DevPanel() {
           <section><h3>요청·승인 이벤트</h3>
             <select value={req} onChange={(e) => setReq(e.target.value)} aria-label="요청 선택">{snap.requests.map((r) => <option key={r.id} value={r.id}>{r.id} · {r.status} · {r.label}</option>)}</select>
             <div className="row row--wrap" style={{ marginTop: 6 }}>
-              <B label="업체 승인" run={() => ctl.approveRequest(req)} /><B label="추가 정보 요청" run={() => ctl.requestInfo(req)} />
+              <label className="row">업체 제안 방문 시각 <input type="time" value={apTime} onChange={(e) => setApTime(e.target.value)} aria-label="업체 제안 방문 시각" /></label>
+              <B label="업체 승인" run={() => ctl.approveRequest(req, apTime)} /><B label="추가 정보 요청" run={() => ctl.requestInfo(req)} />
               <B label="업체 거절" run={() => ctl.rejectRequest(req)} /><B label="승인 만료" run={() => ctl.expireApproval(req)} /><B label="조건 버전 올리기" run={() => ctl.bumpApprovalVersion(req)} />
             </div></section>
 
@@ -87,7 +92,14 @@ export default function DevPanel() {
           <section><h3>예약·작업 이벤트</h3>
             <select value={bk} onChange={(e) => setBk(e.target.value)} aria-label="예약 선택">{snap.bookings.map((b) => <option key={b.id} value={b.id}>{b.id} · {b.status}/{b.work} · {b.label}</option>)}</select>
             <div className="row row--wrap" style={{ marginTop: 6 }}>
-              <B label="방문 지연 발생" run={() => ctl.startDelay(bk)} /><B label="업체 변경 제안" run={() => ctl.proposeProviderChange(bk)} />
+              <label className="row">새 날짜 <input type="date" value={chDate} onChange={(e) => setChDate(e.target.value)} aria-label="변경 제안 새 날짜" /></label>
+              <label className="row">새 방문 시각 <input type="time" value={chTime} onChange={(e) => setChTime(e.target.value)} aria-label="변경 제안 새 방문 시각" /></label>
+              <B label="업체 변경 제안" run={() => ctl.proposeProviderChange(bk, chDate, chTime)} />
+              <B label="고객 변경 요청에 업체 동의" run={() => {
+                const p = mock.__db().proposals.find((x) => x.bookingId === bk && x.origin === 'customer' && x.status === 'requested');
+                return p ? ctl.providerAgreesChange(p.id, chTime) : { ok: false, message: '이 예약에 업체 응답 대기 중인 고객 변경 요청이 없어요.' };
+              }} />
+              <B label="방문 지연 발생" run={() => ctl.startDelay(bk)} />
               <B label="자재 조건 제시" run={() => ctl.offerMaterial(bk)} /><B label="자재 도착 지연" run={() => ctl.materialDelayed(bk)} /><B label="자재 선결제·주문됨" run={() => ctl.payAndOrderMaterial(bk)} /><B label="추가 작업 제안" run={() => ctl.proposeAdditionalWork(bk)} />
               <B label="작업 완료·잔금 있음" run={() => ctl.registerFinalStatement(bk, 'pay')} /><B label="작업 완료·0원" run={() => ctl.registerFinalStatement(bk, 'zero')} /><B label="작업 완료·환불" run={() => ctl.registerFinalStatement(bk, 'refund')} />
             </div></section>

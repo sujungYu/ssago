@@ -6,6 +6,7 @@
 import { paymentDeadline } from '../domain/rules';
 import { perHouseholdFee } from '../domain/pricing';
 import { latestCloseAt } from '../domain/time';
+import { isValidVisitTime, proposedVisitTimeError } from '../domain/visitTime';
 import type { GroupRecord, StatementItem } from '../domain/types';
 import { byId, endGroup, nid, notify, stateOfRequest } from '../data/mock/engine';
 import { createSeed } from '../data/mock/seed';
@@ -63,10 +64,13 @@ export class DevController {
   }
 
   // ───────── 요청·승인 ─────────
-  approveRequest(requestId: string): EventResult {
+  /** 업체 승인(모의). 업체가 고객 가능 시간 안에서 방문 시각을 제안해야 한다. 범위에서 시각을 추정하지 않는다. */
+  approveRequest(requestId: string, visitTime: string): EventResult {
     const r = byId(this.db.requests, requestId);
     if (!r) return no('요청이 없어요.');
     if (!['reviewing', 'needs_info'].includes(r.status)) return no('검토 중·추가 정보 필요 상태의 요청만 승인할 수 있어요.');
+    const timeErr = proposedVisitTimeError(visitTime, r.slots);
+    if (timeErr) return no(timeErr);
     const prov = byId(this.db.providers, r.providerId)!;
     let g: GroupRecord | undefined = r.groupId ? byId(this.db.groups, r.groupId) : undefined;
     if (!g) {
@@ -84,7 +88,7 @@ export class DevController {
     this.db.approvals = this.db.approvals.filter((a) => a.requestId !== r.id);
     this.db.approvals.push({
       id: nid(this.db, 'ap'), requestId: r.id, version: 1, approvedAt, groupCloseAt: g.closeAt,
-      paymentDeadline: paymentDeadline(approvedAt, g.closeAt), visitDate: g.date, visitWindow: r.slots[0] ?? g.slots[0],
+      paymentDeadline: paymentDeadline(approvedAt, g.closeAt), visitDate: g.date, visitTime,
       totalTripFee: g.totalTripFee, depositAmount: g.totalTripFee,
       tasks: r.tasks.map((t) => ({ title: t.title, note: '요청하신 범위로 작업합니다.', estimate: 40000 })),
       partsEstimate: 15000, cancellationTerms: ['마감 전에는 출장비 공제 없이 취소할 수 있어요.', '마감 후 취소하면 본인 확정 출장비가 공제돼요.'], groupId: g.id,
@@ -157,26 +161,33 @@ export class DevController {
     if (!b || b.status !== 'confirmed') return no('확정 예약만 가능해요.');
     if (this.db.delays.some((d) => d.bookingId === b.id && d.status === 'open')) return no('이미 열린 지연 안내가 있어요.');
     const id = nid(this.db, 'dl');
-    this.db.delays.push({ id, bookingId: b.id, originalDate: b.visitDate, originalWindow: b.visitWindow, newEta: new Date(new Date(this.db.now).getTime() + 80 * 60000).toISOString(), status: 'open' });
+    // 지연 안내는 예약 방문 시각을 바꾸지 않는다. 변경 도착 예상은 따로 둔다.
+    this.db.delays.push({ id, bookingId: b.id, originalDate: b.visitDate, originalVisitTime: b.visitTime, newEta: new Date(new Date(this.db.now).getTime() + 80 * 60000).toISOString(), status: 'open' });
     notify(this.db, '방문이 지연되고 있어요. 대응을 선택해 주세요.', `/delays/${id}`, { type: 'delay', id, state: 'open' });
     return this.done(ok('지연 안내를 만들었어요.'));
   }
-  proposeProviderChange(bookingId: string): EventResult {
+  /** 업체 일정 변경 제안(모의). 새 방문 시각은 고객 가능 시간 밖이어도 되며 고객이 수락해야만 반영된다. */
+  proposeProviderChange(bookingId: string, newDate: string, visitTime: string): EventResult {
     const b = byId(this.db.bookings, bookingId);
     if (!b || b.status !== 'confirmed') return no('확정 예약만 가능해요.');
+    if (!isValidVisitTime(visitTime)) return no('새 방문 시각(HH:MM)을 입력하세요.');
+    if (this.db.proposals.some((p) => p.bookingId === b.id && (p.status === 'requested' || p.status === 'proposed'))) return no('확인 대기 중인 변경이 이미 있어요.');
     const id = nid(this.db, 'pr');
     this.db.proposals.push({
       id, bookingId: b.id, origin: 'provider', status: 'proposed', free: 'provider',
-      oldVisit: { date: b.visitDate, window: b.visitWindow }, newVisit: { date: '2026-10-22', window: '09:00–12:00' },
+      oldVisit: { date: b.visitDate, time: b.visitTime }, newVisit: { date: newDate || b.visitDate, time: visitTime },
       reason: '이전 작업이 길어져 같은 날 방문이 어려워졌어요.',
       cost: { tripFeeCharged: 0, additionalDeposit: 0, note: '업체 사유 변경이라 변경 수수료가 없어요. 확정 출장비는 그대로 유지돼요.' }, createdAt: this.db.now,
     });
     notify(this.db, '업체가 일정 변경을 제안했어요.', `/proposals/${id}`, { type: 'proposal', id, state: 'proposed' });
     return this.done(ok('업체 변경 제안을 만들었어요.'));
   }
-  providerAgreesChange(proposalId: string): EventResult {
+  /** 고객 변경 요청에 업체가 동의(모의). 업체가 새 방문 시각을 정해 제안하고, 고객이 최종 수락한다. */
+  providerAgreesChange(proposalId: string, visitTime: string): EventResult {
     const p = byId(this.db.proposals, proposalId);
     if (!p || p.origin !== 'customer' || p.status !== 'requested') return no('고객이 요청한 변경만 업체가 동의할 수 있어요.');
+    if (!isValidVisitTime(visitTime)) return no('업체가 제안할 새 방문 시각(HH:MM)을 입력하세요.');
+    p.newVisit.time = visitTime;
     p.status = 'proposed';
     notify(this.db, '업체가 일정 변경에 동의했어요. 내용을 확인해 주세요.', `/proposals/${p.id}`, { type: 'proposal', id: p.id, state: 'proposed' });
     return this.done(ok('업체가 변경 요청에 동의했어요(고객 최종 확인 대기).'));

@@ -21,7 +21,8 @@ import {
 } from './engine';
 import { createSeed } from './seed';
 
-const STORAGE_KEY = 'on-gimae/mock-db/v1';
+// v2: 방문 시간 구조 변경(고객 가능 시간 / 업체 제안·예약 방문 시각 분리). 이전 형식 저장값은 읽지 않는다.
+const STORAGE_KEY = 'on-gimae/mock-db/v2';
 
 export interface MockRepoOptions {
   persist?: boolean;
@@ -471,7 +472,8 @@ export class MockRepository implements Repository {
       }
       const p: ChangeProposal = {
         id: nid(this.db, 'pr'), bookingId: b.id, origin: 'customer', status: 'requested', free,
-        oldVisit: { date: b.visitDate, window: b.visitWindow }, newVisit: { date: newDate, window: input.newSlot, groupId },
+        // 고객 요청 단계에는 새 방문 시각이 없다. 고객이 원하는 가능 시간만 두고, 업체가 동의할 때 방문 시각을 제안한다.
+        oldVisit: { date: b.visitDate, time: b.visitTime }, newVisit: { date: newDate, wishSlot: input.newSlot, groupId },
         reason: input.reason, cost, createdAt: this.db.now,
       };
       this.db.proposals.push(p);
@@ -492,7 +494,7 @@ export class MockRepository implements Repository {
       const g = this.group(b.groupId);
       let preview: ProposalView['preview'] = null;
       if (p.newVisit.groupId && p.origin === 'customer') preview = datePreviewFor(this.db, b, this.group(p.newVisit.groupId).totalTripFee);
-      return { proposal: p, booking: b, providerName: this.provider(b.providerId).name, groupClosed: g.closed, preview, cancelPreview: cancelPreviewOf(this.db, b, 'policy_free') };
+      return { proposal: p, booking: b, providerName: this.provider(b.providerId).name, providerPhone: this.provider(b.providerId).phone, groupClosed: g.closed, preview, cancelPreview: cancelPreviewOf(this.db, b, 'policy_free') };
     });
   }
 
@@ -508,16 +510,13 @@ export class MockRepository implements Repository {
       if (p.status !== 'proposed') throw new RepoError('change_stale');
       const b = this.booking(p.bookingId);
       if (decision === 'reject') {
+        // 거절하면 기존 예약(날짜·방문 시각)을 그대로 둔다. 자동 변경·자동 취소하지 않는다.
+        // 업체 사유 제안을 거절한 경우 고객은 다른 일정을 협의하거나 업체 사유 무료 취소를 직접 선택한다(freeCancelReasonOf).
         this.db.keyed[idempotencyKey] = id;
-        if (p.origin === 'provider') {
-          // 업체 사유 변경을 거절하면 수수료 없이 예약금·선결제 자재비를 전액 환불한다.
-          const { refund } = cancelBookingInternal(this.db, b, 'provider', '업체 사유 일정 변경 거절 · 선결제 전액 환불');
-          p.status = 'rejected';
-          return { proposal: p, refund, booking: b };
-        }
         p.status = 'rejected';
         return { proposal: p, booking: b };
       }
+      if (!p.newVisit.time) throw new RepoError('invalid'); // 업체가 새 방문 시각을 제안하지 않은 변경은 수락할 수 없다
       if (p.cost.additionalDeposit > 0 && p.origin === 'customer') {
         if (this.inFlight((t) => t.proposalId === p.id)) throw new RepoError('payment_in_progress');
         const tx: Transaction = {

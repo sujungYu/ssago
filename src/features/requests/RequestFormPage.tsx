@@ -4,6 +4,7 @@ import { ActionBar, Page } from '../../app/Page';
 import { useAppState, useRepo } from '../../app/context';
 import { useAction, useAsync, useAttemptKey } from '../../app/hooks';
 import { addHours, formatDate, formatDateTime, seoulYmd } from '../../domain/time';
+import { formatSlot } from '../../domain/visitTime';
 import { formatWon } from '../../domain/money';
 import { expectedFeeForJoiner } from '../../domain/pricing';
 import { Icon } from '../../components/Icon';
@@ -66,7 +67,7 @@ export function RequestFormPage() {
 
           const err = {
             tasks: tasks.some((t) => !t.title.trim()) ? '작업 내용을 입력해 주세요.' : null,
-            slots: slots.length === 0 ? '가능한 시간대를 하나 이상 선택해 주세요.' : null,
+            slots: slots.length === 0 ? '고객 가능 시간을 하나 이상 선택해 주세요.' : null,
             date: !joint && !newDate ? '희망 방문 날짜를 선택해 주세요.' : !joint && newDate < minDate ? `${formatDate(minDate)} 이후 날짜를 선택해 주세요.` : null,
             detail: apartment && !detail.trim() ? '동·호수를 입력해 주세요.' : null,
           };
@@ -145,16 +146,17 @@ export function RequestFormPage() {
                 </div>
               </Section>
 
-              <Section title="가능한 시간대">
+              <Section title="고객 가능 시간">
                 {!joint && (
                   <Field label="희망 방문 날짜" error={touched ? err.date : null} hint="새 날짜로 요청하면 업체가 승인하면서 접수 마감을 정해요.">
                     {(fp) => <input {...fp} type="date" className="input" min={minDate} value={newDate} onChange={(e) => setNewDate(e.target.value)} />}
                   </Field>
                 )}
-                <div role="group" aria-label="가능한 시간대 (여러 개 선택 가능)" className="chips">
+                <p className="small muted">방문받을 수 있는 시간 범위를 골라 주세요. 업체가 이 범위 안에서 방문(도착) 시각을 제안하고, 예약금을 결제하면 그 시각으로 예약이 확정돼요.</p>
+                <div role="group" aria-label="고객 가능 시간 (여러 개 선택 가능)" className="chips">
                   {slotOptions.map((s) => (
                     <button key={s} type="button" className="chip" aria-pressed={slots.includes(s)} onClick={() => setSlots(slots.includes(s) ? slots.filter((x) => x !== s) : [...slots, s])}>
-                      {slots.includes(s) && <Icon name="check" size={16} />}{s}
+                      {slots.includes(s) && <Icon name="check" size={16} />}{formatSlot(s)}
                     </button>
                   ))}
                 </div>
