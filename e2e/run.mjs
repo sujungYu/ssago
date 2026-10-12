@@ -75,7 +75,7 @@ async function start(page, { path = '/', address = 'ad-apt', patch, latency = 30
   await page.evaluate(([appKey, addr]) => { if (addr) sessionStorage.setItem(appKey, JSON.stringify({ addressId: addr })); }, [APP_KEY, address]);
   await page.evaluate(() => new Promise((r) => setTimeout(r, 50)));
   const fns = [new Function('db', `db.settings.latencyMs = ${Number(latency)};`)];
-  if (patch) fns.push(patch);
+  if (patch) fns.push(...[].concat(patch)); // 함수 하나 또는 배열(각 함수는 브라우저에서 독립 실행되므로 바깥 변수를 참조하지 않는다)
   await patchDb(page, fns, path);
 }
 async function patchDb(page, fn, path) {
@@ -191,7 +191,10 @@ await test('요청: 비교 묶음에서 업체별 승인 조건 비교', async (
   await page.getByRole('link', { name: /욕실 세면대 수전 교체/ }).first().click();
   await waitText(page, '업체별 응답');
   await waitText(page, '한빛설비'); await waitText(page, '새봄수리');
-  await waitText(page, '5,000원 할인'); // 업체 할인 조건 사전 표시
+  await waitText(page, '업체 할인 조건은 상세에서 확인해요'); // 요약 카드에는 안내만
+  await page.locator('.resp-card').filter({ hasText: '새봄수리' }).getByRole('link', { name: '상세 조건 보기' }).click();
+  await waitText(page, '5,000원 할인'); // 업체 할인 조건은 상세(승인 조건 확인)에서 사전 표시
+  await page.goBack();
   await waitText(page, '하나를 예약하면 나머지 요청은 종료돼요');
 });
 
@@ -1646,6 +1649,157 @@ await test('배포 라우팅: Vercel식 정적 서버에서 규칙 없으면 깊
   eq(JSON.stringify(after), JSON.stringify({ deep: 200, missingAsset: 404, favicon: 200, app: true }), '규칙 적용 후');
 });
 
+// ───────── 비교 요청: 업체별 응답 요약 카드·상태 필터 ─────────
+/** b-sink에 검토 중·추가 정보 필요·거절 요청을 더해 5곳으로 만든다(시드는 바꾸지 않음) */
+const fiveSink = (d) => {
+  const base = d.requests.find((r) => r.id === 'rq-3');
+  const add = (id, providerId, status, extra = {}) => d.requests.push({ ...structuredClone(base), id, providerId, status, groupId: null, bookingId: undefined, ...extra });
+  add('rq-s3', 'p3', 'reviewing');
+  add('rq-s4', 'p4', 'needs_info', { infoRequest: { message: '세면대 아래 배관이 보이는 사진을 한 장 더 올려 주세요.', requestedAt: '2026-10-13T16:00:00+09:00' } });
+  add('rq-s5', 'p5', 'rejected', { rejectionReason: '해당 날짜에는 일정이 꽉 차서 맡기 어려워요.' });
+};
+const respCards = (page) => page.locator('.resp-card');
+const respCard = (page, name) => respCards(page).filter({ has: page.locator('.resp-card__name', { hasText: name }) });
+const bundleTitle = (page) => page.locator('.section__head--filter h2');
+async function pickBundleStatus(page, label) {
+  await page.getByRole('button', { name: /^전체 상태 필터/ }).click();
+  const dlg = page.getByRole('dialog', { name: '요청 상태' });
+  await dlg.getByText(label, { exact: true }).click();
+  await dlg.getByRole('button', { name: '적용' }).click();
+  await dlg.waitFor({ state: 'detached' });
+}
+
+await test('비교 요청: 업체별 응답 요약 카드 — 결제 대기는 방문·예상 총금액·결제 기한·상세 조건 보기만, 상태별 행동 연결', async (page) => {
+  await start(page, { path: '/requests/bundle/b-sink', patch: fiveSink });
+  await respCards(page).first().waitFor();
+  eq(await bundleTitle(page).innerText(), '업체별 응답 · 5곳', '전체 업체 수');
+  eq(await respCards(page).count(), 5, '카드 5개');
+  const hb = await respCard(page, '한빛설비').innerText();
+  truthy(hb.includes('업체 승인 완료 · 결제 대기') && hb.includes('방문 예정') && hb.includes('10월 16일 (금)') && hb.includes('10:00') && hb.includes('약 112,500원') && hb.includes('결제 기한') && hb.includes('남음'), `결제 대기 카드: ${hb}`);
+  truthy(!/그룹 총 출장비|예약금|부품·자재|업체 견적/.test(hb), `요약 카드에 상세 금액이 펼쳐짐: ${hb}`);
+  eq(await respCard(page, '한빛설비').getByRole('link').count(), 1, '카드마다 버튼 하나');
+  eq(await respCard(page, '한빛설비').getByRole('link', { name: '상세 조건 보기' }).getAttribute('href'), '/requests/rq-3/approval', '상세 이동');
+  const sb = await respCard(page, '새봄수리').innerText();
+  truthy(sb.includes('약 115,000원') && sb.includes('업체 할인 조건은 상세에서 확인해요'), `할인 조건 업체: ${sb}`);
+  const rv = respCard(page, '밝은전기');
+  truthy((await rv.innerText()).includes('업체가 작업과 일정을 확인하고 있어요.'), '검토 중 안내');
+  eq(await rv.getByRole('link', { name: '요청 상세 보기' }).getAttribute('href'), '/requests/rq-s3', '검토 중 → 요청 상세');
+  const ni = page.locator('.resp-card').filter({ hasText: '추가 정보 필요' });
+  truthy((await ni.innerText()).includes('배관이 보이는 사진'), '보완 요청 요약');
+  eq(await ni.getByRole('link', { name: '요청 보완하기' }).getAttribute('href'), '/requests/rq-s4/supplement', '보완 이동');
+  const ej = page.locator('.resp-card--ended');
+  truthy((await ej.innerText()).includes('업체 거절') && (await ej.innerText()).includes('일정이 꽉 차서'), '종료: 실제 상태·사유');
+  eq(await ej.getByRole('link', { name: '상세 조건 보기' }).count(), 0, '종료 카드에 결제 행동 없음');
+  eq(await ej.getByRole('link', { name: '요청 상세 보기' }).count(), 1, '종료 → 요청 상세');
+  await waitText(page, '하나를 예약하면 나머지 요청은 종료돼요');
+  await waitText(page, '요청한 작업');
+  truthy(await page.getByRole('button', { name: '같은 작업을 다른 업체에도 요청하기' }).isVisible(), '다른 업체 추가 요청');
+});
+
+await test('비교 요청: 상태 필터(결제 대기·추가 정보 필요·업체 검토 중·종료) 건수·빈 결과·전체로 해제, 다른 묶음에는 적용 안 됨', async (page) => {
+  await start(page, { path: '/requests/bundle/b-sink', patch: [fiveSink, (d) => { d.requests.find((r) => r.id === 'rq-s5').status = 'withdrawn'; }] });
+  await respCards(page).first().waitFor();
+  for (const [label, n, q] of [['결제 대기', 2, 'payment_pending'], ['추가 정보 필요', 1, 'needs_info'], ['업체 검토 중', 1, 'reviewing'], ['종료', 1, 'ended']]) {
+    await pickBundleStatus(page, label);
+    await page.waitForURL((u) => u.searchParams.get('status') === q);
+    eq(await bundleTitle(page).innerText(), `업체별 응답 · 전체 5곳 중 ${n}곳`, `${label} 건수`);
+    eq(await respCards(page).count(), n, `${label} 카드 수`);
+    eq(await page.getByRole('button', { name: /^전체 상태 필터/ }).innerText(), label, '캡슐에 선택값');
+  }
+  truthy((await respCards(page).first().innerText()).includes('철회'), '종료 그룹 안의 실제 상태(철회)');
+  // 빈 결과: 검토 중을 없애고 다시 고른다 → 안내·필터 조작 가능
+  await patchDb(page, (d) => { d.requests.find((r) => r.id === 'rq-s3').status = 'withdrawn'; }, null);
+  await pickBundleStatus(page, '업체 검토 중');
+  await waitText(page, '선택한 상태의 업체 응답이 없어요.');
+  eq(await bundleTitle(page).innerText(), '업체별 응답 · 전체 5곳 중 0곳', '빈 결과 건수');
+  await pickBundleStatus(page, '전체');
+  await page.waitForURL((u) => !u.searchParams.has('status'));
+  eq(await respCards(page).count(), 5, '전체로 해제');
+  // 다른 비교 요청에는 이 필터가 적용되지 않는다
+  await pickBundleStatus(page, '종료');
+  await page.goto(`${BASE}/requests/bundle/b-lamp`);
+  await respCards(page).first().waitFor();
+  truthy((await bundleTitle(page).innerText()).startsWith('업체별 응답 · ') && !(await bundleTitle(page).innerText()).includes('중'), '다른 묶음은 전체');
+  eq(new URL(page.url()).search, '', '다른 묶음 URL에 필터 없음');
+  // 예약 확정 요청은 전체에서 보이고 종료로 분류되지 않는다
+  const booked = page.locator('.resp-card').filter({ hasText: '예약 확정' });
+  eq(await booked.getByRole('link', { name: '예약 상세 보기' }).count(), 1, '예약 확정 → 예약 상세');
+  eq(await booked.getByRole('link', { name: '상세 조건 보기' }).count(), 0, '예약 확정에 결제 버튼 없음');
+  await pickBundleStatus(page, '종료');
+  eq(await page.locator('.resp-card').filter({ hasText: '예약 확정' }).count(), 0, '예약 확정은 종료에 없음');
+});
+
+await test('비교 요청: 예상 총금액 = 승인 조건 화면 예상 총액, 견적 누락 시 금액 확인 필요(0원 대체 없음)', async (page) => {
+  await start(page, { path: '/requests/bundle/b-sink' });
+  await respCard(page, '한빛설비').getByRole('link', { name: '상세 조건 보기' }).click();
+  await page.waitForURL((u) => u.pathname === '/requests/rq-3/approval');
+  await waitText(page, '예상 총액');
+  const t = await page.locator('main').innerText();
+  truthy(t.includes('약 112,500원') && t.includes('약 12,500원') && t.includes('80,000원') && t.includes('20,000원') && t.includes('본인 예약 확정 시 4세대 기준'), `승인 조건 화면 내역: ${t.slice(0, 400)}`);
+  await page.goto(`${BASE}/requests/rq-4/approval`);
+  await waitText(page, '약 115,000원');
+  await waitText(page, '위 예상 총액에는 반영하지 않았어요');
+  // 견적 누락
+  await patchDb(page, (d) => { d.approvals.find((a) => a.requestId === 'rq-3').tasks[1].estimate = null; }, '/requests/bundle/b-sink');
+  await respCards(page).first().waitFor();
+  const hb = await respCard(page, '한빛설비').innerText();
+  truthy(hb.includes('금액 확인 필요') && !hb.includes('112,500') && !hb.includes('82,500'), `누락 시 카드: ${hb}`);
+  await page.goto(`${BASE}/requests/rq-3/approval`);
+  await waitText(page, '견적 없음: 배수 트랩 교체');
+  truthy(!(await page.locator('main').innerText()).includes('약 82,500원'), '승인 화면에도 임의 금액 없음');
+});
+
+await test('비교 요청: 상세에서 돌아오면 필터·목록 위치 복원', async (page) => {
+  await page.setViewportSize({ width: 390, height: 600 });
+  await start(page, { path: '/requests/bundle/b-sink', patch: fiveSink });
+  await respCards(page).first().waitFor();
+  await pickBundleStatus(page, '결제 대기');
+  await page.waitForURL((u) => u.searchParams.get('status') === 'payment_pending');
+  await respCard(page, '새봄수리').scrollIntoViewIfNeeded();
+  await page.evaluate(() => window.scrollBy(0, 120));
+  await page.waitForTimeout(250);
+  const y = await page.evaluate(() => Math.round(scrollY));
+  truthy(y > 100, `스크롤됨 ${y}`);
+  await respCard(page, '새봄수리').getByRole('link', { name: '상세 조건 보기' }).click();
+  await page.waitForURL((u) => u.pathname === '/requests/rq-4/approval');
+  await page.goBack();
+  await page.waitForURL((u) => u.pathname === '/requests/bundle/b-sink' && u.searchParams.get('status') === 'payment_pending');
+  await respCards(page).first().waitFor();
+  await page.waitForFunction((yy) => Math.abs(scrollY - yy) < 4, y);
+  eq(await respCards(page).count(), 2, '필터 유지');
+});
+
+for (const w of [360, 1280]) {
+  await test(`비교 요청: ${w}px 1곳·2곳·여러 곳 배치(데스크톱 2열·모바일 1열), 긴 이름·배지 겹침 없음`, async (page) => {
+    await page.setViewportSize({ width: w, height: 900 });
+    for (const [label, patch, n] of [['1곳', (d) => { d.requests.find((r) => r.id === 'rq-4').bundleId = 'b-solo'; }, 1], ['2곳', null, 2], ['5곳', [fiveSink, (d) => { d.providers.find((p) => p.id === 'p1').name = '한빛설비 욕실·주방 생활배관 전문 협동조합'; }], 5]]) {
+      await start(page, { path: '/requests/bundle/b-sink', patch: patch ?? undefined });
+      await respCards(page).first().waitFor();
+      eq(await respCards(page).count(), n, `${label} 카드 수`);
+      const lay = await page.evaluate(() => {
+        const cs = [...document.querySelectorAll('.resp-card')].map((e) => e.getBoundingClientRect());
+        const overlap = [...document.querySelectorAll('.resp-card__head')].some((h) => { const [a, b] = h.children; const ra = a.getBoundingClientRect(); const rb = b.getBoundingClientRect(); return ra.right > rb.left + 0.5 && ra.bottom > rb.top + 0.5 && ra.top < rb.bottom - 0.5; });
+        return { cols: new Set(cs.map((r) => Math.round(r.left))).size, overflow: document.documentElement.scrollWidth > innerWidth, overlap };
+      });
+      eq(lay.cols, w >= 768 && n > 1 ? 2 : 1, `${label} 열 수`);
+      truthy(!lay.overflow && !lay.overlap, `${label} 넘침·겹침 ${JSON.stringify(lay)}`);
+      if (n === 5) await page.screenshot({ path: join(ROOT, `e2e/screens/${w}_bundle_summary.png`), fullPage: true });
+    }
+  }, { width: w });
+}
+
+await test('비교 요청: 한 업체 결제 → 같은 작업의 다른 업체 요청은 종료(기존 정책 유지), 카드에 실제 사유', async (page) => {
+  await start(page, { path: '/requests/bundle/b-sink' });
+  await respCard(page, '한빛설비').getByRole('link', { name: '상세 조건 보기' }).click();
+  await page.getByRole('checkbox').check();
+  await page.getByRole('button', { name: /모의 결제하기/ }).click();
+  await waitText(page, '예약이 확정됐어요');
+  await page.goto(`${BASE}/requests/bundle/b-sink`);
+  await respCards(page).first().waitFor();
+  truthy((await respCard(page, '새봄수리').innerText()).includes('같은 작업을 다른 업체로 예약해 종료됐어요.'), '다른 업체 요청 종료');
+  eq(await respCard(page, '한빛설비').getByRole('link', { name: '예약 상세 보기' }).count(), 1, '예약 확정 카드');
+});
+
 // ───────── 탐색 주소 공유(업체 찾기 ↔ 카테고리별 업체 목록) ─────────
 const region = (page) => page.locator('.region-card');
 const regionText = async (page) => (await region(page).innerText()).replace(/\s+/g, ' ').trim();
@@ -1907,7 +2061,8 @@ async function openCloseRepeat(page, opener, label, { popover }) {
     else if (how === '닫기 버튼') await dlg.getByRole('button', { name: '닫기' }).first().click();
     else await page.mouse.click(4, popover ? 600 : 80);
     await dlg.waitFor({ state: 'detached' });
-    eq(JSON.stringify(await layoutX(page)), JSON.stringify(base), `${label} 닫은 뒤 가로 위치(${how})`);
+    // 가로 위치만 비교한다(clientWidth는 잠금·스크롤 높이 변화에 따라 달라질 수 있고, scrollbar-gutter로 위치에는 영향이 없다)
+    eq(JSON.stringify({ ...(await layoutX(page)), clientW: 0 }), JSON.stringify({ ...base, clientW: 0 }), `${label} 닫은 뒤 가로 위치(${how})`);
     eq(await page.evaluate(() => scrollY), y0, `${label} 닫은 뒤 스크롤 위치(${how})`);
     eq(await page.evaluate(() => document.documentElement.style.overflow), '', `${label} 잠금 해제`);
     truthy(await opener.evaluate((el) => el === document.activeElement), `${label} 닫은 뒤 포커스 복원(${how})`);

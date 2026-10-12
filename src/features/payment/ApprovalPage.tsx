@@ -5,7 +5,7 @@ import { useRepo } from '../../app/context';
 import { useAction, useAsync, useAttemptKey } from '../../app/hooks';
 import { formatDate, formatDateTime, formatRemaining } from '../../domain/time';
 import { formatWon } from '../../domain/money';
-import { expectedFeeForJoiner } from '../../domain/pricing';
+import { approvalEstimate } from '../../domain/approvalCost';
 import type { ApprovalView } from '../../data/repositories/types';
 import { AsyncView, Banner, Button, KV, LinkButton, MockPayNotice, Section } from '../../components/ui';
 import { PAYMENT_STATUS, VisitText, slotsText } from '../shared';
@@ -23,10 +23,9 @@ function Panel({ v, reload }: { v: ApprovalView; reload: () => void }) {
   const now = repo.now();
   const pending = v.request.status === 'approved_pending_payment';
   const depositAmount = rc ? rc.newDepositAmount : ap.depositAmount;
-  const totalTripFee = rc ? rc.newTotalTripFee : ap.totalTripFee;
-  const confirmedNow = rc ? 0 : (v.group?.confirmedHouseholds ?? 0);
-  const expectedFee = expectedFeeForJoiner(totalTripFee, confirmedNow);
-  const estimate = ap.tasks.reduce((a, t) => a + (t.estimate ?? 0), 0);
+  // 비교 요청 요약 카드와 같은 계산(src/domain/approvalCost.ts). 결제 대기 자리는 확정 세대에 넣지 않는다.
+  const est = approvalEstimate(ap, v.group?.confirmedHouseholds ?? 0);
+  const { totalTripFee, confirmedHouseholds: confirmedNow, myTripFee: expectedFee } = est;
   const inflight = v.inFlightPayment;
 
   if (!pending) {
@@ -109,12 +108,13 @@ function Panel({ v, reload }: { v: ApprovalView; reload: () => void }) {
             { k: '지금 결제하는 예약금', v: <span className="money strong">{formatWon(depositAmount)}</span> },
             { k: '그룹 총 출장비', v: <span className="money">{formatWon(totalTripFee)}</span> },
             { k: confirmedNow === 0 ? '내 출장비(나 혼자일 때)' : `내 예상 출장비 (확정 ${confirmedNow}세대 + 나)`, v: <span className="money">약 {formatWon(expectedFee)}</span> },
-            { k: '업체 견적 합계', v: <span className="money">{formatWon(estimate)}</span> },
-            { k: '부품·자재 예상', v: <span className="money">{formatWon(ap.partsEstimate)}</span> },
-            { k: '예상 총액 (최종 금액 아님)', v: <span className="money strong">약 {formatWon(estimate + ap.partsEstimate + expectedFee)}</span>, total: true },
+            { k: '업체 견적 합계', v: est.labor === null ? <span className="small">금액 확인 필요<span className="xs muted" style={{ display: 'block' }}>견적 없음: {est.laborMissing.join(', ')}</span></span> : <span className="money">{formatWon(est.labor)}</span> },
+            { k: '부품·자재 예상', v: <span className="money">{formatWon(est.parts)}</span> },
+            { k: '예상 총액 (최종 금액 아님)', v: est.total === null ? <span className="strong">금액 확인 필요</span> : <span className="money strong">약 {formatWon(est.total)}</span>, total: true },
           ]} />
+          <p className="xs muted">예상 총액 = 업체 견적 합계 + 부품·자재 예상 + 내 출장비{confirmedNow === 0 ? '(나 혼자일 때)' : `(본인 예약 확정 시 ${est.householdsWithMe}세대 기준)`}. 결제 대기 자리는 세대 수에 넣지 않고, 업체 할인은 조건 충족이 확인되기 전이라 빼지 않았어요.</p>
           <p className="xs muted">예약금은 그룹 총 출장비와 같아요. 마감 때 확정된 세대 수로 내 출장비가 정해지고, 낸 예약금은 최종 금액에서 차감돼요. 최종 금액은 작업이 끝난 뒤 확인해요.</p>
-          {ap.discountNote && <div className="panel small">업체 추가 할인 조건: {ap.discountNote}</div>}
+          {ap.discountNote && <div className="panel small">업체 추가 할인 조건: {ap.discountNote}<span className="xs muted" style={{ display: 'block' }}>조건을 충족하는지 업체가 확인한 뒤 적용돼요. 위 예상 총액에는 반영하지 않았어요.</span></div>}
         </div>
       </Section>
 
