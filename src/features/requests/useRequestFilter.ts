@@ -3,7 +3,7 @@ import { useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../app/auth';
 import { loadListFilter, loadListScroll, saveListFilter, saveListScroll } from '../../app/context';
 import {
-  DEFAULT_REQUEST_FILTER, hasFilterParams, parseRequestFilter, writeRequestFilter, type RequestFilter,
+  hasFilterParams, parseRequestFilter, writeRequestFilter, type RequestFilter,
 } from '../../domain/requestFilter';
 
 type FilterNavState = { filterOwner?: string } | null;
@@ -50,8 +50,7 @@ export function useRequestFilter() {
     window.scrollTo(0, 0); // 필터를 바꾸면 목록 처음으로
   }, [params, setParams, owner]);
 
-  const reset = useCallback(() => apply(DEFAULT_REQUEST_FILTER), [apply]);
-  return { filter, apply, reset };
+  return { filter, apply };
 }
 
 /**

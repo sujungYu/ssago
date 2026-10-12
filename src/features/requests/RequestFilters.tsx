@@ -2,65 +2,75 @@ import { useState } from 'react';
 import { Icon } from '../../components/Icon';
 import { Button, Dialog, Field } from '../../components/ui';
 import {
-  DEFAULT_REQUEST_FILTER, PERIOD_OPTIONS, STATUS_FILTER_OPTIONS, customRangeError, formatYmdDots, isDefaultFilter,
-  periodSummary, statusSummary, toggleStatus, type PeriodPreset, type RequestFilter,
+  PERIOD_OPTIONS, STATUS_GROUP_OPTIONS, customRangeError, formatYmdDots, periodButtonLabel, statusSummary,
+  type PeriodPreset, type RequestFilter, type StatusGroup,
 } from '../../domain/requestFilter';
-import type { RequestStatus } from '../../domain/types';
 
-type Sheet = 'period' | 'status' | null;
+type Open = { kind: 'status' | 'period'; anchor: HTMLElement } | null;
 
 /**
- * 내 요청 필터 막대: 요청 접수일·상태 버튼, 결과 건수, (적용 중일 때) 초기화.
- * 버튼을 누르면 시트(좁은 화면: 하단, 넓은 화면: 가운데)에서 조건을 고르고 ‘적용’으로 반영한다.
- * 시트에서 바꾸다 닫으면 적용값은 그대로다.
+ * 내 요청 필터 막대: [요청 상태 ▾] [접수일 ▾]  요청 묶음 N건. 초기화 버튼은 두지 않는다(각 필터의 ‘전체’로 그 조건만 해제).
+ * 버튼을 누르면 편집용 선택지(모바일 하단 시트, 데스크톱 팝오버)를 열고 ‘적용’ 때만 반영한다. 적용 전에 닫으면 기존 조건 유지.
+ * 필터 규칙·상태 매핑은 src/domain/requestFilter.ts.
  */
-export function RequestFilterBar({ filter, onApply, onReset, count }: {
-  filter: RequestFilter; onApply: (f: RequestFilter) => void; onReset: () => void; count?: number;
-}) {
-  const [open, setOpen] = useState<Sheet>(null);
-  const periodOn = filter.period !== 'all';
-  const statusOn = filter.statuses.length > 0;
+export function RequestFilterBar({ filter, onApply, count }: { filter: RequestFilter; onApply: (f: RequestFilter) => void; count?: number }) {
+  const [open, setOpen] = useState<Open>(null);
+  const status = statusSummary(filter);
+  const period = periodButtonLabel(filter);
+  const apply = (f: RequestFilter) => { setOpen(null); onApply(f); };
   return (
     <div className="filter-bar">
       <div className="filter-bar__buttons" role="group" aria-label="요청 필터">
-        <FilterButton icon="calendar" label="요청 접수일" value={periodSummary(filter)} active={periodOn} onClick={() => setOpen('period')} />
-        <FilterButton icon="filter" label="상태" value={statusSummary(filter)} active={statusOn} onClick={() => setOpen('status')} />
+        <CapsuleButton label="요청 상태" value={status} onClick={(el) => setOpen({ kind: 'status', anchor: el })} />
+        <CapsuleButton label="접수일" value={period} onClick={(el) => setOpen({ kind: 'period', anchor: el })} />
       </div>
-      <div className="filter-bar__summary">
-        <p className="small" aria-live="polite">{count === undefined ? ' ' : <>요청 묶음 <b>{count}</b>건</>}</p>
-        {!isDefaultFilter(filter) && <Button variant="ghost" sm onClick={onReset}><Icon name="refresh" size={16} />필터 초기화</Button>}
-      </div>
-      {open === 'period' && <PeriodSheet filter={filter} onClose={() => setOpen(null)} onApply={(f) => { setOpen(null); onApply(f); }} />}
-      {open === 'status' && <StatusSheet filter={filter} onClose={() => setOpen(null)} onApply={(f) => { setOpen(null); onApply(f); }} />}
+      <p className="filter-bar__count small" aria-live="polite">{count === undefined ? ' ' : <>요청 묶음 <b>{count}</b>건</>}</p>
+      {open?.kind === 'status' && <StatusPicker filter={filter} anchor={open.anchor} onClose={() => setOpen(null)} onApply={apply} />}
+      {open?.kind === 'period' && <PeriodPicker filter={filter} anchor={open.anchor} onClose={() => setOpen(null)} onApply={apply} />}
     </div>
   );
 }
 
-function FilterButton({ icon, label, value, active, onClick }: { icon: string; label: string; value: string; active: boolean; onClick: () => void }) {
+/** 캡슐형 필터 버튼. 기본값이면 필터 이름, 적용되면 선택값을 보여주고 연한 블루로 구분한다. */
+function CapsuleButton({ label, value, onClick }: { label: string; value: string | null; onClick: (el: HTMLElement) => void }) {
+  const active = value !== null;
   return (
-    <button type="button" className={`filter-btn${active ? ' filter-btn--on' : ''}`} aria-haspopup="dialog" onClick={onClick}
-      aria-label={`${label} 필터: ${value}${active ? ', 적용 중' : ', 기본값'}`}>
-      <Icon name={icon} size={18} />
-      <span className="filter-btn__text">
-        <span className="filter-btn__label">{label}</span>
-        <span className="filter-btn__value">{value}</span>
-      </span>
-      {active && <Icon name="check" size={16} />}
+    <button type="button" className={`capsule${active ? ' capsule--on' : ''}`} aria-haspopup="dialog"
+      aria-label={`${label} 필터: ${value ?? (label === '접수일' ? '전체 기간' : '전체')}`} onClick={(e) => onClick(e.currentTarget)}>
+      <span className="capsule__text">{value ?? label}</span>
+      <Icon name="down" size={16} />
     </button>
   );
 }
 
-function Choice({ type, name, checked, onChange, children }: { type: 'radio' | 'checkbox'; name: string; checked: boolean; onChange: () => void; children: string }) {
+function Choice({ name, checked, onChange, children, hint }: { name: string; checked: boolean; onChange: () => void; children: string; hint?: string }) {
   return (
     <label className={`choice${checked ? ' choice--on' : ''}`}>
-      <input type={type} name={name} checked={checked} onChange={onChange} />
-      <span className="grow">{children}</span>
+      <input type="radio" name={name} checked={checked} onChange={onChange} />
+      <span className="grow">{children}{hint && <span className="choice__hint">{hint}</span>}</span>
       {checked && <span className="choice__mark" aria-hidden>선택됨</span>}
     </label>
   );
 }
 
-function PeriodSheet({ filter, onClose, onApply }: { filter: RequestFilter; onClose: () => void; onApply: (f: RequestFilter) => void }) {
+const ENDED_HINT = '업체 거절·철회·승인 만료·다른 업체 예약으로 종료';
+
+function StatusPicker({ filter, anchor, onClose, onApply }: { filter: RequestFilter; anchor: HTMLElement; onClose: () => void; onApply: (f: RequestFilter) => void }) {
+  const [draft, setDraft] = useState<StatusGroup>(filter.status); // 편집 중인 값(적용 전에는 목록에 반영하지 않음)
+  return (
+    <Dialog title="요청 상태" onClose={onClose} closeLabel="닫기" anchor={anchor}
+      actions={<Button variant="primary" block onClick={() => onApply({ ...filter, status: draft })}>적용</Button>}>
+      <fieldset className="choices">
+        <legend className="sr-only">요청 상태(하나 선택)</legend>
+        {STATUS_GROUP_OPTIONS.map((o) => (
+          <Choice key={o.value} name="status-group" checked={draft === o.value} onChange={() => setDraft(o.value)} hint={o.value === 'ended' ? ENDED_HINT : undefined}>{o.label}</Choice>
+        ))}
+      </fieldset>
+    </Dialog>
+  );
+}
+
+function PeriodPicker({ filter, anchor, onClose, onApply }: { filter: RequestFilter; anchor: HTMLElement; onClose: () => void; onApply: (f: RequestFilter) => void }) {
   const [period, setPeriod] = useState<PeriodPreset>(filter.period);
   const [from, setFrom] = useState(filter.from ?? '');
   const [to, setTo] = useState(filter.to ?? '');
@@ -70,19 +80,16 @@ function PeriodSheet({ filter, onClose, onApply }: { filter: RequestFilter; onCl
   const apply = () => {
     setTouched(true);
     if (errs) return;
-    onApply(custom ? { ...filter, period, from, to } : { statuses: filter.statuses, period });
+    onApply(custom ? { status: filter.status, period, from, to } : { status: filter.status, period });
   };
   return (
-    <Dialog title="요청 접수일" onClose={onClose} closeLabel="닫기"
-      actions={<>
-        <Button variant="primary" block onClick={apply}>적용</Button>
-        <Button variant="secondary" block onClick={() => { setPeriod('all'); setFrom(''); setTo(''); setTouched(false); }}>기간 초기화</Button>
-      </>}>
-      <p className="small muted">수리를 요청한 날(요청 접수일) 기준이에요. 방문 예정일이 아니에요. 한국 시간 기준이며 시작일과 종료일을 모두 포함해요.</p>
+    <Dialog title="접수일" onClose={onClose} closeLabel="닫기" anchor={anchor}
+      actions={<Button variant="primary" block onClick={apply}>적용</Button>}>
+      <p className="small muted">수리를 요청한 날(요청 접수일) 기준이에요. 방문일이 아니에요. 한국 시간 기준이며 시작일과 종료일을 모두 포함해요.</p>
       <fieldset className="choices">
         <legend className="sr-only">기간</legend>
         {PERIOD_OPTIONS.map((o) => (
-          <Choice key={o.value} type="radio" name="period" checked={period === o.value} onChange={() => setPeriod(o.value)}>{o.label}</Choice>
+          <Choice key={o.value} name="period" checked={period === o.value} onChange={() => setPeriod(o.value)}>{o.label}</Choice>
         ))}
       </fieldset>
       {custom && (
@@ -95,30 +102,9 @@ function PeriodSheet({ filter, onClose, onApply }: { filter: RequestFilter; onCl
               {(fp) => <input {...fp} className="input" type="date" value={to} onChange={(e) => setTo(e.target.value)} />}
             </Field>
           </div>
-          {from && to && !errs && <p className="small">선택 기간: <b>{formatYmdDots(from)} ~ {formatYmdDots(to)}</b></p>}
+          {from && to && !errs && <p className="small">선택 기간: <b className="nowrap">{formatYmdDots(from)}</b> ~ <b className="nowrap">{formatYmdDots(to)}</b></p>}
         </div>
       )}
-    </Dialog>
-  );
-}
-
-function StatusSheet({ filter, onClose, onApply }: { filter: RequestFilter; onClose: () => void; onApply: (f: RequestFilter) => void }) {
-  const [picked, setPicked] = useState<RequestStatus[]>(filter.statuses);
-  const all = picked.length === 0;
-  return (
-    <Dialog title="요청 상태" onClose={onClose} closeLabel="닫기"
-      actions={<>
-        <Button variant="primary" block onClick={() => onApply({ ...filter, statuses: picked })}>적용</Button>
-        <Button variant="secondary" block onClick={() => setPicked(DEFAULT_REQUEST_FILTER.statuses)}>상태 초기화</Button>
-      </>}>
-      <p className="small muted">여러 상태를 고르면 하나라도 해당하는 요청을 보여줘요.</p>
-      <fieldset className="choices">
-        <legend className="sr-only">상태(여러 개 선택 가능)</legend>
-        <Choice type="checkbox" name="status" checked={all} onChange={() => setPicked([])}>전체 상태</Choice>
-        {STATUS_FILTER_OPTIONS.map((o) => (
-          <Choice key={o.value} type="checkbox" name="status" checked={picked.includes(o.value)} onChange={() => setPicked((p) => toggleStatus(p, o.value))}>{o.label}</Choice>
-        ))}
-      </fieldset>
     </Dialog>
   );
 }

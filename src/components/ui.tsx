@@ -162,10 +162,18 @@ export function PasswordInput(props: Omit<InputHTMLAttributes<HTMLInputElement>,
  * 확인 대화상자. 좁은 화면에서는 하단 시트, 넓은 화면에서는 가운데 대화상자. closeLabel을 주면 제목 옆에 닫기 버튼을 둔다.
  * 열리면 내부로 포커스를 옮기고 Tab을 안에 가두며 Escape로 닫는다. 열린 동안 배경 스크롤을 잠그고,
  * 닫으면 연 버튼으로 포커스를 돌려준다(스크롤 위치는 그대로). 본문만 내부 스크롤되어 하단 버튼이 내용을 가리지 않는다.
+ * anchor를 주면 768px 이상에서는 그 버튼 아래에 팝오버로 띄운다(배경 어둡게 하지 않음, 바깥을 누르면 닫힘).
  */
-export function Dialog({ title, onClose, children, actions, closeLabel }: { title: string; onClose: () => void; children: ReactNode; actions: ReactNode; closeLabel?: string }) {
+export function Dialog({ title, onClose, children, actions, closeLabel, anchor }: { title: string; onClose: () => void; children: ReactNode; actions: ReactNode; closeLabel?: string; anchor?: HTMLElement | null }) {
   const ref = useRef<HTMLDivElement>(null);
   const tid = useId();
+  // 팝오버 위치(데스크톱 + anchor일 때만). 열릴 때 한 번 계산한다(열린 동안 배경 스크롤은 잠김).
+  const [pop] = useState<{ top: number; left: number } | null>(() => {
+    if (!anchor || typeof window === 'undefined' || !window.matchMedia?.('(min-width: 768px)').matches) return null;
+    const r = anchor.getBoundingClientRect();
+    const width = Math.min(380, window.innerWidth - 32);
+    return { top: r.bottom + 8, left: Math.max(16, Math.min(r.left, window.innerWidth - width - 16)) };
+  });
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
   useEffect(() => {
@@ -195,8 +203,9 @@ export function Dialog({ title, onClose, children, actions, closeLabel }: { titl
     };
   }, []);
   return (
-    <div className="dialog-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="dialog" role="dialog" aria-modal="true" aria-labelledby={tid} ref={ref}>
+    <div className={`dialog-backdrop${pop ? ' dialog-backdrop--popover' : ''}`} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className={`dialog${pop ? ' dialog--popover' : ''}`} role="dialog" aria-modal="true" aria-labelledby={tid} ref={ref}
+        style={pop ? { top: pop.top, left: pop.left, maxHeight: `calc(100dvh - ${pop.top + 16}px)` } : undefined}>
         {closeLabel ? (
           <div className="dialog__head">
             <h2 id={tid}>{title}</h2>

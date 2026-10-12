@@ -6,7 +6,7 @@ import { REQUEST_STATUS } from '../../domain/rules';
 import { formatDate, formatRemaining, seoulYmd } from '../../domain/time';
 import { formatYmdDots, toListQuery, writeRequestFilter } from '../../domain/requestFilter';
 import { Icon } from '../../components/Icon';
-import { AsyncView, Badge, Button, EmptyState, LinkButton } from '../../components/ui';
+import { AsyncView, Badge, EmptyState, LinkButton } from '../../components/ui';
 import type { FilteredBundleListItem } from '../../data/repositories/types';
 import type { RequestStatus } from '../../domain/types';
 import { RequestFilterBar } from './RequestFilters';
@@ -27,7 +27,7 @@ function receivedLabel(b: FilteredBundleListItem): string {
 /** C-06 내 요청: 같은 작업을 여러 업체에 요청한 묶음 목록. 요청 접수일·상태로 거를 수 있다. */
 export function RequestsPage() {
   const repo = useRepo();
-  const { filter, apply, reset } = useRequestFilter();
+  const { filter, apply } = useRequestFilter();
   const filterKey = writeRequestFilter(new URLSearchParams(), filter).toString();
   // 오늘(최근 N일 기준)은 목업 시계의 한국 날짜. 저장소 변경 시 재조회하면서 다시 계산한다.
   const q = useAsync(() => repo.queryRequests(toListQuery(filter, repo.now())), [repo, filterKey]);
@@ -39,7 +39,7 @@ export function RequestsPage() {
       <h2 style={{ fontSize: 'var(--fs-xl)' }}>내 요청</h2>
       {/* 요청 자체가 없으면 필터를 보여주지 않는다 */}
       {!(q.data && !q.data.hasAnyRequest) && (
-        <RequestFilterBar filter={filter} onApply={apply} onReset={reset} count={ready && !q.error ? q.data!.bundles.length : undefined} />
+        <RequestFilterBar filter={filter} onApply={apply} count={ready && !q.error ? q.data!.bundles.length : undefined} />
       )}
       <AsyncView state={q}>
         {({ bundles, hasAnyRequest }) => !hasAnyRequest ? (
@@ -47,9 +47,8 @@ export function RequestsPage() {
             업체를 찾아 수리를 요청하면 여기에서 답변을 확인할 수 있어요.
           </EmptyState>
         ) : bundles.length === 0 ? (
-          <EmptyState icon="filter" title="선택한 조건에 맞는 요청이 없어요." action={<Button variant="primary" onClick={reset}>필터 초기화</Button>}>
-            기간이나 상태를 바꿔 보세요.
-          </EmptyState>
+          // 초기화 버튼은 두지 않는다. 위 필터는 그대로 조작할 수 있다.
+          <EmptyState icon="filter" title="선택한 조건에 맞는 요청이 없어요.">날짜나 상태를 변경해주세요.</EmptyState>
         ) : (
           <ul className="stack request-list" aria-busy={q.loading || undefined}>
             {bundles.map((b) => {

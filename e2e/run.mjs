@@ -560,80 +560,87 @@ await test('주소: 모바일 키보드(낮은 화면)에서 상세 주소 입�
   await page.getByRole('button', { name: '요청 보내기' }).waitFor();
 });
 
-// ───────── 내 요청 필터 ─────────
-const statusBtn = (page) => page.getByRole('button', { name: /^상태 필터/ });
-const periodBtn = (page) => page.getByRole('button', { name: /^요청 접수일 필터/ });
+// ───────── 내 요청 필터(캡슐형: 요청 상태 단일 선택 + 접수일) ─────────
+const statusBtn = (page) => page.getByRole('button', { name: /^요청 상태 필터/ });
+const periodBtn = (page) => page.getByRole('button', { name: /^접수일 필터/ });
 const cards = (page) => page.locator('main .request-list > li');
 const badges = (page) => page.locator('main .request-list > li .badge').allInnerTexts();
 /** 조회가 끝난 뒤의 건수 문구(조회 중에는 비어 있다) */
-const countText = async (page) => { await page.locator('.filter-bar__summary p', { hasText: '요청 묶음' }).waitFor(); await page.waitForSelector('.request-list[aria-busy]', { state: 'detached' }).catch(() => {}); return page.locator('.filter-bar__summary p').innerText(); };
+const countText = async (page) => { await page.locator('.filter-bar__count', { hasText: '요청 묶음' }).waitFor(); await page.waitForSelector('.request-list[aria-busy]', { state: 'detached' }).catch(() => {}); return page.locator('.filter-bar__count').innerText(); };
 const search = (page) => new URL(page.url()).search;
 const onPath = (page, p) => page.waitForURL((u) => u.pathname === p);
 const listBadges = async (page) => { await page.locator('main .request-list .badge').first().waitFor(); return badges(page); };
-async function pickStatuses(page, labels) {
+const ENDED = ['업체 거절', '철회', '승인 만료', '다른 업체 예약으로 종료'];
+async function pickStatus(page, label) {
   await statusBtn(page).click();
   const dlg = page.getByRole('dialog', { name: '요청 상태' });
-  for (const l of labels) await dlg.getByRole('checkbox', { name: l, exact: true }).check();
+  await dlg.getByRole('radio', { name: new RegExp('^' + label) }).check();
+  await dlg.getByRole('button', { name: '적용', exact: true }).click();
+  await dlg.waitFor({ state: 'detached' });
+}
+async function pickPeriod(page, label) {
+  await periodBtn(page).click();
+  const dlg = page.getByRole('dialog', { name: '접수일' });
+  await dlg.getByRole('radio', { name: label, exact: true }).check();
   await dlg.getByRole('button', { name: '적용', exact: true }).click();
   await dlg.waitFor({ state: 'detached' });
 }
 
-await test('요청 필터: 기본 조회 → 복수 상태(OR) → 건수 일치 → 초기화', async (page) => {
+await test('요청 필터: 캡슐 버튼 [요청 상태][접수일] 순서·높이·기본 표시, 건수 일치, 초기화 버튼 없음', async (page) => {
   await start(page, { path: '/requests' });
   await waitText(page, '업체 승인 완료 · 결제 대기');
-  await periodBtn(page).filter({ hasText: '전체 기간' }).waitFor();
-  await statusBtn(page).filter({ hasText: '전체 상태' }).waitFor();
-  const total = await cards(page).count();
-  eq(await countText(page), `요청 묶음 ${total}건`, '기본 건수');
-  truthy(await page.getByText('요청 접수일 2026.', { exact: false }).count() >= total, '목록의 요청 접수일 라벨');
-
-  // 전체 상태 ↔ 개별 상태 선택 규칙
-  await statusBtn(page).click();
-  const dlg = page.getByRole('dialog', { name: '요청 상태' });
-  truthy(await dlg.getByRole('checkbox', { name: '전체 상태', exact: true }).isChecked(), '시트 기본값: 전체 상태');
-  await dlg.getByRole('checkbox', { name: '승인 완료·결제 대기', exact: true }).check();
-  eq(await dlg.getByRole('checkbox', { name: '전체 상태', exact: true }).isChecked(), false, '개별 선택 시 전체 상태 해제');
-  await dlg.getByRole('checkbox', { name: '승인 완료·결제 대기', exact: true }).uncheck();
-  truthy(await dlg.getByRole('checkbox', { name: '전체 상태', exact: true }).isChecked(), '모두 해제하면 전체 상태');
-  await dlg.getByRole('checkbox', { name: '승인 완료·결제 대기', exact: true }).check();
-  await dlg.getByRole('checkbox', { name: '예약 확정', exact: true }).check();
-  await dlg.getByRole('checkbox', { name: '전체 상태', exact: true }).check();
-  eq(await dlg.getByRole('checkbox', { name: '예약 확정', exact: true }).isChecked(), false, '전체 상태 선택 시 개별 해제');
-  await dlg.getByRole('button', { name: '닫기' }).click();
-  await statusBtn(page).filter({ hasText: '전체 상태' }).waitFor();
-  eq(await page.evaluate(() => document.activeElement?.getAttribute('aria-label')?.startsWith('상태 필터')), true, '닫은 뒤 포커스 복귀');
-
-  await pickStatuses(page, ['승인 완료·결제 대기', '예약 확정']);
-  eq(search(page), '?status=approved_pending_payment%2Cbooked', 'URL 쿼리');
-  await countText(page);
-  await statusBtn(page).filter({ hasText: '상태 2개' }).waitFor();
-  const shown = await badges(page);
-  truthy(shown.length > 0 && shown.every((b) => ['업체 승인 완료 · 결제 대기', '예약 확정'].includes(b)), `표시 상태: ${shown}`);
-  truthy(shown.includes('예약 확정') && shown.includes('업체 승인 완료 · 결제 대기'), '결제 대기와 예약 확정이 각각 보임');
-  eq(await countText(page), `요청 묶음 ${await cards(page).count()}건`, '필터 후 건수 = 표시 카드 수');
-
-  await statusBtn(page).click();
-  const dlg2 = page.getByRole('dialog', { name: '요청 상태' });
-  truthy(await dlg2.getByRole('checkbox', { name: '예약 확정', exact: true }).isChecked(), '시트에 적용값 표시');
-  await dlg2.getByRole('checkbox', { name: '승인 완료·결제 대기', exact: true }).uncheck();
-  await dlg2.getByRole('button', { name: '적용', exact: true }).click();
-  await page.waitForURL((u) => u.search === '?status=booked');
-  await statusBtn(page).filter({ hasText: '예약 확정' }).waitFor();
-  await page.getByRole('button', { name: '필터 초기화' }).click();
-  await page.waitForURL((u) => u.search === '');
-  await statusBtn(page).filter({ hasText: '전체 상태' }).waitFor();
-  await page.locator('.filter-bar__summary p', { hasText: `요청 묶음 ${total}건` }).waitFor();
-  eq(await cards(page).count(), total, '초기화 후 전체 목록');
-  eq(await page.getByRole('button', { name: '필터 초기화' }).count(), 0, '기본값이면 초기화 버튼 없음');
+  const sb = await statusBtn(page).boundingBox(); const pb = await periodBtn(page).boundingBox();
+  truthy(sb.x < pb.x && Math.abs(sb.y - pb.y) < 2, '요청 상태가 먼저, 같은 줄');
+  truthy(sb.height >= 40 && sb.height <= 44 && pb.height >= 40 && pb.height <= 44, `높이 40~44px(${sb.height}, ${pb.height})`);
+  eq((await statusBtn(page).innerText()).trim(), '요청 상태', '기본 표시');
+  eq((await periodBtn(page).innerText()).trim(), '접수일', '기본 표시');
+  truthy(parseFloat(await statusBtn(page).evaluate((el) => getComputedStyle(el).borderTopLeftRadius)) >= 20, '캡슐형 모서리');
+  eq(await page.locator('.capsule--on').count(), 0, '기본값은 강조 없음');
+  eq(await countText(page), `요청 묶음 ${await cards(page).count()}건`, '건수 = 표시 묶음 수');
+  eq(await page.getByRole('button', { name: /초기화/ }).count(), 0, '초기화 버튼 없음');
 });
 
-await test('요청 필터: 직접 선택 기간 오류·적용(경계 포함) + 상태 AND → 결과 없음 → 초기화', async (page) => {
+await test('요청 필터: 상태 그룹 단일 선택(결제 대기·추가 정보 필요·업체 검토 중·예약 확정·종료) · 전체로 그 조건만 해제', async (page) => {
+  await start(page, { path: '/requests' });
+  await waitText(page, '업체 승인 완료 · 결제 대기');
+  const total = await cards(page).count();
+  const expectGroup = async (label, query, allowed) => {
+    await pickStatus(page, label);
+    eq(search(page), `?status=${query}`, `${label} URL`);
+    await statusBtn(page).filter({ hasText: label }).waitFor();
+    eq(await statusBtn(page).evaluate((el) => el.classList.contains('capsule--on')), true, `${label} 강조`);
+    // 전환 렌더가 끝나 목록이 이 조건으로 바뀔 때까지 기다린다(끝내 맞지 않으면 시간 초과로 실패)
+    await page.waitForFunction((al) => { const b = [...document.querySelectorAll('main .request-list > li .badge')].map((x) => x.textContent); return b.length > 0 && b.every((x) => al.includes(x)); }, allowed).catch(() => {});
+    const shown = await listBadges(page);
+    truthy(shown.length > 0 && shown.every((x) => allowed.includes(x)), `${label}: ${shown}`);
+    eq(await countText(page), `요청 묶음 ${await cards(page).count()}건`, `${label} 건수`);
+    return shown;
+  };
+  await expectGroup('결제 대기', 'payment_pending', ['업체 승인 완료 · 결제 대기']);
+  await expectGroup('추가 정보 필요', 'needs_info', ['추가 정보 필요']);
+  await expectGroup('업체 검토 중', 'reviewing', ['업체 검토 중']);
+  await expectGroup('예약 확정', 'booked', ['예약 확정']);
+  const ended = await expectGroup('종료', 'ended', ENDED);
+  truthy(new Set(ended).size >= 3, `종료에 구체 상태가 그대로 보임: ${ended}`);
+  // 접수일과 함께 적용한 뒤 상태만 ‘전체’로 → 접수일은 유지
+  await pickPeriod(page, '최근 30일');
+  eq(search(page), '?period=30d&status=ended', '두 조건');
+  await pickStatus(page, '전체');
+  eq(search(page), '?period=30d', '상태만 해제');
+  await periodBtn(page).filter({ hasText: '최근 30일' }).waitFor();
+  await statusBtn(page).filter({ hasText: '요청 상태' }).waitFor();
+  await pickPeriod(page, '전체 기간');
+  eq(search(page), '', '접수일만 해제');
+  await page.locator('.filter-bar__count', { hasText: `요청 묶음 ${total}건` }).waitFor();
+});
+
+await test('요청 필터: 접수일 직접 선택(오류·경계) + 상태 AND → 결과 없음에서도 필터 조작, 적용 전 닫으면 유지', async (page) => {
   await page.setViewportSize({ width: 360, height: 760 });
   await start(page, { path: '/requests' });
   await waitText(page, '업체 승인 완료 · 결제 대기');
   await periodBtn(page).click();
-  const dlg = page.getByRole('dialog', { name: '요청 접수일' });
-  await waitText(page, '방문 예정일이 아니에요');
+  const dlg = page.getByRole('dialog', { name: '접수일' });
+  await waitText(page, '방문일이 아니에요');
   await dlg.getByRole('radio', { name: '직접 선택', exact: true }).check();
   await dlg.getByRole('button', { name: '적용', exact: true }).click();
   await waitText(page, '시작일을 입력해 주세요');
@@ -642,32 +649,79 @@ await test('요청 필터: 직접 선택 기간 오류·적용(경계 포함) + 
   await dlg.getByRole('button', { name: '적용', exact: true }).click();
   await waitText(page, '종료일은 시작일과 같거나 늦어야 해요');
   await dlg.getByLabel('종료일', { exact: true }).fill('2026-10-12');
-  await waitText(page, '선택 기간: 2026.10.12 ~ 2026.10.12');
+  await waitText(page, '2026.10.12');
   await ((n) => process.env.E2E_SHOTS !== '0' && page.screenshot({ path: join(ROOT, `e2e/screens/360_filter_${n}.png`) }))('period_sheet');
   await dlg.getByRole('button', { name: '적용', exact: true }).click();
   await dlg.waitFor({ state: 'detached' });
   await periodBtn(page).filter({ hasText: '2026.10.12 ~ 2026.10.12' }).waitFor();
-  // 10-12에 접수된 요청: rq-2(20:00), rq-10(09:00)
-  await page.locator('.filter-bar__summary', { hasText: '요청 묶음 2건' }).waitFor();
-  const labels = await page.locator('main .request-list > li').allInnerTexts();
-  eq(labels.length, 2, '하루 기간 결과 수');
-  truthy(labels.every((t) => t.includes('요청 접수일 2026.10.12')), '모두 10-12 접수');
-
-  // 바꾸다 Esc로 닫으면 기존 적용값 유지
-  await periodBtn(page).click();
-  await page.getByRole('dialog', { name: '요청 접수일' }).getByRole('radio', { name: '최근 7일', exact: true }).check();
+  truthy(await periodBtn(page).evaluate((el) => el.scrollWidth <= el.clientWidth + 1), '직접 선택 기간이 잘리지 않음');
+  // 10-12 접수(한국 날짜, 시작·종료 포함): rq-2(20:00), rq-10(09:00)
+  await page.locator('.filter-bar__count', { hasText: '요청 묶음 2건' }).waitFor();
+  const labels = await cards(page).allInnerTexts();
+  truthy(labels.length === 2 && labels.every((t) => t.includes('요청 접수일 2026.10.12')), '모두 10-12 접수');
+  // 적용 전에 닫으면 기존 조건 유지(편집값 ≠ 적용값)
+  await statusBtn(page).click();
+  await page.getByRole('dialog', { name: '요청 상태' }).getByRole('radio', { name: /^예약 확정/ }).check();
   await page.keyboard.press('Escape');
-  await periodBtn(page).filter({ hasText: '2026.10.12 ~ 2026.10.12' }).waitFor();
-
-  await pickStatuses(page, ['철회']); // 철회 요청(rq-6)은 10-10 접수 → AND 결과 없음
+  await statusBtn(page).filter({ hasText: '요청 상태' }).waitFor();
+  eq(search(page).includes('status'), false, '닫으면 적용 안 됨');
+  // AND → 결과 없음(10-12 접수 중 종료 상태 없음)
+  await pickStatus(page, '종료');
   await waitText(page, '선택한 조건에 맞는 요청이 없어요.');
+  await waitText(page, '날짜나 상태를 변경해주세요.');
   await ((n) => process.env.E2E_SHOTS !== '0' && page.screenshot({ path: join(ROOT, `e2e/screens/360_filter_${n}.png`) }))('no_result');
   eq(await countText(page), '요청 묶음 0건', '결과 없음 건수');
+  eq(await page.getByRole('button', { name: /초기화/ }).count(), 0, '빈 상태에도 초기화 버튼 없음');
   truthy(!(await page.locator('main').innerText()).includes('아직 보낸 수리 요청이 없어요'), '요청 없음과 구분');
-  await page.locator('.empty').getByRole('button', { name: '필터 초기화' }).click();
-  await page.waitForURL((u) => u.search === '');
+  // 결과가 없어도 필터를 계속 조작
+  await pickPeriod(page, '전체 기간');
+  const shown = await listBadges(page);
+  truthy(shown.length > 0 && shown.every((x) => ENDED.includes(x)), `기간 해제 후 종료 상태만: ${shown}`);
+});
+
+await test('요청 필터: 키보드로 열기·선택·적용, 포커스 이동·복귀 · 데스크톱 팝오버/모바일 하단 시트', async (page) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await start(page, { path: '/requests' });
   await waitText(page, '업체 승인 완료 · 결제 대기');
-  await periodBtn(page).filter({ hasText: '전체 기간' }).waitFor();
+  await statusBtn(page).focus();
+  await page.keyboard.press('Enter');
+  const dlg = page.getByRole('dialog', { name: '요청 상태' });
+  await dlg.waitFor();
+  eq(await page.evaluate(() => !!document.activeElement?.closest('[role="dialog"]')), true, '열리면 내부로 포커스');
+  // 데스크톱: 버튼 아래 팝오버, 배경 어둡게 하지 않음
+  const bb = await statusBtn(page).boundingBox(); const db0 = await page.locator('.dialog').boundingBox();
+  truthy(db0.y >= bb.y + bb.height && db0.y - (bb.y + bb.height) < 20 && Math.abs(db0.x - bb.x) < 20, `팝오버 위치(${JSON.stringify(db0)})`);
+  eq(await page.locator('.dialog-backdrop').evaluate((el) => getComputedStyle(el).backgroundColor), 'rgba(0, 0, 0, 0)', '팝오버 배경 투명');
+  await dlg.getByRole('radio', { name: /^전체/ }).focus();
+  await page.keyboard.press('ArrowDown'); // 결제 대기
+  eq(await dlg.getByRole('radio', { name: /^결제 대기/ }).isChecked(), true, '방향키로 선택');
+  await dlg.getByRole('button', { name: '적용', exact: true }).focus();
+  await page.keyboard.press('Enter');
+  await dlg.waitFor({ state: 'detached' });
+  await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === '요청 상태 필터: 결제 대기').catch(() => {});
+  eq(await page.evaluate(() => document.activeElement?.getAttribute('aria-label')), '요청 상태 필터: 결제 대기', '닫히면 버튼으로 포커스 복귀');
+  eq(search(page), '?status=payment_pending', '키보드로 적용');
+  // 모바일: 하단 시트
+  await page.setViewportSize({ width: 390, height: 700 });
+  await periodBtn(page).click();
+  const box = await page.locator('.dialog').boundingBox();
+  truthy(Math.abs(box.y + box.height - 700) < 2, `모바일 하단 시트(${JSON.stringify(box)})`);
+  await page.getByRole('dialog', { name: '접수일' }).getByRole('button', { name: '닫기' }).click();
+});
+
+await test('요청 필터: 묶음 안 서로 다른 상태 — 선택 상태 요청만 표시, 상세 비교에는 전체 유지', async (page) => {
+  // b-sink: rq-3(결제 대기) + rq-4 철회로 상태를 나눈다
+  await start(page, { path: '/requests', patch: (d) => { d.requests.find((r) => r.id === 'rq-4').status = 'withdrawn'; } });
+  await pickStatus(page, '종료');
+  await page.waitForURL((u) => u.search === '?status=ended');
+  await countText(page); // 조회가 끝난 목록을 읽는다
+  const sink = cards(page).filter({ hasText: '욕실 세면대 수전 교체 · 배수 트랩 교체' }).filter({ hasText: '2개 업체에 요청' });
+  await sink.first().waitFor();
+  const t = await sink.first().innerText();
+  truthy(t.includes("철회") && !t.includes("업체 승인 완료 · 결제 대기") && t.includes("목록에서만 숨겼어요"), `묶음 안 선택 상태만: ${JSON.stringify(t)}`);
+  await sink.first().getByRole('link').click();
+  await page.waitForURL((u) => u.pathname === '/requests/bundle/b-sink');
+  await waitText(page, '한빛설비'); await waitText(page, '새봄수리'); // 숨긴 요청도 상세 비교에 그대로
 });
 
 await test('요청 필터: 상세 진입 후 복귀·새로고침·뒤로가기·잘못된 쿼리', async (page) => {
@@ -680,24 +734,24 @@ await test('요청 필터: 상세 진입 후 복귀·새로고침·뒤로가기�
   eq((await listBadges(page)).join(), '추가 정보 필요', '상세 복귀 후 필터 유지');
   await page.reload();
   eq((await listBadges(page)).join(), '추가 정보 필요', '새로고침 후 유지');
-  await pickStatuses(page, ['업체 검토 중']);
-  eq(search(page), '?status=reviewing%2Cneeds_info', '두 번째 적용');
+  await pickStatus(page, '업체 검토 중');
+  eq(search(page), '?status=reviewing', '두 번째 적용');
   await page.goBack();
   await page.waitForURL((u) => u.search === '?status=needs_info');
   await page.waitForTimeout(200);
   eq((await badges(page)).join(), '추가 정보 필요', '뒤로가기로 이전 조건');
-  // 하단 탭으로 다시 들어와도 마지막 적용값
   await page.locator('.tabbar').getByRole('link', { name: '내 정보' }).click();
   await page.locator('.tabbar').getByRole('link', { name: '내 요청' }).click();
   await page.waitForURL((u) => u.search === '?status=needs_info');
-
-  await page.goto(`${BASE}/requests?period=custom&from=2026-99-01&to=x&status=zzz`);
-  await page.waitForURL((u) => u.pathname === '/requests' && u.search === '');
-  await periodBtn(page).filter({ hasText: '전체 기간' }).waitFor();
-  await statusBtn(page).filter({ hasText: '전체 상태' }).waitFor();
+  for (const bad of ['period=custom&from=2026-99-01&to=x&status=zzz', 'status=reviewing,needs_info', 'status=approved_pending_payment']) {
+    await page.goto(`${BASE}/requests?${bad}`);
+    await page.waitForURL((u) => u.pathname === '/requests' && u.search === '');
+    await periodBtn(page).filter({ hasText: '접수일' }).waitFor();
+    await statusBtn(page).filter({ hasText: '요청 상태' }).waitFor();
+  }
 });
 
-await test('요청 필터: 목록 위치 유지(상세 → 뒤로)', async (page) => {
+await test('요청 필터: 목록 위치 유지(상세 → 뒤로) · 필터 변경 시 처음으로', async (page) => {
   await page.setViewportSize({ width: 390, height: 600 });
   await start(page, { path: '/requests' });
   await waitText(page, '업체 승인 완료 · 결제 대기');
@@ -713,12 +767,17 @@ await test('요청 필터: 목록 위치 유지(상세 → 뒤로)', async (page
   await page.waitForTimeout(400);
   const back = await page.evaluate(() => window.scrollY);
   truthy(Math.abs(back - y) < 40, `복귀 위치 ${back} / 이전 ${y}`);
+  await statusBtn(page).scrollIntoViewIfNeeded();
+  await page.evaluate(() => window.scrollTo(0, 200));
+  await pickStatus(page, '예약 확정');
+  await page.waitForTimeout(200);
+  eq(await page.evaluate(() => window.scrollY), 0, '필터 변경 시 목록 처음으로');
 });
 
 await test('요청 필터: 로그아웃·계정 전환 시 필터 초기화', async (page) => {
   await start(page, { path: '/requests' });
   await waitText(page, '업체 승인 완료 · 결제 대기');
-  await pickStatuses(page, ['철회']);
+  await pickStatus(page, '종료');
   await page.locator('.tabbar').getByRole('link', { name: '내 정보' }).click();
   await page.getByRole('button', { name: '로그아웃' }).click();
   await onPath(page, '/login');
@@ -731,7 +790,7 @@ await test('요청 필터: 로그아웃·계정 전환 시 필터 초기화', as
   await page.locator('.tabbar').getByRole('link', { name: '내 요청' }).click();
   await waitText(page, '업체 승인 완료 · 결제 대기');
   eq(search(page), '', '새 계정 쿼리');
-  await statusBtn(page).filter({ hasText: '전체 상태' }).waitFor();
+  await statusBtn(page).filter({ hasText: '요청 상태' }).waitFor();
 });
 
 await test('요청: 추가 정보 요청 → 보완 제출 → 검토 중', async (page) => {

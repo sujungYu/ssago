@@ -2,7 +2,7 @@
  * 내 요청 목록 필터(조회 조건). 화면과 분리된 순수 함수.
  * - 날짜 기준은 ‘요청 접수일’(RepairRequest.createdAt)의 Asia/Seoul 날짜. 방문 예정일이 아니다.
  * - 기간은 시작일·종료일 모두 포함. ‘최근 N일’은 오늘을 포함한 N개의 날짜.
- * - 상태는 복수 선택 OR, 날짜와는 AND. 빈 선택 = 전체 상태.
+ * - 상태는 사용자용 상태 그룹 단일 선택(‘종료’는 4개 업무 상태를 묶음). 날짜와는 AND. 'all' = 전체.
  * 필터는 조회 조건만 바꾸며 요청 데이터·상태를 바꾸지 않는다.
  */
 import { seoulYmd } from './time';
@@ -11,16 +11,19 @@ import type { IsoDate, IsoDateTime, RepairRequest, RequestStatus } from './types
 // ───────── 화면 필터 값(URL에 저장하는 값) ─────────
 export type PeriodPreset = 'all' | '7d' | '30d' | '90d' | 'custom';
 
+/** 사용자용 상태 그룹(필터 전용). 업무 상태(RequestStatus)를 바꾸지 않고 조회 조건으로만 묶는다. */
+export type StatusGroup = 'all' | 'payment_pending' | 'needs_info' | 'reviewing' | 'booked' | 'ended';
+
 export interface RequestFilter {
   period: PeriodPreset;
   /** period='custom'일 때만 사용. YYYY-MM-DD(한국 날짜) */
   from?: IsoDate;
   to?: IsoDate;
-  /** 빈 배열 = 전체 상태 */
-  statuses: RequestStatus[];
+  /** 단일 선택. 'all' = 전체 */
+  status: StatusGroup;
 }
 
-export const DEFAULT_REQUEST_FILTER: RequestFilter = { period: 'all', statuses: [] };
+export const DEFAULT_REQUEST_FILTER: RequestFilter = { period: 'all', status: 'all' };
 
 export const PERIOD_OPTIONS: { value: PeriodPreset; label: string }[] = [
   { value: 'all', label: '전체 기간' },
@@ -33,22 +36,29 @@ export const PERIOD_OPTIONS: { value: PeriodPreset; label: string }[] = [
 const PRESET_DAYS: Partial<Record<PeriodPreset, number>> = { '7d': 7, '30d': 30, '90d': 90 };
 
 /**
- * 상태 필터 옵션(사용자 표현). 코드의 요청 상태 8개와 1:1이다.
- * ‘승인 완료’는 별도 상태가 없고 approved_pending_payment(승인 완료·결제 대기) 하나뿐이므로 옵션도 하나다.
- * 예약 확정(booked)은 예약금 결제 성공 이후의 별도 상태이므로 합치지 않는다.
+ * 상태 그룹 → 업무 상태 매핑. 코드의 요청 상태 8개가 ‘전체’를 뺀 5개 그룹에 빠짐없이 한 번씩 들어간다.
+ * - 결제 대기: approved_pending_payment. ‘승인 완료’만 따로 있는 상태는 없다(업체 승인 = 결제 대기 진입, 승인 조건 재확인
+ *   recheck도 이 상태의 표시값). 그래서 결제 전 승인 상태를 하나로 묶는다.
+ * - 예약 확정: booked. 예약금 결제 성공 이후에만 된다.
+ * - 종료: 업체 거절·철회·승인 만료·다른 업체 예약으로 종료. 카드에는 구체 상태를 그대로 보여준다.
  */
-export const STATUS_FILTER_OPTIONS: { value: RequestStatus; label: string }[] = [
-  { value: 'reviewing', label: '업체 검토 중' },
+export const STATUS_GROUP_STATUSES: Record<Exclude<StatusGroup, 'all'>, RequestStatus[]> = {
+  payment_pending: ['approved_pending_payment'],
+  needs_info: ['needs_info'],
+  reviewing: ['reviewing'],
+  booked: ['booked'],
+  ended: ['rejected', 'withdrawn', 'approval_expired', 'closed_other_booking'],
+};
+
+export const STATUS_GROUP_OPTIONS: { value: StatusGroup; label: string }[] = [
+  { value: 'all', label: '전체' },
+  { value: 'payment_pending', label: '결제 대기' },
   { value: 'needs_info', label: '추가 정보 필요' },
-  { value: 'approved_pending_payment', label: '승인 완료·결제 대기' },
+  { value: 'reviewing', label: '업체 검토 중' },
   { value: 'booked', label: '예약 확정' },
-  { value: 'rejected', label: '업체 거절' },
-  { value: 'withdrawn', label: '철회' },
-  { value: 'approval_expired', label: '승인 만료' },
-  { value: 'closed_other_booking', label: '다른 업체 예약으로 종료' },
+  { value: 'ended', label: '종료' },
 ];
-const STATUS_ORDER = STATUS_FILTER_OPTIONS.map((o) => o.value);
-const isStatus = (s: string): s is RequestStatus => (STATUS_ORDER as string[]).includes(s);
+const isStatusGroup = (s: string | null): s is StatusGroup => STATUS_GROUP_OPTIONS.some((o) => o.value === s);
 
 // ───────── 날짜 ─────────
 const YMD = /^\d{4}-\d{2}-\d{2}$/;
@@ -104,7 +114,7 @@ export function toListQuery(f: RequestFilter, nowIso: IsoDateTime): RequestListQ
     q.createdFrom = f.from;
     q.createdTo = f.to;
   }
-  if (f.statuses.length) q.statuses = [...f.statuses];
+  if (f.status !== 'all') q.statuses = [...STATUS_GROUP_STATUSES[f.status]];
   return q;
 }
 
@@ -137,27 +147,22 @@ export function filterRequestBundles<I extends Filterable, B extends { items: I[
     .sort((a, b) => latestCreatedAt(b.items).localeCompare(latestCreatedAt(a.items)));
 }
 
-// ───────── 상태 선택 규칙 ─────────
-/** 개별 상태 토글. 모두 해제되면 빈 배열(= 전체 상태). 순서는 옵션 순서로 정렬. */
-export function toggleStatus(current: RequestStatus[], s: RequestStatus): RequestStatus[] {
-  const next = current.includes(s) ? current.filter((x) => x !== s) : [...current, s];
-  return STATUS_ORDER.filter((x) => next.includes(x));
-}
-
 // ───────── 요약 표현 ─────────
 export function periodSummary(f: RequestFilter): string {
   if (f.period === 'custom' && f.from && f.to) return `${formatYmdDots(f.from)} ~ ${formatYmdDots(f.to)}`;
   return PERIOD_OPTIONS.find((o) => o.value === f.period)?.label ?? '전체 기간';
 }
 
-export function statusSummary(f: RequestFilter): string {
-  if (!f.statuses.length) return '전체 상태';
-  if (f.statuses.length === 1) return STATUS_FILTER_OPTIONS.find((o) => o.value === f.statuses[0])!.label;
-  return `상태 ${f.statuses.length}개`;
+/** 필터 버튼 표시: 기본값이면 null(버튼은 ‘요청 상태’·‘접수일’), 적용되면 선택값 */
+export function statusSummary(f: RequestFilter): string | null {
+  return f.status === 'all' ? null : STATUS_GROUP_OPTIONS.find((o) => o.value === f.status)!.label;
+}
+export function periodButtonLabel(f: RequestFilter): string | null {
+  return f.period === 'all' ? null : periodSummary(f);
 }
 
 export function isDefaultFilter(f: RequestFilter): boolean {
-  return f.period === 'all' && f.statuses.length === 0;
+  return f.period === 'all' && f.status === 'all';
 }
 
 // ───────── URL 쿼리 ─────────
@@ -175,9 +180,9 @@ export function parseRequestFilter(p: URLSearchParams): RequestFilter {
     if (customRangeError(f ?? undefined, t ?? undefined)) period = 'all';
     else { from = f!; to = t!; }
   }
-  const picked = new Set((p.get('status') ?? '').split(',').filter(isStatus));
-  const statuses = STATUS_ORDER.filter((s) => picked.has(s));
-  return period === 'custom' ? { period, from, to, statuses } : { period, statuses };
+  const rawStatus = p.get('status');
+  const status: StatusGroup = isStatusGroup(rawStatus) ? rawStatus : 'all'; // 이전 형식(쉼표 목록)·알 수 없는 값은 전체
+  return period === 'custom' ? { period, from, to, status } : { period, status };
 }
 
 /** 필터 → 쿼리. 다른(필터와 무관한) 쿼리 값은 유지한다. 기본값은 쿼리에서 뺀다. */
@@ -186,7 +191,7 @@ export function writeRequestFilter(base: URLSearchParams, f: RequestFilter): URL
   for (const k of FILTER_PARAM_KEYS) p.delete(k);
   if (f.period !== 'all') p.set('period', f.period);
   if (f.period === 'custom' && f.from && f.to) { p.set('from', f.from); p.set('to', f.to); }
-  if (f.statuses.length) p.set('status', f.statuses.join(','));
+  if (f.status !== 'all') p.set('status', f.status);
   return p;
 }
 
