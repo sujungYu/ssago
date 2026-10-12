@@ -12,7 +12,9 @@
 .icon-btn { width: 44px; height: 44px; border: 0; background: transparent; border-radius: var(--r-sm); display: grid; place-items: center; color: var(--c-text); text-decoration: none; }
 .icon-btn:hover { background: var(--c-neutral-bg); }
 .top-nav { display: none; gap: var(--sp-1); margin-left: auto; }
-.top-nav a { padding: 10px 14px; border-radius: var(--r-pill); text-decoration: none; color: var(--c-text-2); font-weight: 600; }
+.top-nav a { display: inline-flex; align-items: center; padding: 10px 14px; border-radius: var(--r-pill); text-decoration: none; color: var(--c-text-2); font-weight: 600; white-space: nowrap; }
+.top-nav__home { gap: 7px; } /* 홈 아이콘(19px)과 ‘업체 찾기’ 사이. 아이콘은 currentColor라 기본·활성 색을 그대로 따른다 */
+.top-nav__home svg { flex: none; }
 .top-nav a[aria-current='page'] { color: var(--c-primary); background: var(--c-info-bg); }
 .main { flex: 1; width: 100%; max-width: var(--content-w); margin: 0 auto; padding: var(--sp-4) var(--sp-4) var(--sp-8); }
 .main--tabs { padding-bottom: calc(var(--tab-h) + var(--sp-8) + env(safe-area-inset-bottom)); }

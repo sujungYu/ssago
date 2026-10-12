@@ -39,7 +39,10 @@ export function Page({ title, back, onBack, tabs, progress, children }: { title:
           {(back || onBack) && <h1 className="app-header__title" style={{ fontSize: 'var(--fs-lg)' }}>{title}</h1>}
           {!back && !onBack && <h1 className="sr-only">{title}</h1>}
           <nav className="top-nav" aria-label="주요 메뉴">
-            {TABS.map((t) => <NavLink key={t.to} to={t.to} end={t.end}>{t.label}</NavLink>)}
+            {/* ‘업체 찾기’는 처음 화면(홈)으로 가는 메뉴라 홈 아이콘을 앞에 둔다. 아이콘은 장식(aria-hidden), 링크 이름은 ‘업체 찾기 홈으로 이동’ */}
+            {TABS.map((t) => t.to === '/' ? (
+              <NavLink key={t.to} to={t.to} end={t.end} aria-label="업체 찾기 홈으로 이동" className="top-nav__home"><Icon name="home" size={19} /><span>{t.label}</span></NavLink>
+            ) : <NavLink key={t.to} to={t.to} end={t.end}>{t.label}</NavLink>)}
           </nav>
         </div>
       </header>

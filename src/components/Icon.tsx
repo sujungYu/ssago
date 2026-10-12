@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 
 const P: Record<string, ReactNode> = {
   back: <path d="M15 5l-7 7 7 7" />,
+  home: <><path d="M4 10.5L12 4l8 6.5" /><path d="M6 9v10a1 1 0 0 0 1 1h3.5v-5.5h3V20H17a1 1 0 0 0 1-1V9" /></>,
   chevron: <path d="M9 5l7 7-7 7" />,
   down: <path d="M6 9l6 6 6-6" />,
   search: <><circle cx="11" cy="11" r="6.5" /><path d="M16 16l4.5 4.5" /></>,

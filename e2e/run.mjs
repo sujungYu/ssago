@@ -2233,6 +2233,78 @@ await test('카테고리 카드: 키보드 Tab·Enter로 선택, 포커스 표�
   truthy(outline !== 'none', `포커스 표시 ${outline}`);
 });
 
+// ───────── 상단 메뉴: 업체 찾기 앞 홈 아이콘 ─────────
+const homeLink = (page) => page.locator('nav.top-nav').getByRole('link', { name: '업체 찾기 홈으로 이동', exact: true });
+
+await test('상단 메뉴 홈 아이콘: 주요 화면 공통·접근성 이름·아이콘 장식·크기·간격·색, 이동과 활성 표시, 뒤로가기·제목 유지', async (page) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await start(page, { path: '/' });
+  for (const [p, title] of [['/', null], ['/requests', null], ['/requests/rq-3', '요청 상세'], ['/requests/bundle/b-sink', '비교 요청'], ['/bookings/bk-k2', '예약 상세'], ['/me', null]]) {
+    await page.goto(`${BASE}${p}`);
+    await homeLink(page).waitFor();
+    const r = await homeLink(page).evaluate((a) => {
+      const svg = a.querySelector('svg'); const span = a.querySelector('span');
+      const sr = svg.getBoundingClientRect(); const tr = span.getBoundingClientRect();
+      return { text: a.textContent.trim(), hidden: svg.getAttribute('aria-hidden'), size: Math.round(sr.width), gap: Math.round(tr.left - sr.right), iconFirst: sr.right <= tr.left,
+        iconColor: getComputedStyle(svg).stroke, color: getComputedStyle(a).color, current: a.getAttribute('aria-current'), href: a.getAttribute('href') };
+    });
+    eq(r.text, '업체 찾기', `${p} 텍스트 유지`);
+    truthy(r.hidden === 'true' && r.iconFirst && r.size >= 18 && r.size <= 20 && r.gap >= 6 && r.gap <= 8, `${p} 아이콘(장식·앞·18~20px·간격 6~8px) ${JSON.stringify(r)}`);
+    eq(r.iconColor, r.color, `${p} 아이콘 색 = 메뉴 색`);
+    eq(r.href, '/', `${p} 업체 찾기로`);
+    eq(r.current, p === '/' ? 'page' : null, `${p} 활성 표시`);
+    eq(await page.locator('nav.top-nav a').count(), 4, `${p} 메뉴 4개`);
+    if (title) {
+      eq((await page.locator('.app-header__title').innerText()).trim(), title, `${p} 제목 유지`);
+      eq(await page.locator('.app-header').getByRole('link', { name: '뒤로 가기' }).or(page.locator('.app-header').getByRole('button', { name: '뒤로 가기' })).count(), 1, `${p} 뒤로가기 유지`);
+    }
+  }
+  // 활성 상태 색: 업체 찾기 화면에서 아이콘도 활성 색
+  await page.goto(`${BASE}/`);
+  const active = await homeLink(page).evaluate((a) => ({ c: getComputedStyle(a).color, s: getComputedStyle(a.querySelector('svg')).stroke }));
+  eq(active.s, active.c, '활성 상태에서도 아이콘 색 = 메뉴 색');
+  // 요청 상세·비교 요청에서 눌러 업체 찾기로
+  for (const p of ['/requests/rq-3', '/requests/bundle/b-sink']) {
+    await page.goto(`${BASE}${p}`);
+    await homeLink(page).click();
+    await page.waitForURL((u) => u.pathname === '/');
+    await waitText(page, '어떤 수리가 필요하세요?');
+    eq(await homeLink(page).getAttribute('aria-current'), 'page', `${p} → 업체 찾기 활성`);
+  }
+  // 키보드
+  await page.goto(`${BASE}/requests/rq-3`);
+  await homeLink(page).focus();
+  await page.keyboard.press('Enter');
+  await page.waitForURL((u) => u.pathname === '/');
+});
+
+for (const w of [768, 1024, 390]) {
+  await test(`상단 메뉴 홈 아이콘: ${w}px 배치 — 제목·뒤로가기·메뉴 겹침·잘림 없음`, async (page) => {
+    await page.setViewportSize({ width: w, height: 800 });
+    await start(page, { path: '/' });
+    for (const p of ['/', '/requests/rq-3', '/requests/bundle/b-sink', '/bookings/bk-k9/final']) {
+      await page.goto(`${BASE}${p}`);
+      await page.locator('.app-header').waitFor();
+      const r = await page.evaluate(() => {
+        const nav = document.querySelector('nav.top-nav'); const shown = getComputedStyle(nav).display !== 'none';
+        const links = [...nav.querySelectorAll('a')].map((a) => a.getBoundingClientRect());
+        const title = document.querySelector('.app-header__title, .app-header__brand')?.getBoundingClientRect();
+        const back = document.querySelector('.app-header .icon-btn')?.getBoundingClientRect();
+        return {
+          shown, overflow: document.documentElement.scrollWidth > innerWidth,
+          oneLine: links.every((l) => l.height < 48), inView: links.every((l) => l.right <= innerWidth + .5 && l.left >= -.5),
+          noOverlapTitle: !shown || !title || title.right <= links[0].left + .5, noOverlapBack: !shown || !back || back.right <= links[0].left + .5,
+          linksApart: links.every((l, i) => i === 0 || links[i - 1].right <= l.left + .5),
+        };
+      });
+      truthy(!r.overflow, `${p} 가로 넘침`);
+      if (w >= 768) truthy(r.shown && r.oneLine && r.inView && r.noOverlapTitle && r.noOverlapBack && r.linksApart, `${p} 상단 메뉴 배치 ${JSON.stringify(r)}`);
+      else eq(r.shown, false, '모바일은 상단 메뉴 대신 하단 탭(기존)');
+    }
+    if (w === 768) { await page.goto(`${BASE}/requests/bundle/b-sink`); await page.locator('.resp-card').first().waitFor(); await page.screenshot({ path: join(ROOT, 'e2e/screens/768_topnav_home.png'), clip: { x: 0, y: 0, width: 768, height: 120 } }); }
+  }, { width: w });
+}
+
 // ───────── 탐색 주소 공유(업체 찾기 ↔ 카테고리별 업체 목록) ─────────
 const region = (page) => page.locator('.region-card');
 const regionText = async (page) => (await region(page).innerText()).replace(/\s+/g, ' ').trim();
