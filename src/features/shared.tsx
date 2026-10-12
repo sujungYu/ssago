@@ -50,7 +50,7 @@ export const slotsText = (slots: TimeSlot[]) => formatSlots(slots);
 export function VisitText({ date, time, strong }: { date: IsoDate; time?: VisitTime | null; strong?: boolean }) {
   return (
     <span className={strong ? 'strong' : undefined}>
-      <span className="nowrap">{formatDate(date)}</span>{' '}
+      {/^\d{4}-\d{2}-\d{2}$/.test(date ?? '') ? <span className="nowrap">{formatDate(date)}</span> : <Badge tone="warn">방문일 확인 필요</Badge>}{' '}
       {isValidVisitTime(time) ? <span className="nowrap">{time}</span> : <Badge tone="warn">{VISIT_TIME_MISSING}</Badge>}
     </span>
   );

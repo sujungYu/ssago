@@ -317,3 +317,8 @@ a.list-row:hover { background: #fafbfd; }
 /* 대화상자 팝오버 변형(데스크톱 필터 등): 연 버튼 아래, 배경을 어둡게 하지 않음 */
 .dialog-backdrop--popover { background: transparent; }
 .dialog--popover { position: fixed; width: min(380px, calc(100vw - 32px)); border-radius: var(--r-lg); border: 1px solid var(--c-line); box-shadow: 0 12px 32px rgba(32, 36, 44, .16); padding: var(--sp-4); min-height: 0; }
+
+/* 켜고 끄는 캡슐(확인 필요만) */
+.capsule--toggle { padding-left: var(--sp-3); }
+.capsule__check { display: inline-grid; place-items: center; width: 18px; height: 18px; border: 1.5px solid var(--c-line-strong); border-radius: 50%; flex: none; }
+.capsule--on .capsule__check { border-color: var(--c-primary); background: var(--c-primary); color: #fff; }

@@ -5,12 +5,13 @@ import { REQUEST_PRIORITY } from '../../domain/rules';
 import { filterRequestBundles } from '../../domain/requestFilter';
 import { detailError, toVisitAddress } from '../../domain/address';
 import type { TripFeeBasis } from '../../domain/bookingCost';
+import { filterBookings, tabOf, type BookingListQuery, type PendingAction } from '../../domain/bookingFilter';
 import type {
   AdditionalWork, Booking, Category, ChangeProposal, CustomerProfile, DelayNotice, FinalStatement, Address,
   ProviderDetail, ProviderSummary, RepairRequest, Review, Transaction, Won, GroupRecord, SavedVisitAddress,
 } from '../../domain/types';
 import type {
-  AdditionalView, ApprovalView, BookingDetail, BookingListItem, BundleDetail, BundleListItem, CancelContext, ChangeOption,
+  AdditionalView, ApprovalView, BookingDetail, BookingListItem, BookingQueryResult, BundleDetail, BundleListItem, CancelContext, ChangeOption,
   RequestListQuery, RequestListResult,
   ChangeRequestInput, LedgerEntry, MaterialView, NewRequestInput, NoticeLanding, PaymentResult, ProposalResult, ProposalView,
   ProviderBrief, ProviderQuery, Repository, RequestDetail, RequestListItem, ReviewContext, StatementResult, StatementView,
@@ -432,12 +433,45 @@ export class MockRepository implements Repository {
     return null;
   }
 
+  /** 고객이 지금 해야 할 미처리 행동(실제 데이터). 처리·철회된 제안, 업체 응답 대기, 금액 협의 중, 리뷰 작성(선택)은 넣지 않는다. */
+  private pendingActionsOf(b: Booking): PendingAction[] {
+    if (b.status === 'cancelled') return [];
+    const db = this.db;
+    const out: PendingAction[] = [];
+    if (b.status === 'terms_recheck') out.push('terms_recheck');
+    if (db.proposals.some((p) => p.bookingId === b.id && p.status === 'proposed')) out.push('proposal');
+    if (db.materials.some((m) => m.bookingId === b.id && m.paymentStatus === 'none')) out.push('material');
+    if (db.additionalWorks.some((w) => w.bookingId === b.id && w.status === 'proposed')) out.push('additional');
+    if (db.delays.some((d) => d.bookingId === b.id && d.status === 'open')) out.push('delay');
+    if (db.statements.some((s) => s.bookingId === b.id && s.status === 'awaiting_customer')) out.push('final_statement');
+    return out;
+  }
+
+  private bookingItems(): BookingListItem[] {
+    return [...this.db.bookings].sort((a, b) => b.visitDate.localeCompare(a.visitDate)).map((b) => {
+      const tf = this.tripFeeOf(b);
+      return {
+        booking: b, providerName: this.provider(b.providerId).name, attention: this.attention(b), pendingActions: this.pendingActionsOf(b),
+        groupClosed: this.group(b.groupId).closed, tripFee: { kind: tf.kind, amount: tf.amount },
+      };
+    });
+  }
+
   listBookings(): Promise<BookingListItem[]> {
-    return this.read(() =>
-      [...this.db.bookings].sort((a, b) => b.visitDate.localeCompare(a.visitDate)).map((b) => {
-        const tf = this.tripFeeOf(b);
-        return { booking: b, providerName: this.provider(b.providerId).name, attention: this.attention(b), groupClosed: this.group(b.groupId).closed, tripFee: { kind: tf.kind, amount: tf.amount } };
-      }));
+    return this.read(() => this.bookingItems());
+  }
+
+  queryBookings(query: BookingListQuery): Promise<BookingQueryResult> {
+    // 목업은 전체를 메모리에서 거른다. 정렬은 기존 화면과 같다(확인할 내용 먼저, 그다음 방문일 최신순).
+    return this.read(() => {
+      const all = this.bookingItems();
+      const { items, excludedMissingVisitDate } = filterBookings(all, query);
+      return {
+        items: items.map((it, i) => ({ it, i })).sort((a, b) => Number(!!b.it.attention) - Number(!!a.it.attention) || a.i - b.i).map((x) => x.it),
+        hasAnyInTab: all.some((it) => tabOf(it.booking) === query.tab),
+        excludedMissingVisitDate,
+      };
+    });
   }
 
   getBooking(id: string): Promise<BookingDetail> {

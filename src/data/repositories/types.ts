@@ -9,6 +9,8 @@
 import type { RequestListQuery } from '../../domain/requestFilter';
 export type { RequestListQuery } from '../../domain/requestFilter';
 import type { TripFeeBasis } from '../../domain/bookingCost';
+import type { BookingListQuery, PendingAction } from '../../domain/bookingFilter';
+export type { BookingListQuery, PendingAction } from '../../domain/bookingFilter';
 import type {
   Address, AdditionalWork, SavedVisitAddress, VisitAddress, Approval, Booking, CancelCause, Category, ChangeProposal, CustomerProfile, DelayChoice,
   DelayNotice, Deduction, FinalStatement, IsoDate, IsoDateTime, MaterialOffer, ProviderDetail, ProviderSummary,
@@ -122,9 +124,20 @@ export interface BookingListItem {
   providerName: string;
   /** 예약 상세의 “지금 확인할 내용”에 해당하는 한 줄 요약 */
   attention: string | null;
+  /** 고객이 해야 할 미처리 행동(실제 데이터 기준). ‘확인 필요만’ 필터에 쓴다 */
+  pendingActions: PendingAction[];
   groupClosed: boolean;
   /** 마감 전 예상 / 마감 후 확정 출장비 */
   tripFee: { kind: 'expected' | 'confirmed' | 'locked'; amount: Won | null };
+}
+
+export interface BookingQueryResult {
+  /** 조건에 맞는 예약(기존 정렬: 확인할 내용이 있는 예약 먼저, 그다음 방문일 최신순) */
+  items: BookingListItem[];
+  /** 조건과 무관하게 이 탭에 예약이 하나라도 있는지(‘예약 없음’과 ‘결과 없음’ 구분) */
+  hasAnyInTab: boolean;
+  /** 방문일이 없거나 잘못돼 날짜 조건에서 제외한 예약 수(추정하지 않음) */
+  excludedMissingVisitDate: number;
 }
 
 export interface PrepaidSummary {
@@ -289,6 +302,11 @@ export interface Repository {
 
   // 예약
   listBookings(): Promise<BookingListItem[]>;
+  /**
+   * 조건(탭·상태 그룹·방문일 범위·확인 필요)으로 내 예약을 조회한다. 필터는 조회 조건일 뿐 데이터를 바꾸지 않는다.
+   * 서버 구현은 페이지네이션이 생겨도 이 조건을 전체 조회에 적용해야 한다.
+   */
+  queryBookings(query: BookingListQuery): Promise<BookingQueryResult>;
   getBooking(id: string): Promise<BookingDetail>;
   listChangeOptions(bookingId: string): Promise<ChangeOption[]>;
   requestChange(input: ChangeRequestInput): Promise<ChangeProposal>;

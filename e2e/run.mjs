@@ -560,6 +560,151 @@ await test('주소: 모바일 키보드(낮은 화면)에서 상세 주소 입�
   await page.getByRole('button', { name: '요청 보내기' }).waitFor();
 });
 
+// ───────── 내 예약 필터(진행 중·이용 내역) ─────────
+const bkStatus = (page) => page.getByRole('button', { name: /^상태 필터/ });
+const bkVisit = (page) => page.getByRole('button', { name: /^방문일 필터/ });
+const bkToggle = (page) => page.getByRole('button', { name: '확인 필요만' });
+const bkCards = (page) => page.locator('main .booking-list > li');
+const bkTab = (page, name) => page.getByRole('tab', { name });
+/** 조회가 끝나 목록 배지가 조건에 맞을 때까지 기다린 뒤 배지 목록 */
+async function bkBadges(page, allowed) {
+  if (allowed) await page.waitForFunction((al) => { const b = [...document.querySelectorAll('main .booking-list > li .badge')].map((x) => x.textContent); return b.length > 0 && b.every((x) => al.includes(x)); }, allowed).catch(() => {});
+  return page.locator('main .booking-list > li .badge').allInnerTexts();
+}
+async function bkCount(page, n) {
+  await page.locator('.filter-bar__count', { hasText: `예약 ${n}건` }).waitFor();
+  await page.waitForFunction((k) => document.querySelectorAll('main .booking-list > li').length === k, n).catch(() => {});
+  eq(await bkCards(page).count(), n, `표시 예약 수 ${n}`);
+}
+async function bkPick(page, which, label) {
+  await (which === 'status' ? bkStatus(page) : bkVisit(page)).click();
+  const dlg = page.getByRole('dialog', { name: which === 'status' ? '상태' : '방문일' });
+  await dlg.getByRole('radio', { name: new RegExp('^' + label) }).check();
+  await dlg.getByRole('button', { name: '적용', exact: true }).click();
+  await dlg.waitFor({ state: 'detached' });
+}
+
+await test('내 예약 필터: 진행 중 상태·방문일·확인 필요(AND), 건수 일치, 전체로 그 조건만 해제, 초기화 없음', async (page) => {
+  await start(page, { path: '/bookings' });
+  await bkCount(page, 11);
+  eq((await bkStatus(page).innerText()).trim(), '상태', '기본 표시');
+  eq((await bkVisit(page).innerText()).trim(), '방문일', '기본 표시');
+  eq(await bkToggle(page).getAttribute('aria-pressed'), 'false', '확인 필요만 기본 꺼짐');
+  const h = (await bkStatus(page).boundingBox()).height;
+  truthy(h >= 40 && h <= 44, `높이 ${h}`);
+  eq(await page.getByRole('button', { name: /초기화/ }).count(), 0, '초기화 버튼 없음');
+  await bkPick(page, 'status', '방문 예정');
+  truthy((await bkBadges(page, ['방문 예정'])).every((x) => x === '방문 예정'), '방문 예정만');
+  await bkCount(page, 5);
+  await bkPick(page, 'status', '작업 중');
+  const w = await bkBadges(page, ['작업 중', '후속 방문 대기']);
+  truthy(w.includes('작업 중') && w.includes('후속 방문 대기'), `작업 중(후속 방문 대기 포함): ${w}`);
+  await bkPick(page, 'status', '최종 금액 확인 필요');
+  truthy((await bkBadges(page, ['최종 금액 확인 필요'])).length === 3, '최종 금액 확인 필요 3건');
+  await bkPick(page, 'status', '정산 대기');
+  await bkCount(page, 1);
+  // 확인 필요만: 정산 대기(금액 협의 중)는 고객 행동이 없어 결과 없음
+  await bkToggle(page).click();
+  eq(await bkToggle(page).getAttribute('aria-pressed'), 'true', '토글 켜짐');
+  await waitText(page, '선택한 조건에 맞는 예약이 없어요.');
+  await bkPick(page, 'status', '전체');
+  await bkCount(page, 7); // 지연·제안·자재·추가 작업·최종 금액 ×3
+  await bkPick(page, 'status', '방문 예정');
+  await bkCount(page, 3); // 방문 예정 AND 확인 필요
+  await bkToggle(page).click();
+  await bkPick(page, 'visit', '이번 주'); // 10-12(월)~10-18(일)
+  await bkVisit(page).filter({ hasText: '이번 주' }).waitFor();
+  await bkCount(page, 5);
+  await bkPick(page, 'visit', '오늘');
+  await bkCount(page, 1);
+  await bkPick(page, 'status', '전체'); // 상태만 해제 → 오늘 방문(진행 중) 전체
+  eq(new URL(page.url()).search, '?a_visit=today', '상태만 해제');
+  await bkPick(page, 'visit', '전체 기간');
+  eq(new URL(page.url()).search, '', '방문일만 해제');
+  await bkCount(page, 11);
+});
+
+await test('내 예약 필터: 탭별 독립 조건 · 탭 전환 후 유지 · 상세 복귀 시 탭·조건 복원', async (page) => {
+  await start(page, { path: '/bookings' });
+  await bkCount(page, 11);
+  await bkPick(page, 'status', '방문 예정');
+  await bkTab(page, '이용 내역').click();
+  await bkCount(page, 6);
+  eq((await bkStatus(page).innerText()).trim(), '상태', '이용 내역은 별도 조건(기본)');
+  eq(await bkToggle(page).count(), 0, '이용 내역에는 확인 필요만 없음');
+  await bkPick(page, 'status', '취소됨');
+  truthy((await bkBadges(page, ['취소됨'])).every((x) => x === '취소됨'), '취소됨만');
+  await bkCount(page, 4);
+  await bkPick(page, 'status', '이용 완료');
+  await bkCount(page, 2);
+  await bkPick(page, 'status', '취소됨');
+  await bkTab(page, '진행 중').click();
+  await bkStatus(page).filter({ hasText: '방문 예정' }).waitFor();
+  await bkCount(page, 5);
+  await bkTab(page, '이용 내역').click();
+  await bkStatus(page).filter({ hasText: '취소됨' }).waitFor();
+  await bkCount(page, 4);
+  await bkCards(page).first().getByRole('link').click();
+  await page.waitForURL((u) => u.pathname.startsWith('/bookings/bk-'));
+  await page.getByRole('link', { name: '뒤로 가기' }).click(); // 쿼리 없는 /bookings 링크
+  await page.waitForURL((u) => u.pathname === '/bookings' && u.search.includes('tab=past'));
+  eq(await bkTab(page, '이용 내역').getAttribute('aria-selected'), 'true', '이용 내역 탭 복원');
+  await bkStatus(page).filter({ hasText: '취소됨' }).waitFor();
+  await bkCount(page, 4);
+  const qs = decodeURIComponent(new URL(page.url()).search);
+  truthy(!/bk-|ad-|동|호/.test(qs), `URL에 조건 외 정보: ${qs}`);
+});
+
+await test('내 예약 필터: 방문일 직접 선택 오류 · 결과 없음에서도 조작 · 적용 전 닫으면 유지 · 키보드', async (page) => {
+  await start(page, { path: '/bookings?tab=past' });
+  await bkCount(page, 6);
+  await bkVisit(page).click();
+  const dlg = page.getByRole('dialog', { name: '방문일' });
+  await waitText(page, '접수·결제·취소일이 아니에요');
+  await dlg.getByRole('radio', { name: '직접 선택', exact: true }).check();
+  await dlg.getByRole('button', { name: '적용', exact: true }).click();
+  await waitText(page, '시작일을 입력해 주세요');
+  await dlg.getByLabel('시작일', { exact: true }).fill('2026-10-12');
+  await dlg.getByLabel('종료일', { exact: true }).fill('2026-10-10');
+  await dlg.getByRole('button', { name: '적용', exact: true }).click();
+  await waitText(page, '종료일은 시작일과 같거나 늦어야 해요');
+  await dlg.getByLabel('시작일', { exact: true }).fill('2025-01-01');
+  await dlg.getByLabel('종료일', { exact: true }).fill('2025-01-02');
+  await dlg.getByRole('button', { name: '적용', exact: true }).click();
+  await waitText(page, '선택한 조건에 맞는 예약이 없어요.');
+  await waitText(page, '날짜나 상태를 변경해주세요.');
+  eq(await page.getByRole('button', { name: /초기화/ }).count(), 0, '빈 결과에도 초기화 없음');
+  truthy(!(await page.locator('main').innerText()).includes('이용 내역이 없어요'), '예약 없음과 구분');
+  // 적용 전 닫으면 유지(키보드: Enter로 열고 Esc로 닫으면 버튼으로 포커스 복귀)
+  await bkStatus(page).focus();
+  await page.keyboard.press('Enter');
+  await page.getByRole('dialog', { name: '상태' }).getByRole('radio', { name: /^취소됨/ }).check();
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label')?.startsWith('상태 필터')).catch(() => {});
+  eq(await page.evaluate(() => document.activeElement?.getAttribute('aria-label')), '상태 필터: 전체', '닫으면 포커스 복귀·적용 안 됨');
+  await bkPick(page, 'visit', '전체 기간'); // 결과 없음에서도 조작
+  await bkCount(page, 6);
+});
+
+await test('내 예약 필터: 일정 변경 합의 전에는 기존 방문일, 수락 후 바뀐 방문일 기준', async (page) => {
+  await start(page, { path: '/bookings?a_visit=custom&a_from=2026-10-19&a_to=2026-10-19' });
+  await waitText(page, '선택한 조건에 맞는 예약이 없어요.'); // bk-k4는 제안(10-19) 확인 대기 → 기존 10-14 기준
+  await page.goto(`${BASE}/proposals/pr-k4`);
+  await page.getByRole('button', { name: '변경 수락하기' }).click();
+  await waitText(page, '수락됨');
+  await page.goto(`${BASE}/bookings?a_visit=custom&a_from=2026-10-19&a_to=2026-10-19`);
+  await bkCount(page, 1);
+  await waitText(page, '깔끔마감');
+});
+
+await test('내 예약 필터: 조회 오류는 빈 결과와 구분하고 다시 시도', async (page) => {
+  await start(page, { path: '/bookings', patch: (d) => { d.settings.failNextQuery = true; } });
+  await waitText(page, '정보를 불러오지 못했습니다');
+  truthy(!(await page.locator('main').innerText()).includes('선택한 조건에 맞는 예약이 없어요'), '오류를 빈 결과로 표시');
+  await page.getByRole('button', { name: /다시 시도/ }).click();
+  await bkCount(page, 11);
+});
+
 // ───────── 내 요청 필터(캡슐형: 요청 상태 단일 선택 + 접수일) ─────────
 const statusBtn = (page) => page.getByRole('button', { name: /^요청 상태 필터/ });
 const periodBtn = (page) => page.getByRole('button', { name: /^접수일 필터/ });
