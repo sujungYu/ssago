@@ -8,8 +8,9 @@ import type { TripFeeBasis } from '../../domain/bookingCost';
 import { filterBookings, tabOf, type BookingListQuery, type PendingAction } from '../../domain/bookingFilter';
 import type {
   AdditionalWork, Booking, Category, ChangeProposal, CustomerProfile, DelayNotice, FinalStatement, Address,
-  ProviderDetail, ProviderSummary, RepairRequest, Review, Transaction, Won, GroupRecord, SavedVisitAddress,
+  ProviderDetail, ProviderSummary, RepairRequest, Review, Transaction, Won, GroupRecord, SavedVisitAddress, IsoDate, PublicGroup,
 } from '../../domain/types';
+import { isGroupJoinable } from '../../domain/jointCalendar';
 import type {
   AdditionalView, ApprovalView, BookingDetail, BookingListItem, BookingQueryResult, BundleDetail, BundleListItem, CancelContext, ChangeOption,
   RequestListQuery, RequestListResult,
@@ -223,6 +224,17 @@ export class MockRepository implements Repository {
         ...this.summary(p, addressId), intro: p.intro, phone: p.phone, afterServiceTerms: p.afterServiceTerms, reviews: p.reviews,
         groups: gs.sort((a, b) => a.date.localeCompare(b.date)).map(toPublicGroup),
       };
+    });
+  }
+
+  listJointGroups(providerId: string, addressId: string | null, date: IsoDate): Promise<PublicGroup[]> {
+    return this.read(() => {
+      this.provider(providerId);
+      if (addressId === null) return [];
+      const gs = this.eligibleGroups(providerId, addressId);
+      if (gs === null) throw new RepoError('address_unavailable');
+      return gs.filter((g) => g.date === date).map(toPublicGroup).filter((g) => isGroupJoinable(g, this.db.now))
+        .sort((a, b) => a.slots[0].localeCompare(b.slots[0]) || a.closeAt.localeCompare(b.closeAt));
     });
   }
 

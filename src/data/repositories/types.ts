@@ -279,6 +279,11 @@ export interface Repository {
   getAddress(id: string): Promise<Address>;
   listProviders(q: ProviderQuery): Promise<ProviderSummary[]>;
   getProvider(id: string, addressId: string | null): Promise<ProviderDetail>;
+  /**
+   * 그 날짜(KST)에 이 주소로 지금 신청할 수 있는 공동 예약 그룹(접수 중·마감 전·남은 자리 있음·주소 범위 안).
+   * 주소가 없으면 빈 목록, 주소 판단이 불가하면 address_unavailable.
+   */
+  listJointGroups(providerId: string, addressId: string | null, date: IsoDate): Promise<PublicGroup[]>;
 
   // 요청
   createRequest(input: NewRequestInput): Promise<RepairRequest>;

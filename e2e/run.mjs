@@ -111,8 +111,11 @@ await test('탐색: 주소 설정 → 카테고리 → 업체 목록(공동 예�
   await waitText(page, '예상 출장비');
   await page.getByRole('link', { name: /한빛설비/ }).first().click();
   await waitText(page, '공동 예약 일정');
+  await waitText(page, '공동 예약 날짜를 선택해주세요.');
+  await page.getByRole('button', { name: /2026년 10월 16일 금요일, 신청 가능/ }).click();
   await waitText(page, '약 12,500원');
-  await waitText(page, '결제 대기 자리는 세대 수에 넣지 않으며');
+  await waitText(page, '본인 예약 확정 시 4세대 기준');
+  await waitText(page, '결제 대기 자리를 빼고');
 });
 
 await test('탐색: 주소 미설정이면 공동 예약 가능 여부를 단정하지 않는다', async (page) => {
@@ -148,8 +151,9 @@ await test('로딩 상태 표시', async (page) => {
 
 await test('요청: 공동 날짜로 복수 작업 요청서 제출', async (page) => {
   await start(page, { path: '/providers/p1' });
-  await page.locator('input[name="slot"]').first().check();
-  await page.getByRole('link', { name: '이 날짜로 수리 요청하기' }).click();
+  await page.getByRole('button', { name: /2026년 10월 16일 금요일, 신청 가능/ }).click();
+  await page.locator('input[name="joint-group"]').first().check();
+  await page.getByRole('button', { name: '선택한 일정으로 수리 요청하기' }).click();
   await waitText(page, '수리 요청서');
   await waitText(page, '고객 가능 시간');
   await page.getByRole('button', { name: '요청 보내기' }).click();
@@ -1327,6 +1331,166 @@ await test('정책 문구: 할인·채팅·보증 표현 금지', async (page) =
     truthy(!/채팅하기|메시지 보내기|보증합니다|인증 업체|인증 배지/.test(body), `${u}: 금지 표현`);
   }
 });
+
+// ───────── 업체 상세: 공동 예약 캘린더 ─────────
+const dayBtn = (page, md) => page.locator(`.jcal button[data-day="2026-${md}"]`);
+const reqBtn = (page) => page.getByRole('button', { name: '선택한 일정으로 수리 요청하기' });
+
+await test('공동 예약 캘린더: 신청 가능한 날짜만 활성화(마감·자리 없음 제외), 처음엔 자동 선택 없음', async (page) => {
+  await start(page, { path: '/providers/p1' });
+  await page.locator('.jcal').waitFor();
+  eq(await page.locator('.jcal__title').innerText(), '2026년 10월', '처음 보여주는 달');
+  await waitText(page, '공동 예약 날짜를 선택해주세요.');
+  const enabled = await page.locator('.jcal button[data-day]:not([disabled])').evaluateAll((els) => els.map((e) => e.dataset.day));
+  eq(JSON.stringify(enabled), JSON.stringify(['2026-10-16']), '활성 날짜(10/17 g3은 남은 자리 0, 10/20 g2는 주소 범위 밖)');
+  truthy(await dayBtn(page, '10-17').isDisabled(), '자리 없는 날짜 비활성');
+  truthy(await dayBtn(page, '10-12').isDisabled(), '지난 날짜 비활성');
+  eq(await page.locator('input[name="joint-group"]').count(), 0, '날짜 선택 전 카드 없음');
+  truthy(await reqBtn(page).isDisabled(), '요청 버튼 비활성');
+  // 접근성 이름·오늘 표시(색 외 ‘오늘’ 글자)
+  eq(await dayBtn(page, '10-13').getAttribute('aria-label'), '2026년 10월 13일 화요일, 오늘, 신청 가능한 공동 예약 없음', '오늘 이름');
+  truthy((await dayBtn(page, '10-13').innerText()).includes('오늘'), '오늘 글자');
+  eq(await dayBtn(page, '10-16').getAttribute('aria-label'), '2026년 10월 16일 금요일, 신청 가능한 공동 예약 2개', '가능 날짜 이름');
+  eq(await dayBtn(page, '10-16').locator('.jcal__dot').count(), 1, '가능 날짜 점');
+  // 비활성 날짜는 눌러도 아무 일 없음
+  await dayBtn(page, '10-17').click({ force: true });
+  await waitText(page, '공동 예약 날짜를 선택해주세요.');
+  await page.screenshot({ path: join(ROOT, 'e2e/screens/390_provider_calendar.png'), fullPage: true });
+});
+
+await test('공동 예약 캘린더: 날짜 선택 → 그 날짜 카드만, 같은 날 여러 그룹 비교·단일 선택, 날짜만으로는 요청 불가', async (page) => {
+  await start(page, { path: '/providers/p1' });
+  await dayBtn(page, '10-16').click();
+  await waitText(page, '10월 16일(금)의 공동 예약');
+  eq(await dayBtn(page, '10-16').getAttribute('aria-pressed'), 'true', '선택 표시');
+  const cards = page.locator('.joint-card');
+  await page.locator('.joint-card').first().waitFor(); 
+  eq(await cards.count(), 2, '같은 날 두 그룹');
+  eq(await page.locator('input[name="joint-group"]:checked').count(), 0, '그룹 자동 선택 없음');
+  truthy(await reqBtn(page).isDisabled(), '날짜만 선택하면 비활성');
+  const t1 = await cards.nth(0).innerText(); const t2 = await cards.nth(1).innerText();
+  truthy(t1.includes('09:00~12:00') && t1.includes('약 12,500원') && t1.includes('본인 예약 확정 시 4세대 기준') && t1.includes('남은 자리') && t1.includes('2자리') && t1.includes('3세대'), `g1 카드: ${t1}`);
+  truthy(t2.includes('13:00~16:00') && t2.includes('약 22,500원') && t2.includes('본인 예약 확정 시 2세대 기준') && t2.includes('10월 15일 (목) 12:00'), `g1b 카드: ${t2}`);
+  truthy(!t1.includes('그룹 총 출장비') || !(await cards.nth(0).locator('details').evaluate((d) => d.open)), '계산 상세는 접혀 있음');
+  eq(await page.getByText('정확한 방문 시각은 업체가 승인할 때 제안해요').count(), 1, '공통 안내는 한 번만');
+  // 계산 상세: 숫자와 기준 일치
+  await cards.nth(0).getByText('출장비 계산 상세').click();
+  const d1 = await cards.nth(0).locator('details').innerText();
+  truthy(d1.includes('50,000원') && d1.includes('1자리 · 분담 세대 수에서 제외') && d1.includes('50,000원 ÷ 4세대') && d1.includes('약 12,500원') && d1.includes('37,500원(75%) 덜 내요') && d1.includes('마감 때 확정된 세대 수'), `계산 상세: ${d1}`);
+  truthy(!(await page.locator('input[name="joint-group"]:checked').count()), '계산 상세를 펼쳐도 선택되지 않음');
+  // 단일 선택
+  await cards.nth(0).locator('input').check();
+  await cards.nth(1).locator('input').check();
+  eq(await page.locator('input[name="joint-group"]:checked').count(), 1, '하나만 선택');
+  truthy(await reqBtn(page).isEnabled(), '그룹 선택 후 활성');
+  await page.screenshot({ path: join(ROOT, 'e2e/screens/390_provider_calendar_day.png'), fullPage: true });
+  // 신청: 최신 상태 확인 후 기존 요청서로(선택한 그룹)
+  await reqBtn(page).click();
+  await page.waitForURL((u) => u.pathname === '/providers/p1/request' && u.searchParams.get('group') === 'g1b');
+  await waitText(page, '수리 요청서');
+});
+
+await test('공동 예약 캘린더: 월 이동(다음 달 일정)·날짜 변경 시 이전 그룹 선택 해제·선택 날짜 제목 유지', async (page) => {
+  await start(page, { path: '/providers/p1' });
+  await dayBtn(page, '10-16').click();
+  await page.locator('.joint-card input').first().check();
+  truthy(await reqBtn(page).isEnabled(), '선택');
+  truthy(await page.getByRole('button', { name: '이전 달' }).isDisabled(), '이번 달 이전으로는 이동 불가');
+  await page.getByRole('button', { name: '다음 달' }).click();
+  eq(await page.locator('.jcal__title').innerText(), '2026년 11월', '다음 달');
+  // 월만 옮기면 선택 날짜·카드는 유지되고 제목에 날짜가 남는다
+  await waitText(page, '10월 16일(금)의 공동 예약');
+  truthy(await reqBtn(page).isEnabled(), '월 이동만으로는 선택 유지');
+  await page.locator('.jcal button[data-day="2026-11-03"]').click();
+  await waitText(page, '11월 3일(화)의 공동 예약');
+  eq(await page.locator('input[name="joint-group"]:checked').count(), 0, '다른 날짜를 고르면 이전 그룹 해제');
+  truthy(await reqBtn(page).isDisabled(), '날짜 변경 후 비활성');
+  await page.locator('.joint-card').first().waitFor(); 
+  eq(await page.locator('.joint-card').count(), 1, '11/3 카드만');
+  // 키보드: 방향키로 신청 가능 날짜 이동, Enter로 선택
+  await page.getByRole('button', { name: '이전 달' }).click();
+  await dayBtn(page, '10-16').focus();
+  await page.keyboard.press('Enter');
+  await waitText(page, '10월 16일(금)의 공동 예약');
+  truthy(await dayBtn(page, '10-16').evaluate((el) => el === document.activeElement && getComputedStyle(el).outlineStyle !== 'none'), '키보드 포커스 표시');
+});
+
+await test('공동 예약 캘린더: 이번 달에 일정이 없으면 가장 가까운 달, 연도 넘김(12월 → 1월)', async (page) => {
+  await start(page, { path: '/providers/p1', patch: (db) => {
+    for (const g of db.groups.filter((x) => x.providerId === 'p1')) { g.date = '2027-01-08'; g.closeAt = '2027-01-07T18:00:00+09:00'; }
+    db.groups.find((x) => x.id === 'g1b').date = '2027-02-02'; db.groups.find((x) => x.id === 'g1b').closeAt = '2027-02-01T18:00:00+09:00';
+    db.now = '2026-12-20T10:00:00+09:00';
+  } });
+  await page.locator('.jcal').waitFor();
+  eq(await page.locator('.jcal__title').innerText(), '2027년 1월', '가장 가까운 일정의 달');
+  await page.locator('.jcal button[data-day="2027-01-08"]').click();
+  await waitText(page, '2027년 1월 8일(금)의 공동 예약');
+  await page.getByRole('button', { name: '이전 달' }).click();
+  eq(await page.locator('.jcal__title').innerText(), '2026년 12월', '이전 해로');
+  await page.getByRole('button', { name: '다음 달' }).click(); await page.getByRole('button', { name: '다음 달' }).click();
+  eq(await page.locator('.jcal__title').innerText(), '2027년 2월', '다음 해 2월');
+  truthy(await page.locator('.jcal button[data-day="2027-02-02"]').isEnabled(), '2월 일정');
+});
+
+await test('공동 예약 캘린더: 공동 일정 없음 → 안내·새 날짜 요청 / 날짜 조회 오류 → 재시도', async (page) => {
+  await start(page, { path: '/providers/p1', address: 'ad-far' });
+  await waitText(page, '현재 신청 가능한 공동 예약이 없어요.');
+  eq(await page.locator('.jcal').count(), 0, '캘린더 없음');
+  await page.getByRole('link', { name: '다른 날짜로 새 예약 요청' }).click();
+  await page.waitForURL((u) => u.pathname === '/providers/p1/request' && u.searchParams.get('new') === '1');
+  await start(page, { path: '/providers/p1' });
+  await page.locator('.jcal').waitFor();
+  // 다음 조회(날짜별) 1회 실패: 저장소 변경 알림 없이 설정해 다른 화면 조회에는 영향을 주지 않는다
+  await page.waitForFunction(() => !!window.__sagoDev);
+  await page.evaluate(() => { window.__sagoDev.db.settings.failNextQuery = true; });
+  await dayBtn(page, '10-16').click();
+  await page.getByRole('button', { name: '다시 시도' }).click();
+  await page.locator('.joint-card').first().waitFor(); 
+  eq(await page.locator('.joint-card').count(), 2, '재시도 후 카드');
+});
+
+await test('공동 예약 캘린더: 선택 후 그룹이 마감·자리 없음이 되면 선택 해제·사유·다른 일정 제공', async (page) => {
+  await start(page, { path: '/providers/p1' });
+  await dayBtn(page, '10-16').click();
+  await page.locator('.joint-card').nth(1).locator('input').check(); // g1b
+  await dev(page, 'closeGroup', 'g1b'); // 업체가 접수 마감
+  await waitText(page, '선택한 일정을 신청할 수 없게 됐어요');
+  await waitText(page, '접수가 마감·종료됐거나');
+  eq(await page.locator('input[name="joint-group"]:checked').count(), 0, '선택 해제');
+  truthy(await reqBtn(page).isDisabled(), '요청 버튼 비활성');
+  eq(await page.locator('.joint-card').count(), 1, '같은 날짜의 다른 일정');
+  truthy(await page.getByRole('link', { name: '다른 날짜로 새 예약 요청' }).isVisible(), '새 날짜 요청');
+  // 자리 없음: 화면 갱신 알림 없이 다른 고객이 자리를 채운 상황 → 요청 버튼을 누를 때 최신 상태로 다시 확인
+  await page.locator('.joint-card input').first().check(); // g1
+  await page.evaluate(() => { const g = window.__sagoDev.db.groups.find((x) => x.id === 'g1'); g.pendingSeats = g.capacity - g.confirmedHouseholds; });
+  await reqBtn(page).click();
+  await waitText(page, '남은 자리가 없어요.');
+  eq(new URL(page.url()).pathname, '/providers/p1', '요청서로 넘어가지 않음');
+  eq(await page.locator('input[name="joint-group"]:checked').count(), 0, '선택 해제');
+  truthy(await reqBtn(page).isDisabled(), '요청 버튼 비활성');
+});
+
+for (const w of [360, 1280]) {
+  await test(`공동 예약 캘린더: ${w}px 표시 — 날짜 칸·월 이동 버튼 크기, 펼친 카드가 넘치지 않음`, async (page) => {
+    await page.setViewportSize({ width: w, height: 900 });
+    await start(page, { path: '/providers/p1' });
+    const sz = await page.evaluate(() => [...document.querySelectorAll('.jcal__day, .jcal__head .icon-btn')].map((b) => { const r = b.getBoundingClientRect(); return Math.min(r.width, r.height); }));
+    truthy(Math.min(...sz) >= 40, `조작 영역이 작음: ${Math.min(...sz)}`);
+    await dayBtn(page, '10-16').click();
+    await page.locator('.joint-card').first().waitFor();
+    for (const d of await page.locator('.joint-card summary').all()) await d.click();
+    const bad = await page.evaluate(() => {
+      const out = [];
+      for (const card of document.querySelectorAll('.joint-card')) {
+        const cr = card.getBoundingClientRect();
+        for (const el of card.querySelectorAll('*')) { const r = el.getBoundingClientRect(); if (r.width && (r.right > cr.right + 0.5 || r.left < cr.left - 0.5)) out.push(el.textContent.trim().slice(0, 30)); }
+      }
+      return { out, over: document.documentElement.scrollWidth > innerWidth };
+    });
+    truthy(!bad.out.length && !bad.over, `카드 넘침: ${JSON.stringify(bad)}`);
+    await page.screenshot({ path: join(ROOT, `e2e/screens/${w}_provider_calendar_day_open.png`), fullPage: true });
+  }, { width: w });
+}
 
 // ───────── 탐색 주소 공유(업체 찾기 ↔ 카테고리별 업체 목록) ─────────
 const region = (page) => page.locator('.region-card');

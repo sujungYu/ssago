@@ -310,3 +310,40 @@ a.list-row:hover { background: #fafbfd; }
 .capsule--toggle { padding-left: var(--sp-3); }
 .capsule__check { display: inline-grid; place-items: center; width: 18px; height: 18px; border: 1.5px solid var(--c-line-strong); border-radius: 50%; flex: none; }
 .capsule--on .capsule__check { border-color: var(--c-primary); background: var(--c-primary); color: #fff; }
+
+/* ───────── 업체 상세: 공동 예약 캘린더 ───────── */
+/* 가능 = 굵은 블루 숫자 + 점, 선택 = 채운 블루 칸 + 체크, 오늘 = ‘오늘’ 글자 + 테두리, 불가 = 흐린 숫자(누를 수 없음) */
+.jcal { background: var(--c-surface); border: 1px solid var(--c-line); border-radius: var(--r-lg); padding: var(--sp-3); }
+.jcal__head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); margin-bottom: var(--sp-2); }
+.jcal__title { font-size: var(--fs-md); font-weight: 700; }
+.jcal__next svg { transform: rotate(180deg); }
+.icon-btn:disabled { color: var(--c-disabled-text); background: transparent; cursor: not-allowed; opacity: .5; }
+.jcal__grid { width: 100%; border-collapse: separate; border-spacing: 2px; table-layout: fixed; }
+.jcal__grid th { font-size: var(--fs-xs); font-weight: 600; color: var(--c-text-2); padding: 4px 0; }
+.jcal__grid td { padding: 0; text-align: center; }
+.jcal__day {
+  width: 100%; min-height: 48px; max-width: 56px; margin: 0 auto; border: 1px solid transparent; border-radius: var(--r-md); background: transparent;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; padding: 4px 0; color: var(--c-disabled-text); line-height: 1.1;
+}
+.jcal__day:disabled { cursor: default; }
+.jcal__num { font-size: var(--fs-sm); }
+.jcal__mark { height: 12px; display: grid; place-items: center; font-size: 10px; font-weight: 700; }
+.jcal__dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--c-primary); }
+.jcal__day--open { color: var(--c-primary); background: var(--c-info-bg); cursor: pointer; }
+.jcal__day--open .jcal__num { font-weight: 800; }
+.jcal__day--open:hover { border-color: var(--c-primary); }
+.jcal__day--today { border-color: var(--c-line-strong); color: var(--c-text); }
+.jcal__day--today.jcal__day--open { color: var(--c-primary); border-color: var(--c-primary); }
+.jcal__day--on, .jcal__day--on:hover { background: var(--c-primary); border-color: var(--c-primary-press); color: #fff; }
+.jcal__day--on .jcal__dot { background: #fff; }
+.jcal__day:focus-visible { outline: 3px solid var(--c-focus); outline-offset: 1px; }
+.jcal__legend { display: flex; flex-wrap: wrap; gap: var(--sp-3); margin-top: var(--sp-2); }
+.jcal__legend > span { display: inline-flex; align-items: center; gap: 4px; }
+.jcal__legend-on { display: inline-grid; place-items: center; width: 14px; height: 14px; border-radius: 4px; background: var(--c-primary); color: #fff; }
+.jcal__legend-today { font-size: 10px; font-weight: 700; padding: 0 4px; border: 1px solid var(--c-line-strong); border-radius: 4px; }
+.jcal__prompt { text-align: center; color: var(--c-text-2); padding: var(--sp-3) 0; }
+.joint-card { display: flex; flex-direction: column; border-radius: var(--r-md); }
+.joint-card .radio-card { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+.joint-card__detail { border: 1px solid var(--c-line-strong); border-top: 0; border-radius: 0 0 var(--r-md) var(--r-md); padding: 0 var(--sp-4); background: var(--c-surface); }
+.joint-card__detail:last-child { border-bottom: 1px solid var(--c-line-strong); }
+.joint-card:has(input:checked) .joint-card__detail { border-color: var(--c-primary); }

@@ -127,6 +127,9 @@ const groups: GroupRecord[] = [
   group({ id: 'g8', providerId: 'p6', date: ymd('10-16'), closeAt: k('10-15', '18:00'), totalTripFee: 50000, capacity: 4, anchorKey: 'complex:haessal3', ended: true }),
   group({ id: 'g9', providerId: 'p6', date: ymd('10-19'), closeAt: k('10-18', '18:00'), totalTripFee: 60000, capacity: 4, anchorKey: 'pending-new', slots: ['09:00–12:00'] }),
   group({ id: 'gn-p5', providerId: 'p5', date: ymd('10-19'), closeAt: k('10-18', '18:00'), totalTripFee: 50000, capacity: 5, confirmedHouseholds: 2, slots: ['09:00–12:00'], anchorKey: 'complex:haessal3' }),
+  // 업체 상세 캘린더: 같은 날(10/16) 시간·출장비·마감이 다른 두 번째 그룹, 다음 달 일정
+  group({ id: 'g1b', providerId: 'p1', date: ymd('10-16'), closeAt: k('10-15', '12:00'), totalTripFee: 45000, capacity: 4, confirmedHouseholds: 1, slots: ['13:00–16:00'], anchorKey: 'complex:haessal3' }),
+  group({ id: 'g1n', providerId: 'p1', date: ymd('11-03'), closeAt: k('11-02', '18:00'), totalTripFee: 50000, capacity: 5, confirmedHouseholds: 2, anchorKey: 'complex:haessal3' }),
   // 마감된 그룹(확정 출장비 고정)
   group({ id: 'gc-p1', providerId: 'p1', date: ymd('10-14'), closeAt: k('10-13', '18:00'), totalTripFee: 50000, confirmedHouseholds: 4, closed: true, finalPerHouseholdFee: 12500, slots: ['09:00–12:00'], anchorKey: 'complex:haessal3' }),
   group({ id: 'gc-p4', providerId: 'p4', date: ymd('10-13'), closeAt: k('10-12', '18:00'), totalTripFee: 45000, confirmedHouseholds: 3, closed: true, finalPerHouseholdFee: 15000, slots: ['13:00–16:00'], anchorKey: 'complex:haessal3' }),
