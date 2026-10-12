@@ -2,7 +2,8 @@ import type { Booking, IsoDate, PaymentStatus, RefundStatus, TimeSlot, VisitTime
 import { formatDate } from '../domain/time';
 import { VISIT_TIME_MISSING, formatSlots, isValidVisitTime } from '../domain/visitTime';
 import { VISIT_ADDRESS_MISSING } from '../domain/address';
-import type { VisitAddress } from '../domain/types';
+import type { CustomerContact, VisitAddress } from '../domain/types';
+import { maskPhone } from '../domain/profile';
 import type { Tone } from '../domain/rules';
 import { Badge } from '../components/ui';
 
@@ -60,6 +61,11 @@ export function VisitText({ date, time, strong }: { date: IsoDate; time?: VisitT
 export function VisitAddressText({ va }: { va: VisitAddress | null }) {
   if (!va) return <Badge tone="warn">{VISIT_ADDRESS_MISSING}</Badge>;
   return <span>{va.line1}{va.detail && <><br />{va.detail}</>}</span>;
+}
+
+/** 요청·예약의 이름·연락처(제출 당시 스냅숏). 내 정보와 같은 방식으로 연락처 가운데를 가린다. */
+export function ContactText({ c }: { c: CustomerContact }) {
+  return <span>{c.name} · <span className="nowrap">{maskPhone(c.phone)}</span></span>;
 }
 
 export function initialOf(name: string) { return name.slice(0, 1); }

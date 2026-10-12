@@ -3,7 +3,7 @@ export type RepoErrorCode =
   | 'network' | 'save_unknown' | 'not_found' | 'address_unavailable' | 'address_not_eligible'
   | 'request_ended' | 'group_closed' | 'payment_expired' | 'recheck_required' | 'version_changed'
   | 'payment_in_progress' | 'no_amount_due' | 'stale_cancel' | 'already_cancelled' | 'change_stale'
-  | 'not_reviewable' | 'invalid';
+  | 'not_reviewable' | 'invalid' | 'storage_failed';
 
 export class RepoError extends Error {
   readonly code: RepoErrorCode;
@@ -32,6 +32,7 @@ const MESSAGES: Record<RepoErrorCode, { title: string; hint?: string }> = {
   change_stale: { title: '최신 변경 조건을 확인해 주세요.' },
   not_reviewable: { title: '정산이 완료된 실제 이용 건에서 리뷰를 작성할 수 있습니다.' },
   invalid: { title: '입력한 내용을 확인해 주세요.' },
+  storage_failed: { title: '저장하지 못했어요. 잠시 후 다시 시도해 주세요.', hint: '이 브라우저에서 저장 공간을 쓸 수 없는 상태일 수 있어요.' },
   // 인증 — 비밀번호나 서버 원문 메시지는 넣지 않는다.
 };
 

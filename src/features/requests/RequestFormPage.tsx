@@ -15,6 +15,7 @@ import { expectedFeeForJoiner } from '../../domain/pricing';
 import { Icon } from '../../components/Icon';
 import { AsyncView, Banner, Button, Dialog, EmptyState, Field, KV, LinkButton, Section } from '../../components/ui';
 import { SAVED_ADDRESS_LOADED, detailError, savedDetailFor } from '../../domain/address';
+import { NAME_MAX, PHONE_HINT, formatPhone, nameError, phoneDigits, phoneError } from '../../domain/profile';
 import type { Address } from '../../domain/types';
 import { AddressSearch } from '../discovery/AddressSearch';
 
@@ -27,6 +28,8 @@ const blank = (): TaskDraft => ({ key: seq++, title: '', description: '', photoN
  * C-05 수리 요청서. 요청만으로는 예약이 확정되지 않는다.
  * 방문 주소 = 건물(기본 주소) + 상세 주소. 건물은 업체 찾기 탐색 주소로 시작하지만 여기서 바꿔도 탐색 주소는 바뀌지 않는다.
  * 저장한 재사용 주소는 같은 건물일 때만 상세 주소를 자동 입력하고, ‘다음 신청에도 이 주소 사용’은 기본 미선택이다.
+ * 이름·연락처는 내 정보(공통 고객 정보)를 기본값으로 한 번만 채운다. 고객이 고친 값은 내 정보가 바뀌어도 덮어쓰지 않고,
+ * 여기서 고쳐도 내 정보는 바뀌지 않는다. 제출하면 이 요청에 제출 당시 값으로 저장된다.
  */
 export function RequestFormPage() {
   const { id = '' } = useParams();
@@ -43,6 +46,7 @@ export function RequestFormPage() {
   const address = useAsync(() => (baseId ? repo.getAddress(baseId) : Promise.resolve(null)), [repo, baseId]);
   const saved = useAsync(() => repo.getSavedVisitAddress(), [repo]);
   const bundle = useAsync(() => (bundleId ? repo.getBundle(bundleId) : Promise.resolve(null)), [repo, bundleId]);
+  const profile = useAsync(() => repo.getProfile(), [repo]);
   const action = useAction();
   const attempt = useAttemptKey('req');
 
@@ -55,6 +59,10 @@ export function RequestFormPage() {
   const [picking, setPicking] = useState(false);
   const [baseChanged, setBaseChanged] = useState(false);
   const [touched, setTouched] = useState(false);
+  const [contactName, setContactName] = useState('');
+  const [contactPhone, setContactPhone] = useState('');
+  const contactEdited = useRef({ name: false, phone: false }); // 고객이 직접 고친 항목
+  const contactFilled = useRef(false);
   const prefilled = useRef(false);
   // 제출 오류 → 첫 오류로 이동: 제출할 때마다 증가시키고, 오류 문구가 렌더링된 뒤(effect) 화면 순서상 첫 오류로 한 번만 이동한다
   const formRef = useRef<HTMLFormElement>(null);
@@ -75,6 +83,15 @@ export function RequestFormPage() {
     const d = savedDetailFor(saved.data ?? null, base);
     if (d !== null && !detail) { setDetail(d); setAutofilled(d); }
   }, [address.data, saved.data, saved.error]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 내 정보로 이름·연락처를 한 번만 채운다. 이미 직접 입력한 항목은 건드리지 않고, 이후 내 정보가 바뀌어도 다시 채우지 않는다.
+  useEffect(() => {
+    const p = profile.data;
+    if (!p || contactFilled.current) return;
+    contactFilled.current = true;
+    if (!contactEdited.current.name) setContactName(p.name);
+    if (!contactEdited.current.phone) setContactPhone(formatPhone(p.phone));
+  }, [profile.data]);
 
   /** 신청서에서 방문 건물을 바꾸면 이전 건물의 상세 주소(자동 입력 포함)를 비우고 다시 확인하게 한다. */
   const changeBase = (a: Address) => {
@@ -124,12 +141,15 @@ export function RequestFormPage() {
             date: !joint && !newDate ? '희망 방문 날짜를 선택해 주세요.' : !joint && newDate < minDate ? `${formatDate(minDate)} 이후 날짜를 선택해 주세요.` : null,
             base: !address.data ? '방문할 건물 주소를 선택해 주세요.' : null,
             detail: address.data ? detailError(address.data.kind, detail) : null,
+            name: nameError(contactName),
+            phone: phoneError(contactPhone),
           };
           const valid = !Object.values(err).some(Boolean) && !groupMissing;
-          // 화면 순서대로의 오류 대상(작업 → 건물 주소 → 상세 주소 → 희망 날짜 → 가능 시간). 안내 문구는 오류가 아니다
+          // 화면 순서대로의 오류 대상(작업 → 건물 주소 → 상세 주소 → 이름 → 연락처 → 희망 날짜 → 가능 시간). 안내 문구는 오류가 아니다
           errOrder.current = [
             ...tasks.filter((t) => !t.title.trim()).map((t) => `task-${t.key}`),
-            ...(err.base ? ['base'] : []), ...(err.detail ? ['detail'] : []), ...(err.date ? ['date'] : []), ...(err.slots ? ['slots'] : []),
+            ...(err.base ? ['base'] : []), ...(err.detail ? ['detail'] : []), ...(err.name ? ['name'] : []), ...(err.phone ? ['phone'] : []),
+            ...(err.date ? ['date'] : []), ...(err.slots ? ['slots'] : []),
           ];
 
           const submit = () => {
@@ -146,6 +166,7 @@ export function RequestFormPage() {
                 providerId: p.id, groupId: joint ? groupId : null, newDateWish: joint ? undefined : newDate, slots,
                 tasks: tasks.map((t) => ({ title: t.title.trim(), description: t.description.trim(), photoNames: t.photoNames })),
                 addressId: address.data!.id, addressDetail: detail.trim(), saveAddressForNext: saveForNext,
+                contact: { name: contactName.trim(), phone: phoneDigits(contactPhone) },
                 bundleId: bundleId ?? undefined, idempotencyKey: attempt.get(),
               });
               setBundleId(null);
@@ -243,6 +264,21 @@ export function RequestFormPage() {
                   <AddressSearch selectedId={baseId} onPick={changeBase} />
                 </Dialog>
               )}
+
+              <Section title="연락받을 정보">
+                <div className="card stack">
+                  <p className="small muted">업체가 방문 일정을 안내할 때 쓰는 이름·연락처예요. 내 정보에 저장된 값으로 채웠고, 이 요청에만 바꿔 쓸 수 있어요(내 정보는 그대로예요). 데모라 가상 정보를 입력해도 돼요.</p>
+                  {profile.error !== undefined && <p className="xs muted">내 정보를 불러오지 못했어요. 이름·연락처를 직접 입력해 주세요.</p>}
+                  <Field label="이름" error={touched ? err.name : null} liveError={false}>
+                    {(fp) => <input {...fp} data-err-target="name" className="input" value={contactName} maxLength={NAME_MAX + 10} autoComplete="off"
+                      onChange={(e) => { contactEdited.current.name = true; setContactName(e.target.value); }} />}
+                  </Field>
+                  <Field label="연락처" hint={PHONE_HINT} error={touched ? err.phone : null} liveError={false}>
+                    {(fp) => <input {...fp} data-err-target="phone" className="input" type="tel" inputMode="tel" value={contactPhone} maxLength={20} autoComplete="off" placeholder="010-0000-0000"
+                      onChange={(e) => { contactEdited.current.phone = true; setContactPhone(e.target.value); }} />}
+                  </Field>
+                </div>
+              </Section>
 
               <Section title="고객 가능 시간">
                 {!joint && (

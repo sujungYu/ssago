@@ -125,6 +125,8 @@ export interface RepairRequest {
   addressId: string; // 방문 건물 식별자(참여 자격 확인용)
   /** 제출 당시 방문 주소. 본인과 요청받은 업체만 확인. 없으면(이전 데이터) ‘방문 주소 확인 필요’ */
   visitAddress?: VisitAddress;
+  /** 제출 당시 이름·연락처 스냅숏. 내 정보를 나중에 수정해도 바뀌지 않는다. 없으면(이전 데이터) 표시하지 않는다 */
+  contact?: CustomerContact;
   status: RequestStatus;
   createdAt: IsoDateTime;
   updatedAt: IsoDateTime;
@@ -205,6 +207,8 @@ export interface Booking {
   scheduleChanges?: ScheduleChange[];
   /** 승인·확정된 방문 주소(요청에서 복사한 스냅숏). 없으면 ‘방문 주소 확인 필요’ */
   visitAddress?: VisitAddress;
+  /** 확정된 예약의 이름·연락처(요청의 제출 당시 스냅숏을 복사). 내 정보 수정으로 바뀌지 않는다 */
+  contact?: CustomerContact;
   tasks: TaskItem[];
   cancelledAt?: IsoDateTime;
   cancelCause?: CancelCause;
@@ -374,9 +378,16 @@ export interface Review {
   createdAt: IsoDateTime;
 }
 
-export interface CustomerProfile {
-  id: string;
+/** 고객 이름·연락처. 연락처는 숫자만(예: 01012345678). 인증된 정보가 아니다(데모는 가상 정보). src/domain/profile.ts */
+export interface CustomerContact {
   name: string;
+  phone: string;
+}
+
+/** 내 정보(현재 고객 정보). 새 수리 요청서의 이름·연락처 기본값이며, 이미 제출된 요청·예약의 연락처 스냅숏은 바꾸지 않는다. */
+export interface CustomerProfile extends CustomerContact {
+  id: string;
+  /** 요약 표시용(가운데 4자리 가림) */
   phoneMasked: string;
 }
 

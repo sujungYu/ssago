@@ -12,7 +12,7 @@ import type { RequestDetail } from '../../data/repositories/types';
 import { RequestBadge } from './RequestsPage';
 import { progressOfRequest, unlessComplete } from '../../domain/progressStep';
 import { ProgressSteps } from '../../components/ProgressSteps';
-import { VisitAddressText, VisitText, slotsText } from '../shared';
+import { ContactText, VisitAddressText, VisitText, slotsText } from '../shared';
 import { DURATION_NOTE } from '../../domain/visitTime';
 
 function Body({ d, now }: { d: RequestDetail; now: string }) {
@@ -89,6 +89,8 @@ function Body({ d, now }: { d: RequestDetail; now: string }) {
             ...(d.group ? [{ k: '방문 날짜', v: formatDate(d.group.date) }] : r.newDateWish ? [{ k: '희망 날짜', v: formatDate(r.newDateWish) }] : []),
             { k: '고객 가능 시간', v: slotsText(r.slots) },
             { k: '방문 주소', v: <VisitAddressText va={d.visitAddress} /> },
+            // 제출 당시 이름·연락처(내 정보를 나중에 수정해도 바뀌지 않음). 이전 데이터라 없으면 표시하지 않는다
+            ...(r.contact ? [{ k: '연락처', v: <ContactText c={r.contact} /> }] : []),
           ]} />
           <p className="xs muted">정확한 주소와 작업 내용은 나와 요청을 받은 업체만 볼 수 있어요.</p>
         </div>

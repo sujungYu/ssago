@@ -4,7 +4,7 @@
  */
 import { paymentDeadline } from '../../domain/rules';
 import type {
-  Approval, Booking, Category, Deduction, FinalStatement, GroupRecord, MaterialOffer, Refund, RepairRequest,
+  Approval, Booking, Category, CustomerContact, Deduction, FinalStatement, GroupRecord, MaterialOffer, Refund, RepairRequest,
   StatementItem, TaskItem, Transaction, TxKind, Won, VisitAddress,
 } from '../../domain/types';
 import { DEFAULT_SETTINGS, type AddressRecord, type MockDb, type ProviderRecord } from './db';
@@ -147,12 +147,15 @@ const tk = (title: string, description: string, photoNames: string[] = []): Task
 
 const T_FAUCET = () => [tk('욕실 세면대 수전 교체', '수전 손잡이가 헐거워 물이 샙니다.', ['faucet.jpg']), tk('배수 트랩 교체', '배수 속도가 느리고 냄새가 납니다.')];
 
+/** 기본 가상 고객(저장된 내 정보가 없거나 잘못됐을 때 사용). 실제 개인정보가 아니다. */
+export const DEFAULT_CUSTOMER: CustomerContact = { name: '김온다 (가상 고객)', phone: '01000000000' };
+
 function request(r: Partial<RepairRequest> & Pick<RepairRequest, 'id' | 'providerId' | 'status' | 'tasks'>): RepairRequest {
   const addressId = r.addressId ?? 'ad-apt';
   return {
     bundleId: `b-${r.id}`, groupId: null, slots: ['09:00–12:00', '13:00–16:00'],
     createdAt: k('10-13', '09:00'), updatedAt: k('10-13', '09:00'), ...r,
-    addressId, visitAddress: r.visitAddress ?? visitAddressOf(addressId),
+    addressId, visitAddress: r.visitAddress ?? visitAddressOf(addressId), contact: r.contact ?? { ...DEFAULT_CUSTOMER },
   };
 }
 
@@ -231,7 +234,7 @@ function addBooking(b: BookingSeed) {
   bookings.push({
     id: b.id, requestId: b.req, providerId: b.provider, groupId: b.group, addressId: b.address ?? 'ad-apt',
     status: b.status ?? 'confirmed', workStatus: b.work ?? 'scheduled', visitDate: b.visit, visitTime: b.time, customerSlots: [b.window], tasks: b.tasks,
-    visitAddress: visitAddressOf(b.address ?? 'ad-apt'),
+    visitAddress: visitAddressOf(b.address ?? 'ad-apt'), contact: { ...DEFAULT_CUSTOMER },
     createdAt: b.created ?? k('10-09', '11:00'), cancelledAt: b.cancelledAt, cancelCause: b.cancelCause, followUp: b.followUp,
   });
   addTx(b.id, 'deposit', b.deposit, 'success', b.req);
@@ -316,7 +319,7 @@ addRefund('bk-k14', 7500, '최종 금액 정산 · 선결제 초과분', 'comple
 
 const db: MockDb = {
   version: 1, now: MOCK_NOW, seq: 100, ownerAccountId: null,
-  customer: { id: 'cu1', name: '김온다 (가상 고객)', phoneMasked: '010-****-0000' },
+  customer: { id: 'cu1', ...DEFAULT_CUSTOMER, phoneMasked: '010-****-0000' },
   // 사용자별 주소: 처음에는 탐색 주소·재사용 주소 모두 없음(첫 방문·첫 신청)
   exploreAddressId: null, savedVisitAddress: null,
   addressBook, categories: CATEGORIES, providers, groups, requests, approvals, bookings, transactions, refunds, deductions,

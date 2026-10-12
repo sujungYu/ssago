@@ -2280,6 +2280,198 @@ await test('카테고리 카드: 키보드 Tab·Enter로 선택, 포커스 표�
   truthy(outline !== 'none', `포커스 표시 ${outline}`);
 });
 
+// ───────── 내 정보 수정(이름·연락처) ─────────
+const editBtn = (page) => page.getByRole('button', { name: '내 정보 수정' });
+const pDlg = (page) => page.getByRole('dialog', { name: '내 정보 수정' });
+const pName = (page) => pDlg(page).getByLabel('이름', { exact: true });
+const pPhone = (page) => pDlg(page).getByLabel('연락처', { exact: true });
+const profileCard = (page) => page.locator('main .card.row').first();
+
+await test('내 정보 수정: 현재 값 표시 → 저장 → 즉시 반영·완료 안내·마스킹 유지 → 새로고침 후 유지', async (page) => {
+  await start(page, { path: '/me' });
+  await editBtn(page).waitFor();
+  eq((await editBtn(page).innerText()).trim(), '수정', '버튼 글자');
+  await editBtn(page).click();
+  await pDlg(page).waitFor();
+  eq(await pName(page).inputValue(), '김온다 (가상 고객)', '현재 이름 미리 표시');
+  eq(await pPhone(page).inputValue(), '010-0000-0000', '현재 연락처(전체 번호) 미리 표시');
+  eq(await pPhone(page).getAttribute('type'), 'tel', '전화번호 키보드(type)');
+  eq(await pPhone(page).getAttribute('inputmode'), 'tel', '전화번호 키보드(inputmode)');
+  const dialogText = await pDlg(page).innerText();
+  truthy(dialogText.includes('가상 정보를 입력해도 돼요') && !/인증 완료|본인 확인 완료|인증됨/.test(dialogText), '가상 정보 안내·인증 표현 없음');
+  truthy(/취소/.test(dialogText) && /저장하기/.test(dialogText), '하단 버튼');
+  truthy((await pDlg(page).getByRole('button', { name: '저장하기' }).getAttribute('class')).includes('primary'), '저장하기 = 주요 버튼');
+  await pName(page).fill('  박데모  ');
+  await pPhone(page).fill('010 9876-5432');
+  await pDlg(page).getByRole('button', { name: '저장하기' }).click();
+  await pDlg(page).waitFor({ state: 'detached' });
+  await waitText(page, '정보를 수정했어요.');
+  const card = await profileCard(page).innerText();
+  truthy(card.includes('박데모') && card.includes('010-****-5432') && !card.includes('9876'), `즉시 반영·마스킹: ${card}`);
+  eq(await page.evaluate(() => document.activeElement?.getAttribute('aria-label')), '내 정보 수정', '닫은 뒤 수정 버튼으로 포커스');
+  const d = await db(page);
+  eq(d.customer.phone, '01098765432', '숫자만 저장');
+  eq(d.customer.name, '박데모', '앞뒤 공백 제거');
+  await page.reload();
+  await waitText(page, '박데모');
+  truthy((await profileCard(page).innerText()).includes('010-****-5432'), '새로고침 후 유지');
+  truthy(!(await page.locator('main').innerText()).includes('정보를 수정했어요.'), '완료 안내는 새로고침 후 다시 뜨지 않음');
+  const banner = await page.locator('main .banner--info').last().innerText();
+  truthy(banner.includes('이 브라우저 탭에만 저장') && banner.includes('새로고침해도 유지') && banner.includes('이름·연락처'), `저장 범위 안내: ${banner}`);
+  await editBtn(page).click();
+  eq(await pPhone(page).inputValue(), '010-9876-5432', '다시 열면 저장한 값');
+});
+
+await test('내 정보 수정: 취소·닫기·Escape·바깥 누르기는 변경을 반영하지 않음', async (page) => {
+  await start(page, { path: '/me' });
+  for (const how of ['cancel', 'close', 'escape', 'backdrop']) {
+    await editBtn(page).click();
+    await pName(page).fill(`바뀐이름-${how}`);
+    await pPhone(page).fill('010-1111-1111');
+    if (how === 'cancel') await pDlg(page).getByRole('button', { name: '취소' }).click();
+    if (how === 'close') await pDlg(page).getByRole('button', { name: '닫기' }).click();
+    if (how === 'escape') await page.keyboard.press('Escape');
+    if (how === 'backdrop') await page.mouse.click(5, 5);
+    await pDlg(page).waitFor({ state: 'detached' });
+    const card = await profileCard(page).innerText();
+    truthy(card.includes('김온다 (가상 고객)') && card.includes('010-****-0000'), `${how}: 반영 안 됨 ${card}`);
+    truthy(!(await page.locator('main').innerText()).includes('정보를 수정했어요.'), `${how}: 완료 안내 없음`);
+    await editBtn(page).click();
+    eq(await pName(page).inputValue(), '김온다 (가상 고객)', `${how}: 다시 열면 저장된 값`);
+    await pDlg(page).getByRole('button', { name: '취소' }).click();
+  }
+  eq((await db(page)).customer.name, '김온다 (가상 고객)', '저장소 그대로');
+});
+
+await test('내 정보 수정: 빈 값·공백 이름·잘못된 연락처 → 입력란 아래 오류, 첫 오류로 포커스, 고치면 저장', async (page) => {
+  await start(page, { path: '/me' });
+  await editBtn(page).click();
+  await pName(page).fill('   ');
+  await pPhone(page).fill('');
+  await pDlg(page).getByRole('button', { name: '저장하기' }).click();
+  await waitText(page, '이름을 입력해 주세요');
+  await waitText(page, '연락처를 입력해 주세요');
+  eq(await page.evaluate(() => document.activeElement?.getAttribute('data-err-target')), 'name', '첫 오류(이름)로 포커스');
+  eq(await pName(page).getAttribute('aria-invalid'), 'true', '이름 오류 연결');
+  truthy((await pName(page).getAttribute('aria-describedby')).length > 0, '오류 문구 연결');
+  // 이름만 고치면 다음 저장 때 연락처로
+  await pName(page).fill('Kim Demo');
+  for (const [v, msg] of [['011-1234-5678', '010으로 시작하는'], ['010-1234-567', '11자리'], ['010-1234-5678#', '숫자와 하이픈']]) {
+    await pPhone(page).fill(v);
+    await pDlg(page).getByRole('button', { name: '저장하기' }).click();
+    await waitText(page, msg);
+    eq(await page.evaluate(() => document.activeElement?.getAttribute('data-err-target')), 'phone', `${v}: 연락처로 포커스`);
+    truthy(await pDlg(page).isVisible(), '오류면 닫히지 않음');
+  }
+  eq((await db(page)).customer.name, '김온다 (가상 고객)', '오류면 저장 안 함');
+  // Enter로 제출(키보드)
+  await pPhone(page).fill('01012345678');
+  await pPhone(page).press('Enter');
+  await pDlg(page).waitFor({ state: 'detached' });
+  truthy((await profileCard(page).innerText()).includes('Kim Demo'), '한글 외 이름 허용·Enter 저장');
+});
+
+await test('내 정보 수정: 저장 실패 시 입력 유지·실패 안내, 저장 중 중복 제출·닫기 방지', async (page) => {
+  await start(page, { path: '/me', latency: 600 });
+  await editBtn(page).click();
+  await pName(page).fill('실패후성공');
+  await pPhone(page).fill('010-2222-3333');
+  await page.evaluate(() => { window.__sagoDev.db.settings.failNextWrite = true; });
+  await pDlg(page).getByRole('button', { name: '저장하기' }).click();
+  await waitText(page, '정보를 저장하지 못했어요.');
+  eq(await pName(page).inputValue(), '실패후성공', '실패 후 이름 유지');
+  eq(await pPhone(page).inputValue(), '010-2222-3333', '실패 후 연락처 유지');
+  truthy(!(await page.locator('main').innerText()).includes('정보를 수정했어요.'), '실패인데 완료 안내 없음');
+  truthy((await profileCard(page).innerText()).includes('김온다 (가상 고객)'), '실패면 반영 안 함');
+  // 저장 중: 버튼 비활성·연타해도 한 번, Escape로 닫히지 않음
+  const save = pDlg(page).getByRole('button', { name: '저장하기' });
+  await save.click();
+  eq(await save.getAttribute('aria-busy'), 'true', '저장 중 표시');
+  truthy(await save.isDisabled(), '저장 중 비활성');
+  await save.click({ force: true }).catch(() => {});
+  await page.keyboard.press('Escape');
+  truthy(await pDlg(page).isVisible(), '저장 중에는 닫히지 않음');
+  await pDlg(page).waitFor({ state: 'detached' });
+  await waitText(page, '정보를 수정했어요.');
+  truthy((await profileCard(page).innerText()).includes('실패후성공'), '다시 저장하면 반영');
+});
+
+await test('내 정보 수정 → 새 요청서 기본값, 직접 입력한 값은 덮어쓰지 않음, 기존 요청·예약 연락처 유지', async (page) => {
+  await start(page, { path: '/me' });
+  await editBtn(page).click();
+  await pName(page).fill('박데모');
+  await pPhone(page).fill('01098765432');
+  await pDlg(page).getByRole('button', { name: '저장하기' }).click();
+  await waitText(page, '정보를 수정했어요.');
+  // 새 수리 요청서: 바뀐 값이 기본값
+  await page.goto(`${BASE}/providers/p1/request?new=1`);
+  const fName = page.locator('main').getByLabel('이름', { exact: true });
+  const fPhone = page.locator('main').getByLabel('연락처', { exact: true });
+  await page.waitForFunction(() => [...document.querySelectorAll('main input')].some((i) => i.value === '박데모'));
+  eq(await fName.inputValue(), '박데모', '요청서 이름 기본값');
+  eq(await fPhone.inputValue(), '010-9876-5432', '요청서 연락처 기본값');
+  eq(await fPhone.getAttribute('inputmode'), 'tel', '요청서 연락처 키보드');
+  // 작성 중 직접 고친 값은 내 정보가 바뀌어도 그대로
+  await fName.fill('요청용 이름');
+  await page.evaluate(() => window.__sagoDev.repo.updateProfile({ name: '다른이름', phone: '01055556666' }));
+  await page.waitForTimeout(400);
+  eq(await fName.inputValue(), '요청용 이름', '직접 입력한 이름 유지');
+  eq(await fPhone.inputValue(), '010-9876-5432', '열려 있는 요청서는 다시 채우지 않음');
+  // 요청서에서 잘못된 연락처 → 해당 칸 오류·포커스
+  await fillNewDateRequest(page, '연락처 확인용 요청');
+  await detailInput(page).fill('301동 1204호');
+  await fPhone.fill('010-12');
+  await page.getByRole('button', { name: '요청 보내기' }).click();
+  await waitText(page, '11자리');
+  eq(await page.evaluate(() => document.activeElement?.getAttribute('data-err-target')), 'phone', '요청서 연락처 오류로 포커스');
+  await fPhone.fill('010-7777-8888');
+  await page.getByRole('button', { name: '요청 보내기' }).click();
+  await page.waitForURL(/\/requests\/rq-/);
+  await waitText(page, '요청용 이름');
+  truthy((await page.locator('main').innerText()).includes('010-****-8888'), '제출한 연락처(마스킹)');
+  const d = await db(page);
+  const created = d.requests.find((r) => r.tasks[0].title === '연락처 확인용 요청');
+  eq(JSON.stringify(created.contact), JSON.stringify({ name: '요청용 이름', phone: '01077778888' }), '요청 스냅숏');
+  eq(d.customer.name, '다른이름', '요청서에서 고쳐도 내 정보는 그대로');
+  // 기존 요청·확정 예약은 제출 당시 정보
+  await page.goto(`${BASE}/requests/rq-3`);
+  await waitText(page, '연락처');
+  truthy((await page.locator('main').innerText()).includes('김온다 (가상 고객) · 010-****-0000'), '기존 요청 연락처 유지');
+  await page.goto(`${BASE}/bookings/bk-k2`);
+  await waitText(page, '내 작업·방문 주소');
+  const bk = await page.locator('main').innerText();
+  truthy(bk.includes('김온다 (가상 고객) · 010-****-0000') && !bk.includes('다른이름'), '기존 예약 연락처 유지');
+});
+
+for (const w of [390, 1280]) {
+  await test(`내 정보 수정: ${w}px 배치·키보드 조작(열기·Tab 순서·닫기 후 포커스), 가로 넘침 없음`, async (page) => {
+    await page.setViewportSize({ width: w, height: 800 });
+    await start(page, { path: '/me' });
+    await editBtn(page).focus();
+    await page.keyboard.press('Enter');
+    await pDlg(page).waitFor();
+    const r = await page.evaluate(() => {
+      const dlg = document.querySelector('[role=dialog]').getBoundingClientRect();
+      const btns = [...document.querySelectorAll('.dialog-actions-row button')].map((b) => b.getBoundingClientRect());
+      return { overflow: document.documentElement.scrollWidth > innerWidth, inView: dlg.left >= 0 && dlg.right <= innerWidth + .5 && dlg.bottom <= innerHeight + .5,
+        sideBySide: btns.length === 2 && Math.abs(btns[0].top - btns[1].top) < 1 && btns[0].right <= btns[1].left, primaryWider: btns[1].width > btns[0].width,
+        tall: btns.every((b) => b.height >= 44) };
+    });
+    truthy(!r.overflow && r.inView && r.sideBySide && r.primaryWider && r.tall, `배치 ${JSON.stringify(r)}`);
+    const card = await profileCard(page).evaluate((el) => { const b = el.querySelector('button').getBoundingClientRect(); const c = el.getBoundingClientRect(); return { right: c.right - b.right, inside: b.right <= c.right }; });
+    truthy(card.inside && card.right < 40, `수정 버튼이 프로필 영역 오른쪽 ${JSON.stringify(card)}`);
+    // Tab 순서: 닫기 → 이름 → 연락처 → 취소 → 저장하기 → (갇힘) 닫기
+    const seq = [];
+    for (let i = 0; i < 6; i++) { seq.push(await page.evaluate(() => document.activeElement?.getAttribute('aria-label') || document.activeElement?.getAttribute('data-err-target') || document.activeElement?.textContent.trim())); await page.keyboard.press('Tab'); }
+    eq(seq.join(','), '닫기,name,phone,취소,저장하기,닫기', 'Tab 순서·포커스 가둠');
+    if (w === 390) await page.screenshot({ path: join(ROOT, 'e2e/screens/390_me_edit.png') });
+    if (w === 1280) await page.screenshot({ path: join(ROOT, 'e2e/screens/1280_me_edit.png') });
+    await page.keyboard.press('Escape');
+    await pDlg(page).waitFor({ state: 'detached' });
+    eq(await page.evaluate(() => document.activeElement?.getAttribute('aria-label')), '내 정보 수정', '닫은 뒤 수정 버튼으로 포커스');
+  }, { width: w });
+}
+
 // ───────── 상단 메뉴: 업체 찾기 앞 홈 아이콘 ─────────
 const homeLink = (page) => page.locator('nav.top-nav').getByRole('link', { name: '업체 찾기 홈으로 이동', exact: true });
 

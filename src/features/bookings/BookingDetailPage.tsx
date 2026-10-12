@@ -9,7 +9,7 @@ import { formatWon } from '../../domain/money';
 import { Icon } from '../../components/Icon';
 import { AsyncView, Badge, Banner, KV, LinkButton, PhoneButton, Section } from '../../components/ui';
 import type { BookingDetail } from '../../data/repositories/types';
-import { PAYMENT_STATUS, VisitAddressText, VisitText, bookingBadge, slotsText } from '../shared';
+import { ContactText, PAYMENT_STATUS, VisitAddressText, VisitText, bookingBadge, slotsText } from '../shared';
 import { BookingCostCard } from './BookingCostCard';
 import { DURATION_NOTE, formatVisit } from '../../domain/visitTime';
 import { visitLabel } from './BookingsPage';
@@ -116,7 +116,9 @@ function Body({ d }: { d: BookingDetail }) {
           {b.tasks.map((t) => <div key={t.id}><p className="strong">{t.title}</p>{t.description && <p className="small muted">{t.description}</p>}</div>)}
           <hr className="hr" />
           <p className="small"><VisitAddressText va={d.visitAddress} /></p>
-          <p className="xs muted">정확한 주소는 나와 이 업체만 볼 수 있어요.</p>
+          {/* 예약 확정 당시 이름·연락처(요청에서 복사한 스냅숏, 내 정보 수정과 무관) */}
+          {b.contact && <p className="small"><span className="muted">연락처</span> <ContactText c={b.contact} /></p>}
+          <p className="xs muted">정확한 주소와 연락처는 나와 이 업체만 볼 수 있어요.</p>
         </div>
       </Section>
 

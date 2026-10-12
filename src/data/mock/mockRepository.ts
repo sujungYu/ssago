@@ -4,10 +4,11 @@ import { checkPayable } from '../../domain/rules';
 import { REQUEST_PRIORITY } from '../../domain/rules';
 import { filterRequestBundles } from '../../domain/requestFilter';
 import { detailError, toVisitAddress } from '../../domain/address';
+import { maskPhone, normalizeContact } from '../../domain/profile';
 import type { TripFeeBasis } from '../../domain/bookingCost';
 import { filterBookings, tabOf, type BookingListQuery, type PendingAction } from '../../domain/bookingFilter';
 import type {
-  AdditionalWork, Booking, Category, ChangeProposal, CustomerProfile, DelayNotice, FinalStatement, Address,
+  AdditionalWork, Booking, Category, ChangeProposal, CustomerContact, CustomerProfile, DelayNotice, FinalStatement, Address,
   ProviderDetail, ProviderSummary, RepairRequest, Review, Transaction, Won, GroupRecord, SavedVisitAddress, IsoDate, PublicGroup,
 } from '../../domain/types';
 import { isGroupJoinable } from '../../domain/jointCalendar';
@@ -23,7 +24,7 @@ import {
   addressAnchors, applyPaymentSuccess, byId, cancelBookingInternal, cancelPreviewOf, datePreviewFor,
   finalizeProposalAccept, freeCancelReasonOf, markPaymentFailure, nid, prepaidOf, seatsOf, stateOfRequest, toPublicGroup,
 } from './engine';
-import { createSeed } from './seed';
+import { DEFAULT_CUSTOMER, createSeed } from './seed';
 
 // v3: 주소 구조 변경(탐색 주소 / 재사용 방문 주소 / 요청·예약 방문 주소 스냅숏 분리). 이전 형식 저장값은 읽지 않는다.
 const STORAGE_KEY = 'on-gimae/mock-db/v3';
@@ -75,10 +76,10 @@ export class MockRepository implements Repository {
       return raw ? (JSON.parse(raw) as MockDb) : null;
     } catch { return null; }
   }
-  private save(): void {
-    if (this.persist) {
-      try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(this.db)); } catch { /* 저장 불가 환경에서도 동작 */ }
-    }
+  /** 저장에 성공했는지 돌려준다(저장하지 않는 설정이면 true). 대부분의 쓰기는 실패해도 화면 동작을 이어 간다. */
+  private save(): boolean {
+    if (!this.persist) return true;
+    try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(this.db)); return true; } catch { return false; /* 저장 불가 환경에서도 동작 */ }
   }
   private commit(): void {
     this.save();
@@ -247,6 +248,8 @@ export class MockRepository implements Repository {
       const base = this.address(input.addressId);
       if (detailError(base.kind, input.addressDetail)) throw new RepoError('invalid');
       if (!input.tasks.length || input.tasks.some((t) => !t.title.trim()) || !input.slots.length) throw new RepoError('invalid');
+      const contact = normalizeContact(input.contact ?? { name: '', phone: '' });
+      if (!contact) throw new RepoError('invalid');
       if (input.groupId) {
         const gs = this.eligibleGroups(input.providerId, input.addressId);
         if (gs === null) throw new RepoError('address_unavailable');
@@ -260,6 +263,8 @@ export class MockRepository implements Repository {
         slots: input.slots, tasks: input.tasks.map((t) => ({ ...t, id: nid(this.db, 't') })), addressId: input.addressId,
         // 저장 선택 여부와 관계없이 이번 요청에는 정확한 방문 주소를 스냅숏으로 보존한다
         visitAddress: toVisitAddress(base, input.addressDetail), status: 'reviewing', createdAt: this.db.now, updatedAt: this.db.now,
+        // 제출 당시 이름·연락처 스냅숏(내 정보를 참조하지 않는다 — 나중에 내 정보를 수정해도 이 요청은 그대로)
+        contact,
       };
       this.db.requests.push(r); // 제출만으로 자리·세대 수·결제는 발생하지 않는다
       this.db.keyed[input.idempotencyKey] = id;
@@ -873,7 +878,27 @@ export class MockRepository implements Repository {
   }
 
   getProfile(): Promise<CustomerProfile> {
-    return this.read(() => ({ ...this.db.customer }));
+    return this.read(() => this.profile());
+  }
+
+  updateProfile(input: CustomerContact): Promise<CustomerProfile> {
+    return this.write(() => {
+      const next = normalizeContact(input);
+      if (!next) throw new RepoError('invalid');
+      const prev = this.db.customer;
+      this.db.customer = { id: prev.id, ...next, phoneMasked: maskPhone(next.phone) };
+      // 브라우저 저장에 실패하면 바꾸지 않은 것으로 되돌린다(새로고침하면 사라질 값을 저장했다고 알리지 않는다)
+      if (!this.save()) { this.db.customer = prev; throw new RepoError('storage_failed'); }
+      return this.profile();
+    });
+  }
+
+  /** 저장된 고객 정보가 없거나 형식이 잘못됐으면 기본 가상 고객 정보를 쓴다(이전 형식 저장값 포함). */
+  private profile(): CustomerProfile {
+    const c = this.db.customer as Partial<CustomerProfile> | undefined;
+    const ok = c && typeof c.name === 'string' && typeof c.phone === 'string' ? normalizeContact({ name: c.name, phone: c.phone }) : null;
+    const v = ok ?? DEFAULT_CUSTOMER;
+    return { id: c?.id ?? 'cu1', ...v, phoneMasked: maskPhone(v.phone) };
   }
 
   // ───────── 알림 진입 ─────────

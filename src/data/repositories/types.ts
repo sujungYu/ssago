@@ -12,7 +12,7 @@ import type { TripFeeBasis } from '../../domain/bookingCost';
 import type { BookingListQuery, PendingAction } from '../../domain/bookingFilter';
 export type { BookingListQuery, PendingAction } from '../../domain/bookingFilter';
 import type {
-  Address, AdditionalWork, SavedVisitAddress, VisitAddress, Approval, Booking, CancelCause, Category, ChangeProposal, CustomerProfile, DelayChoice,
+  Address, AdditionalWork, SavedVisitAddress, VisitAddress, Approval, Booking, CancelCause, Category, ChangeProposal, CustomerContact, CustomerProfile, DelayChoice,
   DelayNotice, Deduction, FinalStatement, IsoDate, IsoDateTime, MaterialOffer, ProviderDetail, ProviderSummary,
   PublicGroup, Refund, RepairRequest, Review, TaskItem, TimeSlot, Transaction, Won,
 } from '../../domain/types';
@@ -40,6 +40,8 @@ export interface NewRequestInput {
   addressDetail: string;
   /** ‘다음 신청에도 이 주소 사용’. true면 제출 성공 시에만 재사용 주소를 이 주소로 바꾼다. false면 기존 저장 주소를 그대로 둔다 */
   saveAddressForNext: boolean;
+  /** 이 요청의 이름·연락처(요청서에서 확인·수정한 값). 요청에 스냅숏으로 저장하며 내 정보는 바꾸지 않는다 */
+  contact: CustomerContact;
   bundleId?: string;
   idempotencyKey: string;
 }
@@ -340,6 +342,11 @@ export interface Repository {
   getReviewContext(bookingId: string): Promise<ReviewContext>;
   createReview(input: { bookingId: string; rating: number; body: string; photoNames: string[]; idempotencyKey: string }): Promise<Review>;
   getProfile(): Promise<CustomerProfile>;
+  /**
+   * 내 정보 이름·연락처 수정(사용자별 데이터, 인증 아님). 이후 새 수리 요청서의 기본값이 된다.
+   * 이미 제출된 요청·확정된 예약의 연락처 스냅숏은 바꾸지 않는다. 형식이 맞지 않으면 invalid, 저장하지 못하면 storage_failed(변경 없음).
+   */
+  updateProfile(input: CustomerContact): Promise<CustomerProfile>;
 
   // 알림 진입(S-02)
   resolveNotice(noticeId: string): Promise<NoticeLanding>;

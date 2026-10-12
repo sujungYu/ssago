@@ -185,6 +185,8 @@ a.list-row:hover { background: #fafbfd; }
   margin: calc(2px - var(--focus-ring-space)) calc(-1 * var(--sp-4)); padding: var(--focus-ring-space) var(--sp-4);
 }
 .dialog__head, .dialog__actions { flex: none; }
+/* 대화상자 하단 두 버튼(보조 왼쪽 · 주요 오른쪽, 주요 버튼을 더 넓게) */
+.dialog-actions-row { display: grid; grid-template-columns: 1fr 1.6fr; gap: var(--sp-2); }
 @media (min-width: 768px) {
   .dialog-backdrop { align-items: center; }
   .dialog { border-radius: var(--r-lg); width: 480px; max-width: calc(100vw - 32px); }

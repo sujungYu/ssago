@@ -150,6 +150,8 @@ export function createBookingFromRequest(db: MockDb, tx: Transaction): Booking {
     customerSlots: [...req.slots],
     // 승인·확정된 방문 주소: 요청의 제출 당시 스냅숏을 복사한다(회원·탐색 주소를 참조하지 않는다)
     visitAddress: req.visitAddress ? { ...req.visitAddress } : undefined,
+    // 이름·연락처도 요청의 제출 당시 스냅숏을 복사한다(내 정보를 참조하지 않는다)
+    contact: req.contact ? { ...req.contact } : undefined,
     tasks: req.tasks, createdAt: db.now,
   };
   db.bookings.push(booking);
