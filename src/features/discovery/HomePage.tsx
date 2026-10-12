@@ -12,22 +12,24 @@ export function HomePage() {
   const addr = useAsync(() => (addressId ? repo.getAddress(addressId) : Promise.resolve(null)), [repo, addressId]);
   return (
     <Page title="업체 찾기" tabs>
-      <Section title="방문 지역">
+      {/* 업체 찾기 상단: 지역·건물 주소만 간결하게(동·호수는 표시하지 않음). 누르면 설정·변경 */}
+      <Section title="지역·건물 주소">
         {addressId === null ? (
           <div className="card stack">
-            <p>수리받을 곳을 정하면, 같은 날 함께 참여할 수 있는 공동 예약이 있는지 알려드려요.</p>
-            <LinkButton to="/address?back=/" variant="primary" block><Icon name="pin" size={18} />방문 지역 설정하기</LinkButton>
+            <p>수리받을 지역·건물을 정하면, 같은 날 함께 참여할 수 있는 공동 예약 후보를 알려드려요.</p>
+            <LinkButton to="/address?back=/" variant="primary" block><Icon name="pin" size={18} />지역·건물 주소 설정하기</LinkButton>
           </div>
         ) : (
-          <AsyncView state={addr} loading={<Skeleton h={72} />}>
+          <AsyncView state={addr} loading={<Skeleton h={60} />}>
             {(a) => a && (
-              <div className="card row row--between">
-                <div className="grow">
-                  <p className="strong">{a.label}</p>
-                  <p className="small muted">{a.line1}</p>
-                </div>
-                <LinkButton to="/address?back=/" variant="secondary" sm>변경</LinkButton>
-              </div>
+              <Link to="/address?back=/" className="card list-row explore-address" aria-label={`지역·건물 주소 변경: ${a.label}`}>
+                <Icon name="pin" />
+                <span className="list-row__main">
+                  <span className="list-row__title">{a.label}</span>
+                  <span className="small muted">{a.line1}</span>
+                </span>
+                <span className="small strong nowrap" style={{ color: 'var(--c-primary)' }}>변경</span>
+              </Link>
             )}
           </AsyncView>
         )}

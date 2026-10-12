@@ -75,6 +75,7 @@ export default function DevPanel() {
                 <option value="success">성공</option><option value="fail">실패</option><option value="unknown">계속 확인 중</option></select></label>
             <label className="row"><input type="checkbox" checked={st.addressServiceDown} onChange={(e) => say(ctl.setSettings({ addressServiceDown: e.target.checked }))} />주소·단지 판단 서비스 장애</label>
             <B label="다음 조회 1회 실패시키기" run={() => ctl.setSettings({ failNextQuery: true })} />
+            <B label="다음 저장 1회 실패시키기" run={() => ctl.setSettings({ failNextWrite: true })} />
           </div></section>
 
           <section><h3>요청·승인 이벤트</h3>

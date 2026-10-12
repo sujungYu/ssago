@@ -3,10 +3,11 @@ import { expectedFeeForJoiner, computeSettlement, perHouseholdFee } from '../../
 import { checkPayable } from '../../domain/rules';
 import { REQUEST_PRIORITY } from '../../domain/rules';
 import { filterRequestBundles } from '../../domain/requestFilter';
+import { detailError, toVisitAddress } from '../../domain/address';
 import type { TripFeeBasis } from '../../domain/bookingCost';
 import type {
   AdditionalWork, Booking, Category, ChangeProposal, CustomerProfile, DelayNotice, FinalStatement, Address,
-  ProviderDetail, ProviderSummary, RepairRequest, Review, Transaction, Won, GroupRecord,
+  ProviderDetail, ProviderSummary, RepairRequest, Review, Transaction, Won, GroupRecord, SavedVisitAddress,
 } from '../../domain/types';
 import type {
   AdditionalView, ApprovalView, BookingDetail, BookingListItem, BundleDetail, BundleListItem, CancelContext, ChangeOption,
@@ -22,8 +23,8 @@ import {
 } from './engine';
 import { createSeed } from './seed';
 
-// v2: 방문 시간 구조 변경(고객 가능 시간 / 업체 제안·예약 방문 시각 분리). 이전 형식 저장값은 읽지 않는다.
-const STORAGE_KEY = 'on-gimae/mock-db/v2';
+// v3: 주소 구조 변경(탐색 주소 / 재사용 방문 주소 / 요청·예약 방문 주소 스냅숏 분리). 이전 형식 저장값은 읽지 않는다.
+const STORAGE_KEY = 'on-gimae/mock-db/v3';
 
 export interface MockRepoOptions {
   persist?: boolean;
@@ -96,6 +97,11 @@ export class MockRepository implements Repository {
   }
   private async write<T>(fn: () => T): Promise<T> {
     await this.delay();
+    if (this.db.settings.failNextWrite) {
+      this.db.settings.failNextWrite = false;
+      this.save(); // 아무 데이터도 바꾸지 않고 실패(구독자에게 알리지 않음)
+      throw new RepoError('network');
+    }
     const out = fn();
     this.commit();
     return out;
@@ -129,7 +135,7 @@ export class MockRepository implements Repository {
   private address(id: string): Address {
     const a = byId(this.db.addressBook, id);
     if (!a) throw new RepoError('not_found');
-    return { id: a.id, label: a.label, line1: a.line1, detail: a.detail, kind: a.kind };
+    return { id: a.id, label: a.label, line1: a.line1, kind: a.kind };
   }
   /** 이 주소로 참여 가능하고 접수가 열린 그룹만 반환한다. 주소 판단이 불가하면 null. */
   private eligibleGroups(providerId: string, addressId: string | null): GroupRecord[] | null {
@@ -163,7 +169,7 @@ export class MockRepository implements Repository {
     const ap = this.db.approvals.find((a) => a.requestId === r.id);
     const g = r.groupId ? byId(this.db.groups, r.groupId) : undefined;
     return {
-      request: r, provider: this.brief(this.provider(r.providerId)), address: this.address(r.addressId), addressDetail: r.addressDetail,
+      request: r, provider: this.brief(this.provider(r.providerId)), visitAddress: r.visitAddress ?? null,
       group: g ? toPublicGroup(g) : undefined, groupClosed: !!g?.closed, approval: ap, now: this.db.now,
     };
   }
@@ -179,6 +185,26 @@ export class MockRepository implements Repository {
     });
   }
   getAddress(id: string): Promise<Address> { return this.read(() => this.address(id)); }
+
+  // ───────── 사용자별 주소 ─────────
+  // 목업: 사용자별 데이터는 목업 DB(sessionStorage)에 있고 계정이 바뀌면 새 시드로 초기화된다(__switchOwner).
+  // 실제 연동 시 같은 계약으로 서버의 사용자별 저장소(RLS)에서 읽고 쓴다.
+  getExploreAddress(): Promise<Address | null> {
+    return this.read(() => {
+      const id = this.db.exploreAddressId;
+      return id && byId(this.db.addressBook, id) ? this.address(id) : null;
+    });
+  }
+  setExploreAddress(addressId: string): Promise<Address> {
+    return this.write(() => {
+      const a = this.address(addressId);
+      this.db.exploreAddressId = a.id; // 탐색 주소만 바꾼다. 요청·예약 방문 주소와 재사용 주소는 그대로
+      return a;
+    });
+  }
+  getSavedVisitAddress(): Promise<SavedVisitAddress | null> {
+    return this.read(() => (this.db.savedVisitAddress ? { ...this.db.savedVisitAddress } : null));
+  }
 
   listProviders(q: ProviderQuery): Promise<ProviderSummary[]> {
     return this.read(() => {
@@ -204,7 +230,8 @@ export class MockRepository implements Repository {
       const existing = this.db.keyed[input.idempotencyKey];
       if (existing) return this.request(existing); // 같은 제출은 최초 접수 건을 돌려준다 (ERR-REQ-03)
       this.provider(input.providerId);
-      this.address(input.addressId);
+      const base = this.address(input.addressId);
+      if (detailError(base.kind, input.addressDetail)) throw new RepoError('invalid');
       if (!input.tasks.length || input.tasks.some((t) => !t.title.trim()) || !input.slots.length) throw new RepoError('invalid');
       if (input.groupId) {
         const gs = this.eligibleGroups(input.providerId, input.addressId);
@@ -217,10 +244,15 @@ export class MockRepository implements Repository {
       const r: RepairRequest = {
         id, bundleId: input.bundleId ?? `b-${id}`, providerId: input.providerId, groupId: input.groupId, newDateWish: input.newDateWish,
         slots: input.slots, tasks: input.tasks.map((t) => ({ ...t, id: nid(this.db, 't') })), addressId: input.addressId,
-        addressDetail: input.addressDetail, status: 'reviewing', createdAt: this.db.now, updatedAt: this.db.now,
+        // 저장 선택 여부와 관계없이 이번 요청에는 정확한 방문 주소를 스냅숏으로 보존한다
+        visitAddress: toVisitAddress(base, input.addressDetail), status: 'reviewing', createdAt: this.db.now, updatedAt: this.db.now,
       };
       this.db.requests.push(r); // 제출만으로 자리·세대 수·결제는 발생하지 않는다
       this.db.keyed[input.idempotencyKey] = id;
+      // 접수에 성공한 같은 처리 안에서만 재사용 주소를 바꾼다. 선택하지 않으면 기존 저장 주소를 그대로 둔다(삭제하지 않음).
+      if (input.saveAddressForNext) {
+        this.db.savedVisitAddress = { addressId: base.id, line1: base.line1, detail: r.visitAddress!.detail, savedAt: this.db.now };
+      }
       return r;
     });
   }
@@ -418,7 +450,7 @@ export class MockRepository implements Repository {
       return {
         booking: b,
         provider: { ...this.summary(p, null), phone: p.phone, afterServiceTerms: p.afterServiceTerms },
-        address: this.address(b.addressId), addressDetail: this.request(b.requestId).addressDetail,
+        visitAddress: b.visitAddress ?? null,
         group: toPublicGroup(g), groupClosed: g.closed, groupEnded: g.ended,
         tripFee: tf, approval: this.db.approvals.find((a) => a.requestId === b.requestId),
         prepaid: prepaidOf(this.db, b.id),
@@ -794,7 +826,7 @@ export class MockRepository implements Repository {
   }
 
   getProfile(): Promise<CustomerProfile> {
-    return this.read(() => ({ ...this.db.customer, addresses: [this.address('ad-apt')] }));
+    return this.read(() => ({ ...this.db.customer }));
   }
 
   // ───────── 알림 진입 ─────────

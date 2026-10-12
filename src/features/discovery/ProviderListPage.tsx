@@ -10,10 +10,11 @@ import { AsyncView, Badge, Banner, EmptyState, LinkButton, Stars } from '../../c
 import { initialOf } from '../shared';
 
 export function JointBadge({ p, hasAddress }: { p: ProviderSummary; hasAddress: boolean }) {
-  if (!hasAddress) return <Badge>방문 지역을 정하면 확인할 수 있어요</Badge>;
+  if (!hasAddress) return <Badge>지역·건물 주소를 정하면 확인할 수 있어요</Badge>;
   if (p.jointAvailable === null) return <Badge tone="warn">공동 예약 가능 여부 확인 필요</Badge>;
   if (!p.jointAvailable) return <Badge>참여 가능한 공동 날짜 없음</Badge>;
-  return <Badge tone="info">공동 예약 가능</Badge>;
+  // 지역·건물 기준 후보. 신청할 때 정확한 주소로 동일 단지·반경 300m 조건을 다시 확인한다.
+  return <Badge tone="info">공동 예약 후보</Badge>;
 }
 
 export function ProviderListPage() {
@@ -29,13 +30,14 @@ export function ProviderListPage() {
       <div className="card row row--between">
         <div className="grow">
           <p className="small muted">현재 조회 지역</p>
-          <p className="strong">{addressId ? '설정한 방문 지역' : '아직 설정하지 않았어요'}</p>
+          <p className="strong">{addressId ? '설정한 지역·건물 주소' : '아직 설정하지 않았어요'}</p>
         </div>
         <LinkButton to={`/address?back=${encodeURIComponent(`/providers?category=${categoryId}`)}`} variant="secondary" sm>{addressId ? '변경' : '설정'}</LinkButton>
       </div>
       <AsyncView state={list}>
         {(items) => (
           <>
+            {addressId && items.some((p) => p.jointAvailable) && <p className="xs muted">‘공동 예약 후보’는 선택한 지역·건물 기준이에요. 신청할 때 정확한 방문 주소로 참여 조건을 다시 확인해요.</p>}
             {addressId && items.some((p) => p.jointAvailable === null) && (
               <Banner tone="warn" title="현재 공동 예약 참여 가능 여부를 확인하기 어려워요">다시 확인하기 전에는 참여할 수 있다고 안내하지 않아요. 잠시 뒤 다시 시도해 주세요.</Banner>
             )}

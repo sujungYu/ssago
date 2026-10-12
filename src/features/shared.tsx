@@ -1,6 +1,8 @@
 import type { Booking, IsoDate, PaymentStatus, RefundStatus, TimeSlot, VisitTime } from '../domain/types';
 import { formatDate } from '../domain/time';
 import { VISIT_TIME_MISSING, formatSlots, isValidVisitTime } from '../domain/visitTime';
+import { VISIT_ADDRESS_MISSING } from '../domain/address';
+import type { VisitAddress } from '../domain/types';
 import type { Tone } from '../domain/rules';
 import { Badge } from '../components/ui';
 
@@ -52,6 +54,12 @@ export function VisitText({ date, time, strong }: { date: IsoDate; time?: VisitT
       {isValidVisitTime(time) ? <span className="nowrap">{time}</span> : <Badge tone="warn">{VISIT_TIME_MISSING}</Badge>}
     </span>
   );
+}
+
+/** 요청·예약의 방문 주소(제출 당시 스냅숏). 없으면 현재 주소로 추정하지 않고 ‘방문 주소 확인 필요’ */
+export function VisitAddressText({ va }: { va: VisitAddress | null }) {
+  if (!va) return <Badge tone="warn">{VISIT_ADDRESS_MISSING}</Badge>;
+  return <span>{va.line1}{va.detail && <><br />{va.detail}</>}</span>;
 }
 
 export function initialOf(name: string) { return name.slice(0, 1); }

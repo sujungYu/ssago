@@ -10,7 +10,7 @@ import type { RequestListQuery } from '../../domain/requestFilter';
 export type { RequestListQuery } from '../../domain/requestFilter';
 import type { TripFeeBasis } from '../../domain/bookingCost';
 import type {
-  Address, AdditionalWork, Approval, Booking, CancelCause, Category, ChangeProposal, CustomerProfile, DelayChoice,
+  Address, AdditionalWork, SavedVisitAddress, VisitAddress, Approval, Booking, CancelCause, Category, ChangeProposal, CustomerProfile, DelayChoice,
   DelayNotice, Deduction, FinalStatement, IsoDate, IsoDateTime, MaterialOffer, ProviderDetail, ProviderSummary,
   PublicGroup, Refund, RepairRequest, Review, TaskItem, TimeSlot, Transaction, Won,
 } from '../../domain/types';
@@ -32,8 +32,12 @@ export interface NewRequestInput {
   newDateWish?: IsoDate;
   slots: TimeSlot[];
   tasks: Omit<TaskItem, 'id'>[];
+  /** 방문 건물(기본 주소) — 정확한 주소 기준으로 공동 예약 참여 자격을 다시 확인한다 */
   addressId: string;
+  /** 상세 주소(동·호수·층 등, 형식 자유, 단독주택은 비울 수 있음) */
   addressDetail: string;
+  /** ‘다음 신청에도 이 주소 사용’. true면 제출 성공 시에만 재사용 주소를 이 주소로 바꾼다. false면 기존 저장 주소를 그대로 둔다 */
+  saveAddressForNext: boolean;
   bundleId?: string;
   idempotencyKey: string;
 }
@@ -71,8 +75,8 @@ export interface RequestListResult {
 export interface RequestDetail {
   request: RepairRequest;
   provider: ProviderBrief;
-  address: Address;
-  addressDetail: string;
+  /** 제출 당시 방문 주소. null이면 이전 데이터라 확인 필요 */
+  visitAddress: VisitAddress | null;
   group?: PublicGroup;
   groupClosed: boolean;
   approval?: Approval;
@@ -135,8 +139,8 @@ export interface PrepaidSummary {
 export interface BookingDetail {
   booking: Booking;
   provider: ProviderDetail | (ProviderSummary & { phone: string; afterServiceTerms: string[] });
-  address: Address;
-  addressDetail: string;
+  /** 승인·확정된 방문 주소. null이면 확인 필요 */
+  visitAddress: VisitAddress | null;
   group: PublicGroup;
   groupClosed: boolean;
   groupEnded: boolean;
@@ -253,6 +257,12 @@ export interface Repository {
   // 탐색
   listCategories(): Promise<Category[]>;
   searchAddresses(keyword: string): Promise<Address[]>;
+  /** 이 사용자가 마지막으로 저장한 탐색 지역·건물 주소(없으면 null). 재접속 시 기본값 */
+  getExploreAddress(): Promise<Address | null>;
+  /** 탐색 지역·건물 주소 저장. 기존 요청·예약 주소는 바꾸지 않는다 */
+  setExploreAddress(addressId: string): Promise<Address>;
+  /** 저장에 동의한 재사용 방문 주소(사용자당 최근 1개, 없으면 null) */
+  getSavedVisitAddress(): Promise<SavedVisitAddress | null>;
   getAddress(id: string): Promise<Address>;
   listProviders(q: ProviderQuery): Promise<ProviderSummary[]>;
   getProvider(id: string, addressId: string | null): Promise<ProviderDetail>;

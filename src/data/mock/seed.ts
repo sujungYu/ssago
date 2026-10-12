@@ -5,7 +5,7 @@
 import { paymentDeadline } from '../../domain/rules';
 import type {
   Approval, Booking, Category, Deduction, FinalStatement, GroupRecord, MaterialOffer, Refund, RepairRequest,
-  StatementItem, TaskItem, Transaction, TxKind, Won,
+  StatementItem, TaskItem, Transaction, TxKind, Won, VisitAddress,
 } from '../../domain/types';
 import { DEFAULT_SETTINGS, type AddressRecord, type MockDb, type ProviderRecord } from './db';
 
@@ -27,11 +27,20 @@ export const CATEGORIES: Category[] = [
 ];
 
 const addressBook: AddressRecord[] = [
-  { id: 'ad-apt', label: '햇살마을 3단지', line1: '서울 가상구 햇살로 100 (햇살마을 3단지)', detail: '301동 1204호', kind: 'apartment', anchors: ['complex:haessal3'] },
-  { id: 'ad-house', label: '달빛길 단독주택', line1: '서울 가상구 달빛길 12 (단독주택)', detail: '', kind: 'house', anchors: ['radius:dalbit-a'] },
-  { id: 'ad-apt2', label: '푸른숲 2단지', line1: '서울 가상구 숲길 45 (푸른숲 2단지)', detail: '', kind: 'apartment', anchors: ['complex:pureun2'] },
-  { id: 'ad-far', label: '먼바다로 빌라', line1: '서울 가상구 먼바다로 77 (빌라)', detail: '', kind: 'house', anchors: [] },
+  { id: 'ad-apt', label: '햇살마을 3단지', line1: '서울 가상구 햇살로 100 (햇살마을 3단지)', kind: 'apartment', anchors: ['complex:haessal3'] },
+  { id: 'ad-apt-b', label: '햇살마을 3단지 상가동', line1: '서울 가상구 햇살로 102 (햇살마을 3단지 상가동)', kind: 'apartment', anchors: ['complex:haessal3'] },
+  { id: 'ad-house', label: '달빛길 단독주택', line1: '서울 가상구 달빛길 12 (단독주택)', kind: 'house', anchors: ['radius:dalbit-a'] },
+  { id: 'ad-apt2', label: '푸른숲 2단지', line1: '서울 가상구 숲길 45 (푸른숲 2단지)', kind: 'apartment', anchors: ['complex:pureun2'] },
+  { id: 'ad-far', label: '먼바다로 빌라', line1: '서울 가상구 먼바다로 77 (빌라)', kind: 'house', anchors: [] },
 ];
+
+/** 데모 요청·예약의 제출 당시 상세 주소(건물별로 명시. 다른 건물의 동·호수를 붙이지 않는다) */
+const DEMO_DETAIL: Record<string, string> = { 'ad-apt': '301동 1204호', 'ad-apt-b': '2층 201호', 'ad-house': '', 'ad-apt2': '105동 702호', 'ad-far': '' };
+/** 제출 당시 방문 주소 스냅숏 */
+function visitAddressOf(addressId: string): VisitAddress {
+  const a = addressBook.find((x) => x.id === addressId)!;
+  return { addressId: a.id, label: a.label, line1: a.line1, kind: a.kind, detail: DEMO_DETAIL[a.id] ?? '' };
+}
 
 const review = (id: string, author: string, rating: number, body: string, md: string, workLabel: string) => ({
   id, author, rating, body, createdAt: k(md, '12:00'), workLabel,
@@ -136,9 +145,11 @@ const tk = (title: string, description: string, photoNames: string[] = []): Task
 const T_FAUCET = () => [tk('욕실 세면대 수전 교체', '수전 손잡이가 헐거워 물이 샙니다.', ['faucet.jpg']), tk('배수 트랩 교체', '배수 속도가 느리고 냄새가 납니다.')];
 
 function request(r: Partial<RepairRequest> & Pick<RepairRequest, 'id' | 'providerId' | 'status' | 'tasks'>): RepairRequest {
+  const addressId = r.addressId ?? 'ad-apt';
   return {
-    bundleId: `b-${r.id}`, groupId: null, slots: ['09:00–12:00', '13:00–16:00'], addressId: 'ad-apt', addressDetail: '301동 1204호',
+    bundleId: `b-${r.id}`, groupId: null, slots: ['09:00–12:00', '13:00–16:00'],
     createdAt: k('10-13', '09:00'), updatedAt: k('10-13', '09:00'), ...r,
+    addressId, visitAddress: r.visitAddress ?? visitAddressOf(addressId),
   };
 }
 
@@ -169,13 +180,13 @@ const materials: MaterialOffer[] = [];
 requests.push(
   request({ id: 'rq-1', providerId: 'p3', status: 'reviewing', tasks: [tk('거실 조명 교체', '거실 등 두 개를 새 제품으로 바꾸고 싶어요.')], newDateWish: ymd('10-21'), createdAt: k('10-13', '09:30') }),
   request({ id: 'rq-2', providerId: 'p4', status: 'needs_info', tasks: [tk('현관문 손잡이 교체', '손잡이가 헐겁습니다.')],
-    infoRequest: { message: '손잡이 브랜드나 모델명이 보이는 사진을 한 장 더 올려 주세요.', requestedAt: k('10-13', '14:00') }, groupId: 'g6', addressId: 'ad-house', addressDetail: '', createdAt: k('10-12', '20:00') }),
+    infoRequest: { message: '손잡이 브랜드나 모델명이 보이는 사진을 한 장 더 올려 주세요.', requestedAt: k('10-13', '14:00') }, groupId: 'g6', addressId: 'ad-house', createdAt: k('10-12', '20:00') }),
   request({ id: 'rq-3', bundleId: 'b-sink', providerId: 'p1', groupId: 'g1', status: 'approved_pending_payment', tasks: T_FAUCET(), createdAt: k('10-13', '10:00'), updatedAt: k('10-13', '15:00') }),
   request({ id: 'rq-4', bundleId: 'b-sink', providerId: 'p2', groupId: 'g4', slots: ['13:00–16:00'], status: 'approved_pending_payment', tasks: T_FAUCET(), createdAt: k('10-13', '10:10'), updatedAt: k('10-13', '17:00') }),
   request({ id: 'rq-5', providerId: 'p6', status: 'rejected', tasks: [tk('거실장 서랍 레일 수리', '서랍이 빠집니다.')],
     rejectionReason: '서랍 레일 규격 확인이 어려워 이번 일정에는 수행이 어려워요.', createdAt: k('10-11', '10:00'), updatedAt: k('10-12', '10:00') }),
   request({ id: 'rq-6', providerId: 'p7', status: 'withdrawn', tasks: [tk('안방 방충망 교체', '찢어졌어요.')], newDateWish: ymd('10-22'), createdAt: k('10-10', '10:00'), updatedAt: k('10-11', '10:00') }),
-  request({ id: 'rq-7', providerId: 'p5', groupId: 'g7', addressId: 'ad-apt2', addressDetail: '', status: 'approval_expired', tasks: [tk('욕실 실리콘 보수', '곰팡이가 생겼어요.')], createdAt: k('10-10', '09:00'), updatedAt: k('10-12', '09:00') }),
+  request({ id: 'rq-7', providerId: 'p5', groupId: 'g7', addressId: 'ad-apt2', status: 'approval_expired', tasks: [tk('욕실 실리콘 보수', '곰팡이가 생겼어요.')], createdAt: k('10-10', '09:00'), updatedAt: k('10-12', '09:00') }),
   request({ id: 'rq-8', bundleId: 'b-lamp', providerId: 'p6', status: 'closed_other_booking', tasks: [tk('거실 조명 교체', '거실 등 교체')], createdAt: k('10-11', '09:00'), updatedAt: k('10-12', '16:00') }),
   request({ id: 'rq-10', providerId: 'p6', groupId: 'g8', status: 'approved_pending_payment', tasks: [tk('거실 선반 설치', '벽걸이 선반 두 개를 달고 싶어요.')], createdAt: k('10-12', '09:00'), updatedAt: k('10-13', '13:00') }),
 );
@@ -217,6 +228,7 @@ function addBooking(b: BookingSeed) {
   bookings.push({
     id: b.id, requestId: b.req, providerId: b.provider, groupId: b.group, addressId: b.address ?? 'ad-apt',
     status: b.status ?? 'confirmed', workStatus: b.work ?? 'scheduled', visitDate: b.visit, visitTime: b.time, customerSlots: [b.window], tasks: b.tasks,
+    visitAddress: visitAddressOf(b.address ?? 'ad-apt'),
     createdAt: b.created ?? k('10-09', '11:00'), cancelledAt: b.cancelledAt, cancelCause: b.cancelCause, followUp: b.followUp,
   });
   addTx(b.id, 'deposit', b.deposit, 'success', b.req);
@@ -301,7 +313,9 @@ addRefund('bk-k14', 7500, '최종 금액 정산 · 선결제 초과분', 'comple
 
 const db: MockDb = {
   version: 1, now: MOCK_NOW, seq: 100, ownerAccountId: null,
-  customer: { id: 'cu1', name: '김온다 (가상 고객)', phoneMasked: '010-****-0000', addresses: addressBook.slice(0, 1) },
+  customer: { id: 'cu1', name: '김온다 (가상 고객)', phoneMasked: '010-****-0000' },
+  // 사용자별 주소: 처음에는 탐색 주소·재사용 주소 모두 없음(첫 방문·첫 신청)
+  exploreAddressId: null, savedVisitAddress: null,
   addressBook, categories: CATEGORIES, providers, groups, requests, approvals, bookings, transactions, refunds, deductions,
   proposals: [
     {

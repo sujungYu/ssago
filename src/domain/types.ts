@@ -13,12 +13,30 @@ export interface Category {
   icon: string;
 }
 
+/** 지역·건물(기본) 주소. 도로명·지번 + 건물명. 동·호수 같은 상세 주소는 포함하지 않는다. */
 export interface Address {
-  id: string;
-  label: string; // 예: 우리 집
-  line1: string; // 가상 주소
-  detail?: string; // 동·호수 — 본인 주소에서만 표시
+  id: string; // 건물 식별자
+  label: string; // 예: 햇살마을 3단지
+  line1: string; // 도로명 또는 지번 주소 + 건물명(가상)
   kind: 'apartment' | 'house';
+}
+
+/** 요청·예약에 보존하는 방문 주소(제출 당시 스냅숏). 탐색 주소·재사용 주소를 참조하지 않는다. src/domain/address.ts */
+export interface VisitAddress {
+  addressId: string; // 건물 식별자 — 참여 자격(동일 단지·반경) 재확인용
+  label: string;
+  line1: string;
+  kind: 'apartment' | 'house';
+  /** 동·호수·층 등. 단독주택은 빈 문자열일 수 있다 */
+  detail: string;
+}
+
+/** 고객이 ‘다음 신청에도 이 주소 사용’에 동의해 저장한 재사용 방문 주소(사용자당 최근 1개) */
+export interface SavedVisitAddress {
+  addressId: string;
+  line1: string;
+  detail: string;
+  savedAt: IsoDateTime;
 }
 
 /** 고객 가능 시간 범위(요청서). 예: "09:00–12:00". 방문 시각이 아니다. */
@@ -105,8 +123,9 @@ export interface RepairRequest {
   /** 고객 가능 시간(요청서에서 제출한 범위) */
   slots: TimeSlot[];
   tasks: TaskItem[];
-  addressId: string;
-  addressDetail: string; // 동·호수 등 상세 주소 — 본인과 요청받은 업체만 확인
+  addressId: string; // 방문 건물 식별자(참여 자격 확인용)
+  /** 제출 당시 방문 주소. 본인과 요청받은 업체만 확인. 없으면(이전 데이터) ‘방문 주소 확인 필요’ */
+  visitAddress?: VisitAddress;
   status: RequestStatus;
   createdAt: IsoDateTime;
   updatedAt: IsoDateTime;
@@ -185,6 +204,8 @@ export interface Booking {
   customerSlots: TimeSlot[];
   /** 수락된 일정 변경 기록(기존 일정·새 일정·사유·고객 동의 시각) */
   scheduleChanges?: ScheduleChange[];
+  /** 승인·확정된 방문 주소(요청에서 복사한 스냅숏). 없으면 ‘방문 주소 확인 필요’ */
+  visitAddress?: VisitAddress;
   tasks: TaskItem[];
   cancelledAt?: IsoDateTime;
   cancelCause?: CancelCause;
@@ -358,7 +379,6 @@ export interface CustomerProfile {
   id: string;
   name: string;
   phoneMasked: string;
-  addresses: Address[];
 }
 
 /** 개발용 목업 알림. 알림함은 서비스 범위가 아니며, 알림 링크가 도착하는 화면(S-02)만 재현한다. */

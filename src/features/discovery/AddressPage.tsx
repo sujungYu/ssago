@@ -1,52 +1,24 @@
-import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Page } from '../../app/Page';
-import { useAppState, useRepo } from '../../app/context';
-import { useAsync } from '../../app/hooks';
-import { Icon } from '../../components/Icon';
-import { AsyncView, Banner, EmptyState, Field } from '../../components/ui';
+import { useAppState } from '../../app/context';
+import { Banner } from '../../components/ui';
+import { AddressSearch } from './AddressSearch';
 
-/** C-02 방문 지역 설정. 모의 주소 검색이며 자동 위치 수집·주소 저장은 하지 않는다(미정). */
+/**
+ * C-02 업체 찾기 지역·건물 주소 설정. 고른 주소는 이 사용자의 탐색 주소로 저장돼 재접속 시 기본값이 된다.
+ * 동·호수는 받지 않는다(신청서에서 입력). 기존 요청·예약의 방문 주소는 바뀌지 않는다. 자동 위치 수집은 하지 않는다.
+ */
 export function AddressPage() {
-  const repo = useRepo();
   const nav = useNavigate();
   const [sp] = useSearchParams();
-  const back = sp.get('back') || '/';
+  // 앱 안 경로만 허용(외부 주소로 이동하지 않음)
+  const raw = sp.get('back') || '/';
+  const back = raw.startsWith('/') && !raw.startsWith('//') ? raw : '/';
   const { addressId, setAddressId } = useAppState();
-  const [kw, setKw] = useState('');
-  const [q, setQ] = useState('');
-  const res = useAsync(() => repo.searchAddresses(q), [repo, q]);
   return (
-    <Page title="방문 지역 설정" back={back}>
-      <form onSubmit={(e) => { e.preventDefault(); setQ(kw); }} className="stack" role="search">
-        <Field label="주소 검색" hint="모의 주소 검색이에요. 예: 햇살, 달빛, 숲길">
-          {(p) => <input {...p} className="input" value={kw} onChange={(e) => setKw(e.target.value)} placeholder="도로명·단지명" enterKeyHint="search" />}
-        </Field>
-        <button className="btn btn--primary btn--block" type="submit"><Icon name="search" size={18} />검색</button>
-      </form>
-      <Banner tone="info">주소는 참여할 수 있는 공동 예약을 찾는 데만 써요. 정확한 동·호수는 요청서에서 입력하고, 요청을 받은 업체와 나만 볼 수 있어요.</Banner>
-      <AsyncView state={res}>
-        {(list) => list.length === 0 ? (
-          <EmptyState icon="pin" title="검색 결과가 없어요">다른 단어로 검색해 보세요.</EmptyState>
-        ) : (
-          <ul className="card card--flush divided" aria-label="검색 결과">
-            {list.map((a) => (
-              <li key={a.id}>
-                <button
-                  type="button" className="list-row" style={{ width: '100%', border: 0, textAlign: 'left' }}
-                  onClick={() => { setAddressId(a.id); nav(back); }} aria-pressed={addressId === a.id}
-                >
-                  <div className="list-row__main">
-                    <span className="list-row__title">{a.label}</span>
-                    <span className="small muted">{a.line1}</span>
-                  </div>
-                  {addressId === a.id ? <span className="badge badge--info">선택됨</span> : <Icon name="chevron" size={18} />}
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </AsyncView>
+    <Page title="지역·건물 주소 설정" back={back}>
+      <Banner tone="info">업체 찾기에서 참여할 수 있는 공동 예약 후보를 찾는 데 써요. 동·호수는 수리 신청서에서 입력하고, 요청을 받은 업체와 나만 볼 수 있어요.</Banner>
+      <AddressSearch selectedId={addressId} onPick={(a) => { setAddressId(a.id); nav(back); }} />
     </Page>
   );
 }

@@ -10,7 +10,7 @@ import { Icon } from '../../components/Icon';
 import { AsyncView, Banner, Button, Dialog, KV, LinkButton, PhoneButton, Section } from '../../components/ui';
 import type { RequestDetail } from '../../data/repositories/types';
 import { RequestBadge } from './RequestsPage';
-import { VisitText, slotsText } from '../shared';
+import { VisitAddressText, VisitText, slotsText } from '../shared';
 import { DURATION_NOTE } from '../../domain/visitTime';
 
 function Body({ d, now }: { d: RequestDetail; now: string }) {
@@ -80,7 +80,7 @@ function Body({ d, now }: { d: RequestDetail; now: string }) {
             { k: '요청 방식', v: d.group ? '공동 예약 날짜 참여' : '새 날짜 요청' },
             ...(d.group ? [{ k: '방문 날짜', v: formatDate(d.group.date) }] : r.newDateWish ? [{ k: '희망 날짜', v: formatDate(r.newDateWish) }] : []),
             { k: '고객 가능 시간', v: slotsText(r.slots) },
-            { k: '방문 주소', v: <span>{d.address.line1}<br />{d.addressDetail}</span> },
+            { k: '방문 주소', v: <VisitAddressText va={d.visitAddress} /> },
           ]} />
           <p className="xs muted">정확한 주소와 작업 내용은 나와 요청을 받은 업체만 볼 수 있어요.</p>
         </div>

@@ -60,11 +60,12 @@ function Body({ p, addressId, now }: { p: ProviderDetail; addressId: string | nu
       <div className="chips" aria-label="수행 작업">{p.scope.map((s) => <Badge key={s} tone="info">{s}</Badge>)}</div>
 
       <Section title="공동 예약 일정">
-        {addressId === null && <Banner tone="info" title="방문 지역을 설정해 주세요">주소를 정하면 참여할 수 있는 공동 날짜를 보여드려요.</Banner>}
-        {addressId === null && <LinkButton to={`/address?back=${encodeURIComponent(`/providers/${p.id}`)}`} variant="secondary" block><Icon name="pin" size={18} />방문 지역 설정하기</LinkButton>}
+        {addressId === null && <Banner tone="info" title="지역·건물 주소를 설정해 주세요">주소를 정하면 참여할 수 있는 공동 날짜를 보여드려요.</Banner>}
+        {addressId === null && <LinkButton to={`/address?back=${encodeURIComponent(`/providers/${p.id}`)}`} variant="secondary" block><Icon name="pin" size={18} />지역·건물 주소 설정하기</LinkButton>}
         {addressId !== null && p.jointAvailable === null && (
           <Banner tone="warn" title="현재 공동 예약 참여 가능 여부를 확인하기 어려워요">다시 확인하기 전에는 참여할 수 있다고 안내하지 않아요. 새 날짜로 요청은 보낼 수 있어요.</Banner>
         )}
+        {addressId !== null && joint.length > 0 && <p className="xs muted">선택한 지역·건물 기준의 공동 예약 후보예요. 신청할 때 정확한 방문 주소로 동일 단지·최초 예약지 반경 300m 조건을 다시 확인해요.</p>}
         {addressId !== null && p.jointAvailable !== null && joint.length === 0 && (
           <Banner tone="info" title="지금 참여할 수 있는 공동 날짜가 없어요">새 날짜로 요청하면, 이후 가까운 이웃이 같은 날을 선택해 함께할 수 있어요.</Banner>
         )}

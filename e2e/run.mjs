@@ -14,7 +14,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = 4174;
 const BASE = `http://localhost:${PORT}`;
 const CHROME = process.env.CHROME_PATH || (existsSync('/opt/pw-browsers/chromium') ? '/opt/pw-browsers/chromium' : undefined);
-const DB_KEY = 'on-gimae/mock-db/v2';
+const DB_KEY = 'on-gimae/mock-db/v3';
 const APP_KEY = 'on-gimae/app-state/v1';
 
 // e2e는 실제 Supabase 프로젝트 대신 아래 가짜 Supabase Auth 서버(브라우저 요청 가로채기)로 인증 흐름을 확인한다.
@@ -172,14 +172,14 @@ console.log('\n싸고 사용자 화면 e2e\n');
 
 await test('탐색: 주소 설정 → 카테고리 → 업체 목록(공동 예약 표시) → 업체 상세', async (page) => {
   await start(page, { address: null });
-  await page.getByRole('link', { name: '방문 지역 설정하기' }).click();
+  await page.getByRole('link', { name: '지역·건물 주소 설정하기' }).click();
   await page.getByLabel('주소 검색').fill('햇살');
   await page.keyboard.press('Enter');
-  await page.getByRole('button', { name: /햇살마을 3단지/ }).click();
+  await page.getByRole('button', { name: /햇살마을 3단지 서울/ }).click();
   await waitText(page, '업체 찾기', { exact: true }).catch(() => {});
   await page.getByRole('link', { name: /수전·샤워기·배수 부품/ }).click();
   await waitText(page, '한빛설비');
-  await waitText(page, '공동 예약 가능');
+  await waitText(page, '공동 예약 후보');
   await waitText(page, '예상 출장비');
   await page.getByRole('link', { name: /한빛설비/ }).first().click();
   await waitText(page, '공동 예약 일정');
@@ -189,8 +189,8 @@ await test('탐색: 주소 설정 → 카테고리 → 업체 목록(공동 예�
 
 await test('탐색: 주소 미설정이면 공동 예약 가능 여부를 단정하지 않는다', async (page) => {
   await start(page, { address: null, path: '/providers?category=c2' });
-  await waitText(page, '방문 지역을 정하면 확인할 수 있어요');
-  truthy(!(await page.getByText('공동 예약 가능', { exact: true }).count()), '단정 표시');
+  await waitText(page, '지역·건물 주소를 정하면 확인할 수 있어요');
+  truthy(!(await page.getByText('공동 예약 후보', { exact: true }).count()), '단정 표시');
 });
 
 await test('탐색: 주소 판단 서비스 장애 시 확인 필요 안내', async (page) => {
@@ -229,7 +229,7 @@ await test('요청: 공동 날짜로 복수 작업 요청서 제출', async (pag
   await page.getByLabel('어떤 작업인가요?').fill('주방 수전 교체');
   await page.getByRole('button', { name: '작업 추가하기' }).click();
   await page.getByLabel('어떤 작업인가요?').nth(1).fill('배수 트랩 교체');
-  await page.getByLabel('동·호수').fill('301동 1204호');
+  await page.getByLabel('상세 주소', { exact: true }).fill('301동 1204호');
   await page.getByRole('button', { name: '09:00~12:00' }).click();
   await page.getByRole('button', { name: '요청 보내기' }).dblclick(); // 연타해도 한 번만
   await waitText(page, '요청을 보냈어요');
@@ -245,7 +245,7 @@ await test('요청: 공동 날짜로 복수 작업 요청서 제출', async (pag
 await test('요청: 새 날짜 요청은 희망 날짜가 필요하다', async (page) => {
   await start(page, { path: '/providers/p1/request?new=1' });
   await page.getByLabel('어떤 작업인가요?').fill('욕실 수전 교체');
-  await page.getByLabel('동·호수').fill('301동 1204호');
+  await page.getByLabel('상세 주소', { exact: true }).fill('301동 1204호');
   await page.getByRole('button', { name: '09:00~12:00' }).click();
   await page.getByRole('button', { name: '요청 보내기' }).click();
   await waitText(page, '희망 방문 날짜를 선택해 주세요');
@@ -261,6 +261,126 @@ await test('요청: 비교 묶음에서 업체별 승인 조건 비교', async (
   await waitText(page, '한빛설비'); await waitText(page, '새봄수리');
   await waitText(page, '5,000원 할인'); // 업체 할인 조건 사전 표시
   await waitText(page, '하나를 예약하면 나머지 요청은 종료돼요');
+});
+
+// ───────── 주소: 탐색 주소 / 재사용 방문 주소 / 요청·예약 방문 주소 ─────────
+const detailInput = (page) => page.getByLabel('상세 주소', { exact: true });
+const saveBox = (page) => page.getByRole('checkbox', { name: /다음 신청에도 이 주소 사용/ });
+async function fillNewDateRequest(page, title) {
+  await page.getByLabel('어떤 작업인가요?').fill(title);
+  await page.getByLabel('희망 방문 날짜').fill('2026-10-21');
+  await page.getByRole('button', { name: '09:00~12:00' }).click();
+}
+
+await test('주소: 내 정보에 주소 메뉴 없음 · 최초 지역·건물 설정 → 재접속 시 복원(동·호수 미표시, URL에 주소 없음)', async (page) => {
+  await start(page, { path: '/me', address: null });
+  await waitText(page, '결제·환불 내역');
+  truthy(!(await page.locator('main').innerText()).includes('저장된 주소'), '내 정보 주소 메뉴');
+  await page.goto(`${BASE}/`);
+  await page.getByRole('link', { name: '지역·건물 주소 설정하기' }).click();
+  await page.getByRole('button', { name: /달빛길 단독주택/ }).click();
+  await page.waitForURL((u) => u.pathname === '/');
+  await page.getByRole('link', { name: /지역·건물 주소 변경: 달빛길 단독주택/ }).waitFor();
+  truthy(!decodeURIComponent(page.url()).includes('달빛'), 'URL에 주소');
+  eq((await db(page)).exploreAddressId, 'ad-house', '사용자별 탐색 주소 저장');
+  // 재접속: 이 탭의 화면 캐시를 지우고 다시 열어도 저장한 탐색 주소로 시작
+  await page.evaluate((k) => sessionStorage.removeItem(k), APP_KEY);
+  await page.reload();
+  await page.getByRole('link', { name: /지역·건물 주소 변경: 달빛길 단독주택/ }).waitFor();
+  // 다시 바꾸면 업체 목록·공동 예약 후보를 새 주소로 조회
+  await page.getByRole('link', { name: /지역·건물 주소 변경/ }).click();
+  await page.getByRole('button', { name: /햇살마을 3단지 서울/ }).click();
+  await page.getByRole('link', { name: /수전·샤워기/ }).click();
+  await waitText(page, '공동 예약 후보');
+});
+
+await test('주소: 첫 신청 저장 선택 → 같은 건물 다음 신청 자동 입력·수정(미선택이면 기존 저장 유지)', async (page) => {
+  await start(page, { path: '/providers/p1/request?new=1' });
+  await waitText(page, '다음 신청에도 이 주소 사용');
+  eq(await detailInput(page).inputValue(), '', '처음에는 상세 주소 비어 있음');
+  eq(await saveBox(page).isChecked(), false, '저장 기본값 미선택');
+  await fillNewDateRequest(page, '첫 신청');
+  await detailInput(page).fill('301동 1204호');
+  await saveBox(page).check();
+  await page.getByRole('button', { name: '요청 보내기' }).click();
+  await waitText(page, '다음 신청에 쓸 주소도 저장했어요');
+  let d = await db(page);
+  eq(d.savedVisitAddress.detail, '301동 1204호', '저장한 재사용 주소');
+  // 두 번째 신청: 같은 건물 → 자동 입력 + 안내
+  await page.goto(`${BASE}/providers/p2/request?new=1`);
+  await waitText(page, '저장한 주소를 불러왔어요. 방문 주소를 확인해주세요.');
+  eq(await detailInput(page).inputValue(), '301동 1204호', '자동 입력');
+  await detailInput(page).fill('301동 1205호'); // 확인·수정
+  await waitText(page, '저장한 주소와 다르게 수정했어요');
+  await fillNewDateRequest(page, '두 번째 신청');
+  await page.getByRole('button', { name: '요청 보내기' }).click();
+  await waitText(page, '요청을 보냈어요');
+  truthy(!(await page.locator('main').innerText()).includes('주소도 저장했어요'), '미선택인데 저장 안내');
+  d = await db(page);
+  eq(d.savedVisitAddress.detail, '301동 1204호', '미선택 시 기존 저장 주소 유지');
+  eq(d.requests.find((r) => r.tasks[0].title === '두 번째 신청').visitAddress.detail, '301동 1205호', '이번 요청에는 입력한 주소');
+  await waitText(page, '301동 1205호'); // 요청 상세의 방문 주소
+});
+
+await test('주소: 다른 건물 선택 시 이전 동·호수 비움 · 같은 건물로 돌아오면 다시 자동 입력 · 탐색 주소는 그대로', async (page) => {
+  await start(page, { path: '/providers/p1/request?new=1', patch: (d) => { d.savedVisitAddress = { addressId: 'ad-apt', line1: '서울 가상구 햇살로 100 (햇살마을 3단지)', detail: '301동 1204호', savedAt: '2026-10-13T00:00:00Z' }; } });
+  await waitText(page, '저장한 주소를 불러왔어요');
+  await page.getByRole('button', { name: '다른 주소' }).click();
+  const dlg = page.getByRole('dialog', { name: '방문할 건물 주소' });
+  await dlg.getByRole('button', { name: /햇살마을 3단지 상가동/ }).click(); // 같은 단지의 다른 건물
+  await waitText(page, '건물 주소가 바뀌어 상세 주소를 비웠어요');
+  eq(await detailInput(page).inputValue(), '', '다른 건물에 이전 동·호수를 붙이지 않음');
+  truthy(!(await page.locator('main').innerText()).includes('저장한 주소를 불러왔어요'), '다른 건물 자동 입력 안내');
+  await waitText(page, '이 신청에만 쓰는 주소예요');
+  await page.getByRole('button', { name: '다른 주소' }).click();
+  await page.getByRole('dialog', { name: '방문할 건물 주소' }).getByRole('button', { name: /햇살마을 3단지 서울/ }).click();
+  await waitText(page, '저장한 주소를 불러왔어요');
+  eq(await detailInput(page).inputValue(), '301동 1204호', '같은 건물로 돌아오면 다시 자동 입력');
+  eq(JSON.parse(await page.evaluate((k) => sessionStorage.getItem(k), APP_KEY)).addressId, 'ad-apt', '탐색 주소 그대로');
+});
+
+await test('주소: 제출 실패 시 저장했다고 표시하지 않음 · 탐색·재사용 주소를 바꿔도 기존 요청·예약 주소 유지', async (page) => {
+  // 다음 저장 1회 실패(네트워크 오류) 상태에서 제출
+  await start(page, { path: '/providers/p1/request?group=g1', patch: (d) => { d.settings.failNextWrite = true; } });
+  await page.getByLabel('어떤 작업인가요?').fill('실패할 신청');
+  await page.getByRole('button', { name: '09:00~12:00' }).click();
+  await detailInput(page).fill('301동 1204호');
+  await saveBox(page).check();
+  await page.getByRole('button', { name: '요청 보내기' }).click();
+  await page.locator('.banner--danger').first().waitFor();
+  eq(new URL(page.url()).pathname, '/providers/p1/request', '실패 시 신청서에 머묾');
+  truthy(!(await page.locator('main').innerText()).includes('주소도 저장했어요'), '실패인데 저장 안내');
+  let d0 = await db(page);
+  eq(d0.savedVisitAddress, null, '실패 시 재사용 주소 저장 안 함');
+  eq(d0.requests.some((r) => r.tasks[0].title === '실패할 신청'), false, '실패 시 요청 없음');
+  // 다시 보내면 성공하고 그때 저장
+  await page.getByRole('button', { name: '요청 보내기' }).click();
+  await waitText(page, '다음 신청에 쓸 주소도 저장했어요');
+  d0 = await db(page);
+  eq(d0.savedVisitAddress.detail, '301동 1204호', '성공 시 저장');
+  // 기존 요청·예약 주소 보존
+  await page.goto(`${BASE}/bookings/bk-k15`);
+  await waitText(page, '105동 702호');
+  await page.goto(`${BASE}/address?back=/`);
+  await page.getByRole('button', { name: /달빛길 단독주택/ }).click();
+  await page.goto(`${BASE}/bookings/bk-k15`);
+  await waitText(page, '서울 가상구 숲길 45 (푸른숲 2단지)');
+  await waitText(page, '105동 702호');
+  await page.goto(`${BASE}/requests/rq-3`);
+  await waitText(page, '301동 1204호');
+});
+
+await test('주소: 모바일 키보드(낮은 화면)에서 상세 주소 입력란이 하단 제출 버튼에 가리지 않음', async (page) => {
+  await page.setViewportSize({ width: 360, height: 420 }); // 키보드가 올라온 높이를 가정
+  await start(page, { path: '/providers/p1/request?new=1' });
+  await waitText(page, '다음 신청에도 이 주소 사용');
+  await detailInput(page).focus();
+  await detailInput(page).press('End');
+  await page.waitForTimeout(200);
+  const input = await detailInput(page).boundingBox();
+  const bar = await page.locator('.action-bar').boundingBox();
+  truthy(input && bar && input.y + input.height <= bar.y && input.y >= 0, `입력란 ${JSON.stringify(input)} / 하단 버튼 ${JSON.stringify(bar)}`);
+  await page.getByRole('button', { name: '요청 보내기' }).waitFor();
 });
 
 // ───────── 내 요청 필터 ─────────
@@ -1080,7 +1200,7 @@ await test('인증: 로그아웃 → 로그인 화면, 뒤로가기·내부 화�
 await test('인증: 계정 전환 시 이전 사용자의 요청·예약·방문 지역이 남지 않는다', async (page) => {
   await start(page, { path: '/providers/p1/request?group=g1' });
   await page.getByLabel('어떤 작업인가요?').fill('계정A 전용 작업');
-  await page.getByLabel('동·호수').fill('101동 101호');
+  await page.getByLabel('상세 주소', { exact: true }).fill('101동 101호');
   await page.getByRole('button', { name: '09:00~12:00' }).click();
   await page.getByRole('button', { name: '요청 보내기' }).click();
   await waitText(page, '요청을 보냈어요');

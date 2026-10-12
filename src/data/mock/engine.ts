@@ -154,6 +154,8 @@ export function createBookingFromRequest(db: MockDb, tx: Transaction): Booking {
     // 예약금 결제 성공 → 업체가 제안한 방문 시각으로 확정. 범위에서 추정하지 않는다.
     visitDate: recheck ? recheck.newVisitDate : ap.visitDate, visitTime: recheck ? recheck.newVisitTime : ap.visitTime,
     customerSlots: [...req.slots],
+    // 승인·확정된 방문 주소: 요청의 제출 당시 스냅숏을 복사한다(회원·탐색 주소를 참조하지 않는다)
+    visitAddress: req.visitAddress ? { ...req.visitAddress } : undefined,
     tasks: req.tasks, createdAt: db.now,
   };
   db.bookings.push(booking);

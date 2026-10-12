@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ActionBar, Page } from '../../app/Page';
 import { useAppState, useRepo } from '../../app/context';
 import { useAction, useAsync, useAttemptKey } from '../../app/hooks';
@@ -8,14 +8,21 @@ import { formatSlot } from '../../domain/visitTime';
 import { formatWon } from '../../domain/money';
 import { expectedFeeForJoiner } from '../../domain/pricing';
 import { Icon } from '../../components/Icon';
-import { AsyncView, Banner, Button, Field, KV, Section } from '../../components/ui';
+import { AsyncView, Banner, Button, Dialog, Field, KV, Section } from '../../components/ui';
+import { SAVED_ADDRESS_LOADED, detailError, savedDetailFor } from '../../domain/address';
+import type { Address } from '../../domain/types';
+import { AddressSearch } from '../discovery/AddressSearch';
 
 interface TaskDraft { key: number; title: string; description: string; photoNames: string[] }
 const DEFAULT_SLOTS = ['09:00–12:00', '13:00–16:00', '16:00–19:00'];
 let seq = 1;
 const blank = (): TaskDraft => ({ key: seq++, title: '', description: '', photoNames: [] });
 
-/** C-05 수리 요청서. 요청만으로는 예약이 확정되지 않는다. */
+/**
+ * C-05 수리 요청서. 요청만으로는 예약이 확정되지 않는다.
+ * 방문 주소 = 건물(기본 주소) + 상세 주소. 건물은 업체 찾기 탐색 주소로 시작하지만 여기서 바꿔도 탐색 주소는 바뀌지 않는다.
+ * 저장한 재사용 주소는 같은 건물일 때만 상세 주소를 자동 입력하고, ‘다음 신청에도 이 주소 사용’은 기본 미선택이다.
+ */
 export function RequestFormPage() {
   const { id = '' } = useParams();
   const [sp] = useSearchParams();
@@ -24,8 +31,12 @@ export function RequestFormPage() {
   const repo = useRepo();
   const nav = useNavigate();
   const { addressId, bundleId, setBundleId } = useAppState();
-  const provider = useAsync(() => repo.getProvider(id, addressId), [repo, id, addressId]);
-  const address = useAsync(() => (addressId ? repo.getAddress(addressId) : Promise.resolve(null)), [repo, addressId]);
+  // 이 신청의 방문 건물. 시작값은 탐색 주소이며, 바꿔도 탐색 주소는 그대로 둔다.
+  const [baseId, setBaseId] = useState<string | null>(addressId);
+  // 공동 날짜 참여 자격은 정확한 방문 건물 기준으로 다시 확인한다
+  const provider = useAsync(() => repo.getProvider(id, baseId), [repo, id, baseId]);
+  const address = useAsync(() => (baseId ? repo.getAddress(baseId) : Promise.resolve(null)), [repo, baseId]);
+  const saved = useAsync(() => repo.getSavedVisitAddress(), [repo]);
   const bundle = useAsync(() => (bundleId ? repo.getBundle(bundleId) : Promise.resolve(null)), [repo, bundleId]);
   const action = useAction();
   const attempt = useAttemptKey('req');
@@ -34,8 +45,35 @@ export function RequestFormPage() {
   const [slots, setSlots] = useState<string[]>([]);
   const [newDate, setNewDate] = useState('');
   const [detail, setDetail] = useState('');
+  const [autofilled, setAutofilled] = useState<string | null>(null); // 자동 입력한 저장 상세 주소
+  const [saveForNext, setSaveForNext] = useState(false); // 고객이 직접 선택(기본 미선택)
+  const [picking, setPicking] = useState(false);
+  const [baseChanged, setBaseChanged] = useState(false);
   const [touched, setTouched] = useState(false);
   const prefilled = useRef(false);
+  const filledFor = useRef<string | null>(null);
+
+  // 같은 건물(건물 식별자 + 기본 주소 일치)일 때만 저장한 상세 주소를 자동 입력한다. 고객은 제출 전에 확인·수정할 수 있다.
+  useEffect(() => {
+    const base = address.data;
+    if (!base || filledFor.current === base.id) return;
+    if (saved.data === undefined && !saved.error) return; // 저장 주소를 불러오는 중
+    filledFor.current = base.id;
+    const d = savedDetailFor(saved.data ?? null, base);
+    if (d !== null && !detail) { setDetail(d); setAutofilled(d); }
+  }, [address.data, saved.data, saved.error]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** 신청서에서 방문 건물을 바꾸면 이전 건물의 상세 주소(자동 입력 포함)를 비우고 다시 확인하게 한다. */
+  const changeBase = (a: Address) => {
+    setPicking(false);
+    if (a.id === baseId) return;
+    setBaseChanged(!!detail);
+    setBaseId(a.id);
+    setDetail('');
+    setAutofilled(null);
+    setSaveForNext(false);
+    filledFor.current = null;
+  };
 
   useEffect(() => {
     if (prefilled.current || !bundle.data) return;
@@ -44,14 +82,6 @@ export function RequestFormPage() {
   }, [bundle.data]);
 
   const back = `/providers/${id}`;
-  if (addressId === null) {
-    return (
-      <Page title="수리 요청서" back={back}>
-        <Banner tone="info" title="방문 지역을 먼저 설정해 주세요">요청서에는 수리받을 주소가 필요해요.</Banner>
-        <Link className="btn btn--primary btn--block" to={`/address?back=${encodeURIComponent(`/providers/${id}/request?${sp.toString()}`)}`}>방문 지역 설정하기</Link>
-      </Page>
-    );
-  }
 
   return (
     <Page title="수리 요청서" back={back}>
@@ -69,7 +99,8 @@ export function RequestFormPage() {
             tasks: tasks.some((t) => !t.title.trim()) ? '작업 내용을 입력해 주세요.' : null,
             slots: slots.length === 0 ? '고객 가능 시간을 하나 이상 선택해 주세요.' : null,
             date: !joint && !newDate ? '희망 방문 날짜를 선택해 주세요.' : !joint && newDate < minDate ? `${formatDate(minDate)} 이후 날짜를 선택해 주세요.` : null,
-            detail: apartment && !detail.trim() ? '동·호수를 입력해 주세요.' : null,
+            base: !address.data ? '방문할 건물 주소를 선택해 주세요.' : null,
+            detail: address.data ? detailError(address.data.kind, detail) : null,
           };
           const valid = !Object.values(err).some(Boolean) && !groupMissing;
 
@@ -80,10 +111,14 @@ export function RequestFormPage() {
               const r = await repo.createRequest({
                 providerId: p.id, groupId: joint ? groupId : null, newDateWish: joint ? undefined : newDate, slots,
                 tasks: tasks.map((t) => ({ title: t.title.trim(), description: t.description.trim(), photoNames: t.photoNames })),
-                addressId, addressDetail: detail.trim(), bundleId: bundleId ?? undefined, idempotencyKey: attempt.get(),
+                addressId: address.data!.id, addressDetail: detail.trim(), saveAddressForNext: saveForNext,
+                bundleId: bundleId ?? undefined, idempotencyKey: attempt.get(),
               });
               setBundleId(null);
-              nav(`/requests/${r.id}`, { state: { flash: '요청을 보냈어요. 업체가 검토하는 동안에는 예약이 확정되지 않아요.' } });
+              // 제출에 성공한 뒤에만 저장 완료를 알린다(실패·취소 시에는 저장했다고 표시하지 않음)
+              nav(`/requests/${r.id}`, { state: { flash: saveForNext
+                ? '요청을 보냈어요. 다음 신청에 쓸 주소도 저장했어요. 업체가 검토하는 동안에는 예약이 확정되지 않아요.'
+                : '요청을 보냈어요. 업체가 검토하는 동안에는 예약이 확정되지 않아요.' } });
             });
           };
 
@@ -132,19 +167,46 @@ export function RequestFormPage() {
 
               <Section title="방문 주소">
                 <div className="card stack">
-                  <AsyncView state={address} loading={<p className="muted">주소를 불러오는 중이에요</p>}>
-                    {(a) => a && (
-                      <div className="row row--between row--top">
-                        <div className="grow"><p className="strong">{a.label}</p><p className="small muted">{a.line1}</p></div>
-                        <Link className="btn btn--secondary btn--sm" to={`/address?back=${encodeURIComponent(`/providers/${id}/request?${sp.toString()}`)}`}>변경</Link>
-                      </div>
-                    )}
-                  </AsyncView>
-                  <Field label={apartment ? '동·호수' : '상세 주소 (선택)'} error={touched ? err.detail : null} hint="요청을 받은 업체와 나만 볼 수 있어요. 공동 예약 이웃에게는 보이지 않아요.">
-                    {(fp) => <input {...fp} className="input" value={detail} onChange={(e) => setDetail(e.target.value)} placeholder="예: 301동 1204호" />}
+                  <div className="stack--sm stack">
+                    <p className="small muted">도로명·지번 주소·건물명</p>
+                    <AsyncView state={address} loading={<p className="muted">주소를 불러오는 중이에요</p>}>
+                      {(a) => a ? (
+                        <div className="row row--between row--top">
+                          <div className="grow"><p className="strong">{a.label}</p><p className="small">{a.line1}</p></div>
+                          <Button variant="secondary" sm onClick={() => setPicking(true)}>다른 주소</Button>
+                        </div>
+                      ) : (
+                        <>
+                          <Button variant="primary" block onClick={() => setPicking(true)}><Icon name="pin" size={18} />방문할 건물 주소 선택</Button>
+                          {touched && err.base && <p className="field__error" role="alert">{err.base}</p>}
+                        </>
+                      )}
+                    </AsyncView>
+                    {baseId && baseId !== addressId && <p className="xs muted">이 신청에만 쓰는 주소예요. 업체 찾기의 지역·건물 주소는 그대로예요.</p>}
+                  </div>
+                  {baseChanged && !detail && <Banner tone="info" title="건물 주소가 바뀌어 상세 주소를 비웠어요">새 주소의 상세 주소를 다시 확인해 주세요.</Banner>}
+                  {autofilled !== null && <Banner tone="info" title={SAVED_ADDRESS_LOADED}>{detail !== autofilled ? '저장한 주소와 다르게 수정했어요. 아래에서 저장을 선택하면 다음 신청에 바뀐 주소를 써요.' : undefined}</Banner>}
+                  {saved.error !== undefined && <p className="xs muted">저장한 주소를 불러오지 못했어요. 상세 주소를 직접 입력해 주세요.</p>}
+                  <Field label={apartment ? '상세 주소' : '상세 주소 (선택)'} error={touched ? err.detail : null}
+                    hint="동·호수, 층 등 방문에 필요한 정보예요. 요청을 받은 업체와 나만 볼 수 있어요.">
+                    {(fp) => <input {...fp} className="input" value={detail} maxLength={60} autoComplete="off" disabled={!address.data}
+                      onChange={(e) => setDetail(e.target.value)} placeholder={apartment ? '예: 301동 1204호' : '예: 2층, 대문 옆 초인종'} />}
                   </Field>
+                  <label className="save-address">
+                    <input type="checkbox" checked={saveForNext} disabled={!address.data} onChange={(e) => setSaveForNext(e.target.checked)} />
+                    <span className="stack--sm stack" style={{ gap: 2 }}>
+                      <span className="strong small">다음 신청에도 이 주소 사용</span>
+                      <span className="xs muted">요청을 보내면 이 건물과 상세 주소를 저장해, 같은 건물로 다시 신청할 때 자동으로 채워요. 선택하지 않으면 이전에 저장한 주소를 바꾸지 않아요.</span>
+                    </span>
+                  </label>
                 </div>
               </Section>
+              {picking && (
+                <Dialog title="방문할 건물 주소" onClose={() => setPicking(false)} closeLabel="닫기" actions={null}>
+                  <p className="small muted">건물을 바꾸면 이전 건물의 상세 주소는 비워져요.</p>
+                  <AddressSearch selectedId={baseId} onPick={changeBase} />
+                </Dialog>
+              )}
 
               <Section title="고객 가능 시간">
                 {!joint && (

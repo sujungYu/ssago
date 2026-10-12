@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { MockRepository } from '../data/mock/mockRepository';
 import type { Repository } from '../data/repositories/types';
 import type { AuthRepository } from '../data/repositories/auth';
@@ -105,12 +105,29 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 }
 
 function AccountAppState({ children }: { children: ReactNode }) {
+  const repo = useRepo();
   const [addressId, setAddr] = useState<string | null>(() => loadState().addressId ?? null);
   const [bundleId, setBundleId] = useState<string | null>(null);
-  const setAddressId = useCallback((id: string | null) => {
+  const cache = useCallback((id: string | null) => {
     setAddr(id);
     try { sessionStorage.setItem(KEY, JSON.stringify({ addressId: id })); } catch { /* 저장 불가 환경 */ }
   }, []);
+  /**
+   * 탐색 지역·건물 주소 저장. 사용자별 데이터로 저장소에 남겨 재접속 시 기본값으로 쓴다(이 탭의 캐시는 sessionStorage).
+   * 최근 예약 주소로 자동 덮어쓰지 않는다 — 고객이 직접 고른 값만 저장한다.
+   */
+  const setAddressId = useCallback((id: string | null) => {
+    cache(id);
+    if (id) void repo.setExploreAddress(id).catch(() => { /* 저장 실패해도 이번 화면에서는 선택값을 쓴다 */ });
+  }, [cache, repo]);
+  // 이 탭에 캐시가 없으면(새 접속) 이 사용자가 마지막으로 저장한 탐색 주소를 불러온다.
+  useEffect(() => {
+    if (addressId !== null) return;
+    let alive = true;
+    // 불러오는 사이 고객이 직접 고른 값이 있으면 덮어쓰지 않는다
+    repo.getExploreAddress().then((a) => { if (alive && a && loadState().addressId == null) cache(a.id); }, () => { /* 없으면 미설정으로 둔다 */ });
+    return () => { alive = false; };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const value = useMemo(() => ({ addressId, setAddressId, bundleId, setBundleId }), [addressId, setAddressId, bundleId]);
   return <AppCtx.Provider value={value}>{children}</AppCtx.Provider>;
 }

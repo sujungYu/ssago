@@ -7,7 +7,7 @@ import { formatWon } from '../../domain/money';
 import { Icon } from '../../components/Icon';
 import { AsyncView, Badge, Banner, KV, LinkButton, PhoneButton, Section } from '../../components/ui';
 import type { BookingDetail } from '../../data/repositories/types';
-import { PAYMENT_STATUS, VisitText, bookingBadge, slotsText } from '../shared';
+import { PAYMENT_STATUS, VisitAddressText, VisitText, bookingBadge, slotsText } from '../shared';
 import { BookingCostCard } from './BookingCostCard';
 import { DURATION_NOTE, formatVisit } from '../../domain/visitTime';
 import { visitLabel } from './BookingsPage';
@@ -113,7 +113,7 @@ function Body({ d }: { d: BookingDetail }) {
         <div className="card stack">
           {b.tasks.map((t) => <div key={t.id}><p className="strong">{t.title}</p>{t.description && <p className="small muted">{t.description}</p>}</div>)}
           <hr className="hr" />
-          <p className="small">{d.address.line1}<br />{d.addressDetail}</p>
+          <p className="small"><VisitAddressText va={d.visitAddress} /></p>
           <p className="xs muted">정확한 주소는 나와 이 업체만 볼 수 있어요.</p>
         </div>
       </Section>

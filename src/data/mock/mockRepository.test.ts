@@ -37,7 +37,7 @@ describe('탐색·개인정보', () => {
 });
 
 describe('요청', () => {
-  const input = (key: string) => ({ providerId: 'p1', groupId: 'g1', slots: ['09:00–12:00'], tasks: [{ title: '수전 교체', description: '', photoNames: [] }], addressId: 'ad-apt', addressDetail: '301동 1204호', idempotencyKey: key });
+  const input = (key: string) => ({ providerId: 'p1', groupId: 'g1', slots: ['09:00–12:00'], tasks: [{ title: '수전 교체', description: '', photoNames: [] }], addressId: 'ad-apt', addressDetail: '301동 1204호', saveAddressForNext: false, idempotencyKey: key });
   it('같은 키로 두 번 제출해도 요청은 하나', async () => {
     const r = repo(); const before = (await r.listRequests()).flatMap((b) => b.items).length;
     const a = await r.createRequest(input('k1')); const b = await r.createRequest(input('k1'));
@@ -171,7 +171,7 @@ describe('계정별 목업 상태', () => {
   it('다른 계정으로 바뀌면 이전 계정이 만든 요청이 남지 않고, 같은 계정이면 유지된다', async () => {
     const r = repo();
     r.__switchOwner('user-a');
-    const created = await r.createRequest({ providerId: 'p1', groupId: 'g1', slots: ['09:00–12:00'], tasks: [{ title: 'A의 요청', description: '', photoNames: [] }], addressId: 'ad-apt', addressDetail: '1동 1호', idempotencyKey: 'own-1' });
+    const created = await r.createRequest({ providerId: 'p1', groupId: 'g1', slots: ['09:00–12:00'], tasks: [{ title: 'A의 요청', description: '', photoNames: [] }], addressId: 'ad-apt', addressDetail: '1동 1호', saveAddressForNext: true, idempotencyKey: 'own-1' });
     r.__switchOwner('user-a');
     expect((await r.getRequest(created.id)).request.tasks[0].title).toBe('A의 요청');
     r.__switchOwner(null); // 로그아웃

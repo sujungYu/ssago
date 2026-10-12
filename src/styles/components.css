@@ -289,3 +289,11 @@ a.list-row:hover { background: #fafbfd; }
 .disclosure > summary:focus-visible { outline: 2px solid var(--c-focus); outline-offset: 2px; border-radius: var(--r-sm); }
 .disclosure[open] { padding-bottom: var(--sp-3); }
 .disclosure[open] > * + * { margin-top: var(--sp-2); }
+
+/* ───────── 주소 ───────── */
+.explore-address { text-decoration: none; color: inherit; padding: var(--sp-3) var(--sp-4); }
+.explore-address > svg:first-child { color: var(--c-primary); flex: none; }
+/* 모바일 키보드·하단 고정 버튼에 입력란이 가리지 않게 포커스 이동 시 여유를 둔다 */
+.input, .textarea { scroll-margin-top: 72px; scroll-margin-bottom: 160px; }
+.save-address { display: flex; gap: var(--sp-2); align-items: flex-start; min-height: 44px; padding: var(--sp-2) 0; cursor: pointer; }
+.save-address input { width: 20px; height: 20px; margin: 2px 0 0; accent-color: var(--c-primary); flex: none; }
