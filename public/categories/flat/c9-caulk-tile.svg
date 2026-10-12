@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96">
+  <!-- c9 실리콘·줄눈: 실리콘 건과 타일 -->
+  <rect x="48" y="44" width="18" height="18" rx="2.5" fill="#dfe4ea"/>
+  <rect x="69" y="44" width="18" height="18" rx="2.5" fill="#dfe4ea"/>
+  <rect x="48" y="65" width="18" height="18" rx="2.5" fill="#dfe4ea"/>
+  <rect x="69" y="65" width="18" height="18" rx="2.5" fill="#dfe4ea"/>
+  <g transform="rotate(-30 38 44)">
+    <rect x="0" y="41" width="16" height="6" rx="3" fill="#a7b0bc"/>
+    <rect x="14" y="33" width="48" height="22" rx="11" fill="#ff7a66"/>
+    <polygon points="62,37 84,44 62,51" fill="#a7b0bc"/>
+    <rect x="34" y="52" width="11" height="26" rx="4.5" fill="#4a86e8"/>
+    <rect x="22" y="52" width="8" height="18" rx="4" fill="#2f5fb3"/>
+  </g>
+</svg>

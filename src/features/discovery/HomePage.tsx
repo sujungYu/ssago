@@ -6,7 +6,14 @@ import { useAsync } from '../../app/hooks';
 import { Icon } from '../../components/Icon';
 import { AsyncView, Banner, CoopGuideHint, LinkButton, Section, Skeleton } from '../../components/ui';
 import { addressSubline, addressTitle, useExploreAddress } from './exploreAddress';
-import { CATEGORY_ART, CATEGORY_ART_SIZE } from './categoryArt';
+import { CATEGORY_ART, CATEGORY_ART_SIZE, CATEGORY_TITLE } from './categoryArt';
+import { Fragment } from 'react';
+
+/** ‘·’ 뒤에서만 줄바꿈되게 한다(의미 단위, 최대 두 줄) */
+function TitleText({ text }: { text: string }) {
+  const parts = text.split('·');
+  return <>{parts.map((p, i) => <Fragment key={i}>{p}{i < parts.length - 1 && <>·<wbr /></>}</Fragment>)}</>;
+}
 
 export function HomePage() {
   const repo = useRepo();
@@ -49,15 +56,15 @@ export function HomePage() {
                 const src = CATEGORY_ART[c.id];
                 return (
                   <li key={c.id}>
-                    {/* 카드 전체가 하나의 링크(안에 다른 버튼 없음). 이미지는 이름과 중복되는 장식이라 alt를 비운다 */}
-                    <Link className="cat-card" to={`/providers?category=${c.id}`}>
+                    {/* 카드 전체가 하나의 링크(안에 다른 버튼 없음). 이미지는 장식이라 alt를 비우고, 링크 이름은 보이는 제목과 같게 둔다(줄바꿈용 <wbr> 영향 없음) */}
+                    <Link className="cat-card" to={`/providers?category=${c.id}`} aria-label={CATEGORY_TITLE[c.id] ?? c.name}>
                       <span className="cat-card__art">
                         {src && !broken.has(c.id) && (
                           <img src={src} alt="" width={CATEGORY_ART_SIZE.width} height={CATEGORY_ART_SIZE.height} decoding="async" draggable={false}
                             onError={() => setBroken((s) => new Set(s).add(c.id))} />
                         )}
                       </span>
-                      <span className="cat-card__name">{c.name}</span>
+                      <span className="cat-card__name"><TitleText text={CATEGORY_TITLE[c.id] ?? c.name} /></span>
                     </Link>
                   </li>
                 );

@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96">
+  <!-- c1 방충망: 망과 프레임 (싸고 플랫 카테고리 아이콘: 96×96, 채운 도형, 그라데이션·그림자 없음) -->
+  <rect x="14" y="14" width="68" height="68" rx="7" fill="#2ec4b6"/>
+  <rect x="22" y="22" width="52" height="52" rx="2" fill="#ffffff"/>
+  <path d="M30 22v52M38 22v52M46 22v52M54 22v52M62 22v52M70 22v52M22 30h52M22 38h52M22 46h52M22 54h52M22 62h52M22 70h52" stroke="#4a86e8" stroke-width="1.6" opacity=".55"/>
+  <rect x="11" y="11" width="10" height="10" rx="2.5" fill="#4a86e8"/>
+  <rect x="75" y="11" width="10" height="10" rx="2.5" fill="#4a86e8"/>
+  <rect x="11" y="75" width="10" height="10" rx="2.5" fill="#4a86e8"/>
+  <rect x="75" y="75" width="10" height="10" rx="2.5" fill="#4a86e8"/>
+</svg>

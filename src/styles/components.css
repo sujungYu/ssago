@@ -193,21 +193,26 @@ a.list-row:hover { background: #fafbfd; }
 
 /* ───────── 업체 카드 등 ───────── */
 .avatar { width: 44px; height: 44px; border-radius: var(--r-md); background: var(--c-info-bg); color: var(--c-primary); display: grid; place-items: center; font-weight: 800; flex: none; }
-/* 업체 찾기 카테고리: 이미지 중심 카드(위 대표 이미지, 아래 카테고리명). 모바일 2열, 넓은 화면 3열(콘텐츠 너비 640px 기준) */
+/* 업체 찾기 카테고리: 흰 카드 + 플랫 컬러 아이콘 + 아래 차콜 제목. 모바일 2열, 600px 이상 3열, 720px 이상 5열(콘텐츠 640px에 5×2).
+   그리드로 왼쪽부터 순서대로 채운다 — 마지막 줄에 카드가 하나만 남아도 첫 열에 같은 너비로 둔다(가운데 정렬·늘리기 없음).
+   같은 행의 카드는 그리드가 같은 높이로 맞춘다. */
 .cat-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-2); }
-@media (min-width: 560px) { .cat-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-3); } }
+.cat-grid > li { min-width: 0; }
+@media (min-width: 600px) { .cat-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-3); } }
+@media (min-width: 720px) { .cat-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; } }
 .cat-card {
-  display: flex; flex-direction: column; height: 100%; min-height: 44px; overflow: hidden; text-decoration: none; color: inherit;
-  background: var(--c-surface); border: 1px solid var(--c-line); border-radius: var(--r-md); transition: border-color .15s, box-shadow .15s, transform .1s;
+  display: flex; flex-direction: column; align-items: center; gap: 14px; height: 100%; min-height: 44px; padding: 20px 12px 16px;
+  text-decoration: none; color: var(--c-text); background: var(--c-surface); border: 1px solid var(--c-line); border-radius: var(--r-lg);
+  transition: border-color .15s, box-shadow .15s, transform .12s;
 }
-.cat-card__art {
-  display: grid; place-items: center; height: 92px; padding: var(--sp-1) var(--sp-2) 0;
-  background: linear-gradient(180deg, var(--c-info-bg), #faf7f0); /* 모든 카드 같은 연한 블루 → 아이보리 */
-}
-.cat-card__art img { display: block; width: auto; height: 84px; max-width: 100%; object-fit: contain; } /* 영역(92px − 위 여백 4px) 안에 비율 그대로 */
-.cat-card__name { flex: 1; display: flex; align-items: center; justify-content: center; text-align: center; padding: var(--sp-2) var(--sp-2) var(--sp-3); font-weight: 600; font-size: var(--fs-sm); line-height: 1.35; overflow-wrap: anywhere; }
-.cat-card:hover { border-color: var(--c-primary); box-shadow: 0 4px 12px rgba(49, 93, 168, .12); }
-.cat-card:active { transform: scale(.98); background: var(--c-info-bg); }
+.cat-card__art { display: grid; place-items: center; width: 72px; height: 72px; flex: none; }
+.cat-card__art img { display: block; width: 72px; height: 72px; object-fit: contain; }
+@media (min-width: 720px) { .cat-card { padding: 18px 10px 16px; gap: 12px; } .cat-card__art, .cat-card__art img { width: 64px; height: 64px; } }
+/* 제목: 기존 폰트·차콜(본문 토큰 --c-text), 15px(--fs-md)·600, 가운데. 충분한 너비에서는 한 줄, 좁으면 ‘·’·띄어쓰기 뒤에서 자연스럽게 줄바꿈
+   (말줄임·글자 축소 없음). 아이콘 아래 같은 위치에서 시작해 줄바꿈돼도 같은 행 카드의 정렬이 맞는다 */
+.cat-card__name { display: block; text-align: center; font-weight: 600; font-size: var(--fs-md); line-height: 1.35; color: var(--c-text); word-break: keep-all; overflow-wrap: break-word; }
+.cat-card:hover { border-color: var(--c-primary); box-shadow: 0 6px 16px rgba(49, 93, 168, .10); transform: translateY(-2px); }
+.cat-card:active { transform: translateY(0) scale(.97); background: var(--c-info-bg); }
 .cat-card:focus-visible { outline: 3px solid var(--c-focus); outline-offset: 2px; border-color: var(--c-primary); }
 @media (prefers-reduced-motion: reduce) { .cat-card { transition: none; } .cat-card:active { transform: none; } }
 .group-opt { display: flex; flex-direction: column; gap: var(--sp-2); }

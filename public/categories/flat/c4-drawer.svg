@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96">
+  <!-- c4 수납장·서랍: 서랍과 손잡이 -->
+  <rect x="14" y="16" width="68" height="60" rx="7" fill="#ffc247"/>
+  <rect x="20" y="22" width="56" height="22" rx="3" fill="#ffd77f"/>
+  <rect x="20" y="48" width="56" height="22" rx="3" fill="#ffd77f"/>
+  <rect x="38" y="30" width="20" height="6" rx="3" fill="#ff7a66"/>
+  <rect x="38" y="56" width="20" height="6" rx="3" fill="#ff7a66"/>
+  <rect x="20" y="76" width="9" height="8" rx="2" fill="#a7b0bc"/>
+  <rect x="67" y="76" width="9" height="8" rx="2" fill="#a7b0bc"/>
+</svg>

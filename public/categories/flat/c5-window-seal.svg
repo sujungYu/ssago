@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96">
+  <!-- c5 창문·틈새: 창문 프레임과 틈새 부품(실링 띠) -->
+  <rect x="14" y="12" width="68" height="72" rx="6" fill="#4a86e8"/>
+  <rect x="22" y="20" width="52" height="56" rx="2" fill="#cfe4fb"/>
+  <polygon points="44,20 58,20 34,76 22,76 22,70" fill="#ffffff" opacity=".75"/>
+  <rect x="22" y="20" width="7" height="56" rx="2" fill="#4fb873"/>
+  <rect x="22" y="69" width="52" height="7" rx="2" fill="#4fb873"/>
+</svg>

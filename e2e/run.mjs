@@ -105,7 +105,7 @@ await test('탐색: 주소 설정 → 카테고리 → 업체 목록(공동 예�
   await page.keyboard.press('Enter');
   await page.getByRole('button', { name: /햇살마을 3단지 서울/ }).click();
   await waitText(page, '업체 찾기', { exact: true }).catch(() => {});
-  await page.getByRole('link', { name: /수전·샤워기·배수 부품/ }).click();
+  await page.getByRole('link', { name: '수전·배수', exact: true }).click();
   await waitText(page, '한빛설비');
   await waitText(page, '공동 예약 후보');
   await waitText(page, '예상 출장비');
@@ -245,7 +245,7 @@ await test('업체 찾기: 공동 예약 안내는 카테고리 제목 영역에
   const outline = await guideBtn(page).evaluate((el) => getComputedStyle(el).outlineStyle);
   truthy(outline !== 'none', '이용 방법 포커스 표시');
   // 카테고리·지역 설정 동작 유지
-  await page.getByRole('link', { name: /수전·샤워기/ }).click();
+  await page.getByRole('link', { name: '수전·배수', exact: true }).click();
   await page.waitForURL((u) => u.pathname === '/providers');
   await waitText(page, '공동 예약 후보');
 });
@@ -403,7 +403,7 @@ await test('주소: 내 정보에 주소 메뉴 없음 · 최초 지역·건물 
   // 다시 바꾸면 업체 목록·공동 예약 후보를 새 주소로 조회
   await page.getByRole('link', { name: /지역·건물 주소 변경/ }).click();
   await page.getByRole('button', { name: /햇살마을 3단지 서울/ }).click();
-  await page.getByRole('link', { name: /수전·샤워기/ }).click();
+  await page.getByRole('link', { name: '수전·배수', exact: true }).click();
   await waitText(page, '공동 예약 후보');
 });
 
@@ -2147,8 +2147,9 @@ await test('요청서 오류 이동: 네트워크·처리 실패는 입력란으
 });
 
 // ───────── 업체 찾기: 이미지 중심 카테고리 카드 ─────────
-const CAT_NAMES = ['방충망 수리·교체', '수전·샤워기·배수 부품', '문손잡이·경첩·문', '수납장·서랍 수리', '창문 부속·틈새 보수', '조명·스위치·콘센트', '커튼·블라인드·선반 설치', '생활 부속품 설치·교체', '실리콘·줄눈 보수', '기타 수리·교체·설치'];
-const CAT_FILES = ['c1-window-screen', 'c2-faucet', 'c3-door-handle', 'c4-drawer-cabinet', 'c5-window-glass', 'c6-bulb-socket', 'c7-curtain-rod', 'c8-towel-holder', 'c9-tile-sealant', 'c10-toolbox-wrench'];
+// 카드 표시 제목(데이터의 카테고리 이름·ID·라우팅은 그대로)
+const CAT_NAMES = ['방충망', '수전·배수', '문 수리', '수납장·서랍', '창문 보수', '조명·전기', '커튼·선반', '생활 부속품', '실리콘·줄눈', '기타 수리'];
+const CAT_FILES = ['flat/c1-screen', 'flat/c2-faucet', 'flat/c3-handle-hinge', 'flat/c4-drawer', 'flat/c5-window-seal', 'flat/c6-bulb-switch', 'flat/c7-curtain', 'flat/c8-towel', 'flat/c9-caulk-tile', 'flat/c10-toolbox'];
 
 await test('카테고리 카드: 10개 순서·이름·개별 이미지 매핑, 장식 이미지 alt 비움·크기 지정, 카드 전체가 하나의 링크', async (page) => {
   await start(page, { path: '/' });
@@ -2163,11 +2164,11 @@ await test('카테고리 카드: 10개 순서·이름·개별 이미지 매핑, 
     eq(cd.href, `/providers?category=c${i + 1}`, `${i + 1} 이동`);
     eq(cd.name, CAT_NAMES[i], `${i + 1} 이름·순서`);
     eq(cd.src, `/categories/${CAT_FILES[i]}.svg`, `${i + 1} 개별 자산`);
-    truthy(cd.alt === '' && cd.w === '160' && cd.h === '120' && cd.nested === 0, `${i + 1} alt·크기·중첩 ${JSON.stringify(cd)}`);
+    truthy(cd.alt === '' && cd.w === '96' && cd.h === '96' && cd.nested === 0, `${i + 1} alt·크기·중첩 ${JSON.stringify(cd)}`);
   });
   eq(new Set(cards.map((x) => x.src)).size, 10, '카드마다 다른 이미지');
   // 접근성 이름은 카테고리명만(이미지 중복 낭독 없음)
-  eq(await page.getByRole('link', { name: '창문 부속·틈새 보수', exact: true }).count(), 1, '링크 이름 = 카테고리명');
+  eq(await page.getByRole('link', { name: '창문 보수', exact: true }).count(), 1, '링크 이름 = 표시 제목');
   // 배지·다른 클릭 요소 없음
   eq(await page.locator('.cat-card .badge').count(), 0, '배지 없음');
   // 공동 예약 한 줄 안내·정보 아이콘, 주소 설정 유지
@@ -2176,7 +2177,7 @@ await test('카테고리 카드: 10개 순서·이름·개별 이미지 매핑, 
   await page.locator('.explore-address').waitFor();
 });
 
-for (const [w, cols] of [[360, 2], [390, 2], [1280, 3]]) {
+for (const [w, cols] of [[360, 2], [390, 2], [640, 3], [1280, 5]]) {
   await test(`카테고리 카드: ${w}px ${cols}열, 이미지 영역 높이 통일, 긴 이름 잘림·겹침 없음, 터치 영역`, async (page) => {
     await page.setViewportSize({ width: w, height: 900 });
     await start(page, { path: '/' });
@@ -2192,11 +2193,25 @@ for (const [w, cols] of [[360, 2], [390, 2], [1280, 3]]) {
         cols: new Set(rc.map((x) => Math.round(x.left))).size, arts: [...new Set(arts)], ratios: [...new Set(imgs.map((x) => x.ratio))], inside: imgs.every((x) => x.inside),
         clipped: names.filter((x) => x.clip || x.ellipsis).length, minH: Math.min(...rc.map((x) => x.height)), maxH: Math.max(...rc.map((x) => x.height)), minW: Math.min(...rc.map((x) => x.width)),
         overflow: document.documentElement.scrollWidth > innerWidth,
+        heights: [...new Set(rc.map((x) => Math.round(x.height)))],
+        lines: Math.max(...cards.map((a) => { const sp = document.createRange(); sp.selectNodeContents(a.querySelector('.cat-card__name')); return new Set([...sp.getClientRects()].map((q) => Math.round(q.top))).size; })),
+        type: [...new Set(cards.map((a) => { const cs = getComputedStyle(a.querySelector('.cat-card__name')); return `${cs.fontSize}/${cs.fontWeight}/${cs.color}`; }))],
+        icon: [...new Set(cards.map((a) => Math.round(a.querySelector('img').getBoundingClientRect().width)))],
+        gap: [...new Set(cards.map((a) => Math.round(a.querySelector('.cat-card__name').getBoundingClientRect().top - a.querySelector('.cat-card__art').getBoundingClientRect().bottom)))],
+        padTop: [...new Set(cards.map((a) => Math.round(a.querySelector('.cat-card__art').getBoundingClientRect().top - a.getBoundingClientRect().top)))],
+        bg: [...new Set(cards.map((a) => getComputedStyle(a).backgroundColor))],
       };
     });
     eq(r.cols, cols, '열 수');
+    eq(r.heights.length, 1, `카드 높이 통일 ${r.heights}`);
+    truthy(r.lines <= (w >= 600 ? 1 : 2), `제목 줄 수(충분한 너비에서는 한 줄) ${r.lines}`);
+    eq(JSON.stringify(r.type), JSON.stringify(['15px/600/rgb(32, 36, 44)']), '제목 15px·600·차콜');
+    truthy(r.icon.length === 1 && r.icon[0] >= 64 && r.icon[0] <= 88, `아이콘 크기 ${r.icon}`);
+    truthy(r.gap.length === 1 && r.gap[0] >= 12 && r.gap[0] <= 16, `아이콘-제목 간격 ${r.gap}`);
+    truthy(r.padTop.every((p) => p >= 16 && p <= 24), `카드 위 여백 ${r.padTop}`);
+    eq(JSON.stringify(r.bg), JSON.stringify(['rgb(255, 255, 255)']), '모든 카드 흰 배경');
     eq(r.arts.length, 1, `이미지 영역 높이 통일 ${r.arts}`);
-    truthy(r.ratios.every((x) => Math.abs(x - 1.33) < .03) && r.inside, `이미지 비율 유지·잘림 없음 ${JSON.stringify(r)}`);
+    truthy(r.ratios.every((x) => Math.abs(x - 1) < .03) && r.inside, `이미지 비율 유지·잘림 없음 ${JSON.stringify(r)}`);
     eq(r.clipped, 0, '이름 잘림·말줄임 없음');
     truthy(!r.overflow, '가로 넘침 없음');
     truthy(r.minH >= 44 && r.minW >= 44 && r.maxH <= 170, `카드 크기 ${JSON.stringify(r)}`);
@@ -2205,10 +2220,42 @@ for (const [w, cols] of [[360, 2], [390, 2], [1280, 3]]) {
   }, { width: w });
 }
 
-await test('카테고리 카드: 이미지를 불러오지 못해도 이름·영역·이동 유지 → 업체 목록에 같은 주소', async (page) => {
-  await page.route('**/categories/c5-window-glass.svg', (route) => route.abort());
+await test('카테고리 카드: 여러 화면 너비(브라우저 확대·축소에 해당)에서 마지막 줄도 왼쪽부터 같은 너비로 채움, 제목·가운뎃점 잘림 없음', async (page) => {
   await start(page, { path: '/' });
-  const card = page.getByRole('link', { name: '창문 부속·틈새 보수', exact: true });
+  const bad = [];
+  // 브라우저 확대·축소는 CSS 화면 너비를 바꾸는 것과 같다(예: 1280px에서 200% = 640px, 50% = 2560px)
+  for (const w of [320, 360, 480, 599, 600, 640, 700, 719, 720, 768, 1024, 1280, 2560]) {
+    await page.setViewportSize({ width: w, height: 900 });
+    await page.waitForTimeout(80);
+    const r = await page.evaluate(() => {
+      const cards = [...document.querySelectorAll('a.cat-card')].map((a) => a.getBoundingClientRect());
+      const cols = new Set(cards.map((x) => Math.round(x.left))).size;
+      const first = cards[0], last = cards[cards.length - 1];
+      const lastRow = cards.filter((x) => Math.round(x.top) === Math.round(last.top));
+      const rows = [...new Set(cards.map((x) => Math.round(x.top)))].map((t) => cards.filter((x) => Math.round(x.top) === t).map((x) => Math.round(x.height)));
+      const clipped = [...document.querySelectorAll('.cat-card__name')].filter((n) => {
+        const card = n.closest('a').getBoundingClientRect(); const range = document.createRange(); range.selectNodeContents(n);
+        return [...range.getClientRects()].some((q) => q.left < card.left - .5 || q.right > card.right + .5) || n.scrollWidth > n.clientWidth + 1;
+      }).length;
+      return { cols, lastLeft: Math.round(last.left), firstLeft: Math.round(first.left), lastW: Math.round(last.width), firstW: Math.round(first.width), lastRowCount: lastRow.length,
+        rowHeightsSame: rows.every((h) => new Set(h).size === 1), clipped, overflow: document.documentElement.scrollWidth > innerWidth };
+    });
+    const expectCols = w >= 720 ? 5 : w >= 600 ? 3 : 2;
+    if (r.cols !== expectCols) bad.push(`${w}px 열 ${r.cols}`);
+    if (r.lastLeft !== r.firstLeft && r.lastRowCount === 1) bad.push(`${w}px 마지막 카드가 첫 열이 아님`);
+    if (Math.abs(r.lastW - r.firstW) > 1) bad.push(`${w}px 마지막 카드 너비 ${r.lastW}/${r.firstW}`);
+    if (!r.rowHeightsSame) bad.push(`${w}px 같은 행 카드 높이 다름`);
+    if (r.clipped) bad.push(`${w}px 제목 잘림 ${r.clipped}`);
+    if (r.overflow) bad.push(`${w}px 가로 넘침`);
+    if (w === 640) await page.screenshot({ path: join(ROOT, 'e2e/screens/640_category_cards_left.png'), clip: { x: 0, y: 180, width: 640, height: 640 } });
+  }
+  truthy(!bad.length, bad.join(' / '));
+});
+
+await test('카테고리 카드: 이미지를 불러오지 못해도 이름·영역·이동 유지 → 업체 목록에 같은 주소', async (page) => {
+  await page.route('**/categories/flat/c5-window-seal.svg', (route) => route.abort());
+  await start(page, { path: '/' });
+  const card = page.getByRole('link', { name: '창문 보수', exact: true });
   await card.waitFor();
   await page.waitForFunction(() => !document.querySelector('a[href="/providers?category=c5"] img'));
   const h = await page.evaluate(() => [...document.querySelectorAll('.cat-card__art')].map((e) => Math.round(e.getBoundingClientRect().height)));

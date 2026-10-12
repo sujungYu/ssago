@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96">
+  <!-- c6 조명·스위치·콘센트: 전구와 스위치 -->
+  <rect x="34" y="6" width="5" height="9" rx="2.5" fill="#ffc247"/>
+  <rect x="14" y="16" width="5" height="9" rx="2.5" fill="#ffc247" transform="rotate(-45 16.5 20.5)"/>
+  <rect x="54" y="16" width="5" height="9" rx="2.5" fill="#ffc247" transform="rotate(45 56.5 20.5)"/>
+  <circle cx="36.5" cy="40" r="19" fill="#ffc247"/>
+  <path d="M32 46l2-8 2.5 6 2.5-6 2 8" fill="none" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="28.5" y="56" width="16" height="7" rx="2" fill="#a7b0bc"/>
+  <rect x="29.5" y="64" width="14" height="10" rx="4" fill="#7d8794"/>
+  <rect x="58" y="44" width="26" height="36" rx="5" fill="#ff7a66"/>
+  <rect x="64" y="50" width="14" height="24" rx="3" fill="#ffffff"/>
+  <rect x="67" y="53" width="8" height="9" rx="2" fill="#ff7a66"/>
+</svg>
