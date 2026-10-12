@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useLocation, useSearchParams } from 'react-router-dom';
-import { useAuth } from './auth';
+import { useAccountId } from './account';
 import { loadListFilter, loadListScroll, saveListFilter, saveListScroll } from './context';
 
 /** 목록 필터 ↔ URL 쿼리 변환(모듈 상수로 만들어 참조가 바뀌지 않게 한다) */
@@ -19,14 +19,13 @@ type FilterNavState = { filterOwner?: string } | null;
  * - 적용할 때마다 방문 기록을 하나 쌓는다 → 뒤로가기로 이전 조건, 새로고침으로 현재 조건 복원(replace로 바꿀 수도 있음).
  * - 쿼리 없이 목록에 들어오면(상세 화면 헤더의 ‘뒤로’, 하단 탭) 이 세션의 마지막 적용값을 복원한다.
  * - 잘못된 쿼리 값은 기본값으로 바꾸고 URL도 정리한다.
- * - 다른 계정에서 만든 기록(로그아웃·계정 전환 후 뒤로가기 등)의 필터는 쓰지 않는다.
+ * - 다른 계정에서 만든 기록의 필터는 쓰지 않는다(로그인 없는 데모에서는 항상 가상 데모 고객).
  *   기록 항목의 state에 적용한 계정을 남겨 구분하고, 계정이 바뀌면 세션 저장값도 지운다(clearUserAppState).
  */
 export function useUrlFilter<F>(codec: UrlFilterCodec<F>) {
   const [params, setParams] = useSearchParams();
   const loc = useLocation();
-  const { state } = useAuth();
-  const owner = state.status === 'signedIn' ? state.session.userId : undefined;
+  const owner = useAccountId();
   const hasParams = codec.has(params);
   // 다른 계정이 적용한 기록 항목이면 쓰지 않는다. 직접 입력·북마크한 주소(state 없음)는 검증 후 쓴다.
   const stateOwner = (loc.state as FilterNavState)?.filterOwner;

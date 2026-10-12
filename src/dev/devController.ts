@@ -1,6 +1,6 @@
 /**
  * 개발용 시나리오 컨트롤러. 시간 경과·업체 응답처럼 실제로는 기다려야 하는 이벤트를 목업 저장소에 직접 일으킨다.
- * 운영 빌드에는 포함되지 않는다(App에서 import.meta.env 조건으로만 lazy-load).
+ * 운영 빌드에는 포함되지 않는다(main.tsx에서 import.meta.env 조건으로만 devHook을 lazy-load). 사용자 화면용 버튼·패널은 없다.
  * 화면 코드는 이 파일을 import하지 않는다.
  */
 import { paymentDeadline } from '../domain/rules';
@@ -43,7 +43,7 @@ export class DevController {
     const settings = { ...this.db.settings };
     const next = createSeed(preset);
     next.settings = settings;
-    next.ownerAccountId = this.db.ownerAccountId; // 로그인한 계정의 상태로 유지
+    next.ownerAccountId = this.db.ownerAccountId; // 현재 계정(데모 고객)의 상태로 유지
     this.repo.__replace(next);
     return ok(`시나리오를 '${preset}'로 초기화했어요.`);
   }

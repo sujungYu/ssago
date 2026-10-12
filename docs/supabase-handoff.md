@@ -18,7 +18,10 @@
 9. **인증과 데이터 권한**: 인증은 연결됨(아래 절). 데이터 연결 시 모든 테이블에 RLS(`auth.uid()` 기준 본인 행), 쓰기·결제는 서버(Edge Functions 등)에서 세션 검증. `getProfile`은 `auth.uid()` 프로필 조회로. 알림 링크 접근 시 권한 재확인.
 10. **주소 검색·거리 계산 공급자**, 단지 판별 데이터.
 
-## 인증(Supabase Auth) — 연결된 것과 교체 지점
+## 인증 — 현재 없음(로그인 없는 데모, 2026-10-12)
+인증 코드와 `@supabase/supabase-js`는 제거됐다. 지금은 모든 방문자가 가상 데모 고객(`src/app/account.ts`의 고정 id)이다. 데이터를 Supabase로 옮길 때는 인증을 다시 도입하고 `useAccountId()`가 인증된 사용자 id를 돌려주게 바꾼 뒤, 모든 테이블에 `auth.uid()` 기준 RLS를 적용한다. 익명 방문자를 실제 고객 계정 하나에 묶거나 RLS를 끄지 않는다. 아래 표는 제거 전 구현의 기록이다(git 기록에서 복원 가능).
+
+## (기록) 인증(Supabase Auth) — 제거 전 연결 지점
 | 계약(`AuthRepository`) | 구현(`SupabaseAuthRepository`) |
 |---|---|
 | `restoreSession` | `auth.getSession()` 후 `auth.getUser()`로 서버 확인. 무효면 `signOut({ scope: 'local' })` |

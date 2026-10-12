@@ -3,10 +3,7 @@ export type RepoErrorCode =
   | 'network' | 'save_unknown' | 'not_found' | 'address_unavailable' | 'address_not_eligible'
   | 'request_ended' | 'group_closed' | 'payment_expired' | 'recheck_required' | 'version_changed'
   | 'payment_in_progress' | 'no_amount_due' | 'stale_cancel' | 'already_cancelled' | 'change_stale'
-  | 'not_reviewable' | 'invalid'
-  // 인증(Supabase Auth). 인증 오류(자격·정책)와 네트워크 오류를 구분한다.
-  | 'auth_not_configured' | 'auth_invalid_credentials' | 'auth_email_not_confirmed' | 'auth_network' | 'auth_rate_limited'
-  | 'auth_weak_password' | 'auth_signup_exists' | 'auth_signup_disabled' | 'auth_invalid_email' | 'auth_recovery_invalid' | 'auth_failed';
+  | 'not_reviewable' | 'invalid';
 
 export class RepoError extends Error {
   readonly code: RepoErrorCode;
@@ -36,17 +33,6 @@ const MESSAGES: Record<RepoErrorCode, { title: string; hint?: string }> = {
   not_reviewable: { title: '정산이 완료된 실제 이용 건에서 리뷰를 작성할 수 있습니다.' },
   invalid: { title: '입력한 내용을 확인해 주세요.' },
   // 인증 — 비밀번호나 서버 원문 메시지는 넣지 않는다.
-  auth_not_configured: { title: '로그인 서버 연결이 설정되지 않았어요.', hint: '설정 전에는 로그인·회원가입을 할 수 없어요. 관리자는 README의 Supabase 설정을 확인해 주세요.' },
-  auth_invalid_credentials: { title: '이메일 또는 비밀번호를 확인해주세요.' },
-  auth_email_not_confirmed: { title: '이메일 확인이 필요해요.', hint: '가입할 때 받은 메일의 링크를 눌러 확인한 뒤 로그인해 주세요.' },
-  auth_network: { title: '네트워크에 연결할 수 없어요.', hint: '연결 상태를 확인한 뒤 다시 시도해 주세요. 입력한 내용은 그대로 있어요.' },
-  auth_rate_limited: { title: '요청이 많아 잠시 처리할 수 없어요.', hint: '잠시 후 다시 시도해 주세요.' },
-  auth_weak_password: { title: '사용할 수 없는 비밀번호예요.', hint: '더 길게 하거나 다른 비밀번호를 입력해 주세요.' },
-  auth_signup_exists: { title: '이 이메일로는 가입할 수 없어요.', hint: '이미 가입했다면 로그인하거나 비밀번호를 재설정해 주세요.' },
-  auth_signup_disabled: { title: '지금은 회원가입을 받을 수 없어요.' },
-  auth_invalid_email: { title: '이메일 주소를 확인해 주세요.' },
-  auth_recovery_invalid: { title: '비밀번호 재설정 링크가 만료됐거나 올바르지 않아요.', hint: '재설정을 다시 요청해 주세요.' },
-  auth_failed: { title: '지금은 처리하지 못했어요.', hint: '잠시 후 다시 시도해 주세요.' },
 };
 
 export function describeError(e: unknown): { title: string; hint?: string; code: RepoErrorCode } {

@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import { Link, type LinkProps } from 'react-router-dom';
 import { describeError } from '../domain/errors';
 import { formatWon } from '../domain/money';
@@ -144,19 +144,6 @@ export function Field({ label, hint, error, children, id }: { label: string; hin
 }
 
 /** 비밀번호 입력 + 표시·숨기기 버튼. Field의 render prop(id·aria-*)을 그대로 받는다. */
-export function PasswordInput(props: Omit<InputHTMLAttributes<HTMLInputElement>, 'type'>) {
-  const [shown, setShown] = useState(false);
-  return (
-    <div className="pw">
-      <input {...props} type={shown ? 'text' : 'password'} className="input pw__input" autoCapitalize="none" autoCorrect="off" spellCheck={false} />
-      <button type="button" className="pw__toggle" aria-label={shown ? '비밀번호 숨기기' : '비밀번호 표시'} aria-pressed={shown}
-        aria-controls={props.id} onClick={() => setShown((v) => !v)}>
-        <Icon name={shown ? 'eyeOff' : 'eye'} size={20} />
-      </button>
-    </div>
-  );
-}
-
 // ───────── 대화상자 ─────────
 /**
  * 확인 대화상자. 좁은 화면에서는 하단 시트, 넓은 화면에서는 가운데 대화상자. closeLabel을 주면 제목 옆에 닫기 버튼을 둔다.
@@ -181,7 +168,9 @@ export function Dialog({ title, onClose, children, actions, closeLabel, anchor }
     const scrollY = window.scrollY;
     const html = document.documentElement;
     const prevOverflow = html.style.overflow;
-    html.style.overflow = 'hidden'; // 배경 스크롤 잠금(스크롤 위치는 유지됨)
+    // 배경 스크롤 잠금(스크롤 위치는 유지됨). 스크롤바가 사라져도 레이아웃이 밀리지 않도록 base.css에서 html에 scrollbar-gutter: stable을 둔다.
+    // 데스크톱 팝오버도 잠근다: 위치를 열 때 한 번 계산해 고정하므로, 배경이 스크롤되면 기준 버튼과 어긋난다.
+    html.style.overflow = 'hidden';
     const first = ref.current?.querySelector<HTMLElement>('button, [href], input, textarea, select');
     first?.focus({ preventScroll: true });
     const onKey = (e: KeyboardEvent) => {
@@ -203,7 +192,10 @@ export function Dialog({ title, onClose, children, actions, closeLabel, anchor }
     };
   }, []);
   return (
-    <div className={`dialog-backdrop${pop ? ' dialog-backdrop--popover' : ''}`} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    <div className={`dialog-backdrop${pop ? ' dialog-backdrop--popover' : ''}`} onMouseDown={(e) => {
+      // 바깥을 눌러 닫을 때 브라우저 기본 동작(포커스를 body로 옮김)을 막아, 닫은 뒤 연 버튼으로 포커스가 돌아가게 한다.
+      if (e.target === e.currentTarget) { e.preventDefault(); onClose(); }
+    }}>
       <div className={`dialog${pop ? ' dialog--popover' : ''}`} role="dialog" aria-modal="true" aria-labelledby={tid} ref={ref}
         style={pop ? { top: pop.top, left: pop.left, maxHeight: `calc(100dvh - ${pop.top + 16}px)` } : undefined}>
         {closeLabel ? (

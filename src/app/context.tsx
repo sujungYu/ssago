@@ -1,12 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { MockRepository } from '../data/mock/mockRepository';
 import type { Repository } from '../data/repositories/types';
-import type { AuthRepository } from '../data/repositories/auth';
-import { SupabaseAuthRepository } from '../data/auth/supabaseAuthRepository';
-import { DemoAuthRepository } from '../data/auth/demoAuthRepository';
-import { OPENED_FROM_RECOVERY_LINK, supabase } from '../data/auth/supabaseClient';
-import { parsePasswordMin } from '../domain/auth';
-import { useAuth } from './auth';
+import { useAccountId } from './account';
 
 /**
  * 데이터 공급자 주입 지점. 2차에서 Supabase 구현체를 같은 Repository 계약으로 만들어 여기서만 교체한다.
@@ -22,18 +17,11 @@ export function useRepo(): Repository {
   return r;
 }
 /**
- * 데이터·인증 공급자 생성. 인증은 Supabase Auth(실제 연결), 예약·업체·결제 데이터는 목업이다.
- * 2차에서 데이터도 Supabase 구현체로 바꾸면 여기만 교체한다.
+ * 데이터 공급자 생성. 로그인 없는 데모라 모든 데이터는 목업(가상 데모 고객 1명)이다. 인증·실제 DB 연결은 없다.
+ * 이후 데이터를 실제 저장소로 바꾸면 같은 Repository 계약으로 여기만 교체한다(그때는 인증·RLS가 함께 필요하다).
  */
-export function createDefaultServices(): { repo: MockRepository; auth: AuthRepository } {
-  const repo = new MockRepository({ persist: true });
-  const passwordMinLength = parsePasswordMin(import.meta.env.VITE_AUTH_PASSWORD_MIN_LENGTH);
-  // ⚠️ 임시: Supabase 값(VITE_SUPABASE_URL·키)이 없으면 연결 전 데모 로그인을 쓴다(이 브라우저 안에서만 유효, 실제 계정 아님).
-  // 값을 넣으면 자동으로 Supabase Auth를 쓴다. Supabase 연결 후에는 데모 분기와 demoAuthRepository.ts를 지운다.
-  const auth: AuthRepository = supabase
-    ? new SupabaseAuthRepository(supabase.auth, { passwordMinLength, openedFromRecoveryLink: OPENED_FROM_RECOVERY_LINK })
-    : new DemoAuthRepository({ passwordMinLength });
-  return { repo, auth };
+export function createDefaultServices(): { repo: MockRepository } {
+  return { repo: new MockRepository({ persist: true }) };
 }
 
 // ───────── 앱 상태(방문 지역·비교 묶음) ─────────
@@ -95,12 +83,11 @@ export function loadListScroll(entryKey: string): number | undefined {
 }
 
 /**
- * 계정마다 앱 상태와 화면 트리를 새로 만든다(key=계정). 계정이 바뀌거나 로그아웃하면
- * 이전 사용자의 조회 캐시·입력 중 상태·방문 지역이 다음 사용자에게 남지 않는다.
+ * 계정마다 앱 상태와 화면 트리를 새로 만든다(key=계정). 계정이 바뀌면 이전 사용자의 조회 캐시·입력 중 상태·방문 지역이
+ * 다음 사용자에게 남지 않는다. 로그인 없는 데모에서는 항상 가상 데모 고객이지만, 이후 실제 계정을 붙일 수 있게 구조를 유지한다.
  */
 export function AppStateProvider({ children }: { children: ReactNode }) {
-  const { state } = useAuth();
-  const account = state.status === 'signedIn' ? state.session.userId : 'guest';
+  const account = useAccountId();
   return <AccountAppState key={account}>{children}</AccountAppState>;
 }
 

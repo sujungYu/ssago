@@ -1,4 +1,3 @@
-import { lazy, Suspense } from 'react';
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { useEffect } from 'react';
 import { HomePage } from '../features/discovery/HomePage';
@@ -25,13 +24,10 @@ import { LedgerDetailPage, LedgerPage } from '../features/history/LedgerPages';
 import { ReviewPage } from '../features/history/ReviewPage';
 import { MePage } from '../features/history/MePage';
 import { GuidePage, NoticePage, NotFoundPage } from '../features/system/SystemPages';
-import { LoginPage, NewPasswordPage, ResetRequestPage, ResetSentPage, SignUpDonePage, SignUpPage } from '../features/auth/AuthPages';
-import { RequireAuth } from './auth';
 import { AppStateProvider } from './context';
 
-// 개발용 시나리오 패널은 dev 서버 또는 VITE_ENABLE_DEV_TOOLS=true 일 때만 번들에 들어간다(운영 빌드에서는 조건이 정적으로 false가 되어 제거됨).
-const SHOW_DEV = import.meta.env.DEV || import.meta.env.VITE_ENABLE_DEV_TOOLS === 'true';
-const DevPanel = SHOW_DEV ? lazy(() => import('../dev/DevPanel')) : null;
+/** 로그인 없는 데모에서 없앤 인증 화면 주소. 들어오면 업체 찾기로 보낸다(이전 링크·북마크 대비). */
+const OLD_AUTH_PATHS = ['/login', '/signup', '/signup/done', '/password/reset', '/password/reset/sent', '/password/new'];
 
 function ScrollTop() {
   const { pathname } = useLocation();
@@ -43,18 +39,11 @@ export function App() {
   return (
     <BrowserRouter>
       <ScrollTop />
-      {/* 계정이 바뀌면 화면 트리·앱 상태를 새로 만든다(이전 사용자의 캐시가 남지 않게) */}
+      {/* 계정(데모에서는 가상 데모 고객 고정)마다 화면 트리·앱 상태를 새로 만든다 */}
       <AppStateProvider>
         <Routes>
-          {/* 로그인 없이 볼 수 있는 화면은 인증 화면뿐이다 */}
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/signup" element={<SignUpPage />} />
-          <Route path="/signup/done" element={<SignUpDonePage />} />
-          <Route path="/password/reset" element={<ResetRequestPage />} />
-          <Route path="/password/reset/sent" element={<ResetSentPage />} />
-          <Route path="/password/new" element={<NewPasswordPage />} />
-          {/* 그 밖의 모든 화면은 로그인 필요. 화면 이동 제어일 뿐 데이터 보안은 서버·RLS가 맡아야 한다. */}
-          <Route element={<RequireAuth />}>
+          {/* 로그인 없는 데모: 모든 화면을 바로 이용한다(인증 가드 없음). 데이터는 전부 목업이다. */}
+          {OLD_AUTH_PATHS.map((p) => <Route key={p} path={p} element={<Navigate to="/" replace />} />)}
           <Route path="/" element={<HomePage />} />
           <Route path="/address" element={<AddressPage />} />
           <Route path="/providers" element={<ProviderListPage />} />
@@ -82,11 +71,9 @@ export function App() {
           <Route path="/me" element={<MePage />} />
           <Route path="/guide" element={<GuidePage />} />
           <Route path="/notice/:id" element={<NoticePage />} />
-            <Route path="/home" element={<Navigate to="/" replace />} />
-            <Route path="*" element={<NotFoundPage />} />
-          </Route>
+          <Route path="/home" element={<Navigate to="/" replace />} />
+          <Route path="*" element={<NotFoundPage />} />
         </Routes>
-        {DevPanel && <Suspense fallback={null}><DevPanel /></Suspense>}
       </AppStateProvider>
     </BrowserRouter>
   );

@@ -1,5 +1,5 @@
 /**
- * 사용자 화면 e2e 점검. 데모 빌드(개발용 시나리오 도구 포함)를 미리보기 서버로 띄워 실제 브라우저로 흐름을 따라간다.
+ * 사용자 화면 e2e 점검. 데모 빌드(화면 없는 개발용 시나리오 훅 `window.__sagoDev` 포함)를 미리보기 서버로 띄워 실제 브라우저로 흐름을 따라간다.
  *   npm run e2e            # 데모 빌드 후 전체 점검
  *   E2E_ONLY=결제 npm run e2e   # 이름에 포함된 점검만 실행
  * 결과는 docs/verification-log.md 에 기록된다.
@@ -17,20 +17,13 @@ const CHROME = process.env.CHROME_PATH || (existsSync('/opt/pw-browsers/chromium
 const DB_KEY = 'on-gimae/mock-db/v3';
 const APP_KEY = 'on-gimae/app-state/v1';
 
-// e2e는 실제 Supabase 프로젝트 대신 아래 가짜 Supabase Auth 서버(브라우저 요청 가로채기)로 인증 흐름을 확인한다.
-// 실제 프로젝트 설정·이메일 발송·서버 정책은 이 점검으로 확인되지 않는다.
-const SB_URL = 'https://e2e-demo.supabase.co';
-const SB_STORAGE = 'sb-e2e-demo-auth-token';
-const E2E_USER = { email: 'e2e@ongimae.test', password: 'e2e-pass-123' };
-
 // npx 대신 node로 vite를 직접 실행한다(Windows에서도 셸 없이 실행·종료되도록).
 const VITE = join(ROOT, 'node_modules/vite/bin/vite.js');
 const vite = (args, opts = {}) => spawnSync(process.execPath, [VITE, ...args], { cwd: ROOT, stdio: 'inherit', ...opts });
 
 // ───────── 빌드·서버 ─────────
 if (!process.env.E2E_SKIP_BUILD) {
-  const env = { ...process.env, VITE_SUPABASE_URL: SB_URL, VITE_SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_e2e_dummy', VITE_AUTH_PASSWORD_MIN_LENGTH: '8' };
-  if (vite(['build', '--mode', 'demo'], { env }).status !== 0) process.exit(1);
+  if (vite(['build', '--mode', 'demo']).status !== 0) process.exit(1);
 }
 const server = spawn(process.execPath, [VITE, 'preview', '--port', String(PORT), '--strictPort'], { cwd: ROOT, stdio: 'ignore' });
 const stopServer = () => { try { server.kill(); } catch { /* ignore */ } };
@@ -41,81 +34,16 @@ for (let i = 0; i < 50; i++) {
 }
 
 const browser = await chromium.launch({ executablePath: CHROME, args: ['--no-sandbox'] });
-
-// ───────── 가짜 Supabase Auth ─────────
-const b64url = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
-const userObj = (u) => ({
-  id: u.id, aud: 'authenticated', role: 'authenticated', email: u.email, email_confirmed_at: u.confirmed ? '2026-10-08T00:00:00Z' : null,
-  app_metadata: { provider: 'email', providers: ['email'] }, user_metadata: {},
-  identities: [{ id: u.id, user_id: u.id, provider: 'email', identity_data: { email: u.email, sub: u.id } }],
-  created_at: '2026-10-08T00:00:00Z', updated_at: '2026-10-08T00:00:00Z',
-});
-class FakeSupabase {
-  constructor() { this.users = new Map(); this.tokens = new Map(); this.calls = []; this.offline = false; this.confirmEmail = false; this.delayMs = 0; this.seq = 0; this.add(E2E_USER); }
-  add({ email, password }) { const u = { id: `00000000-0000-4000-8000-${String(++this.seq).padStart(12, '0')}`, email, password, confirmed: true }; this.users.set(email, u); return u; }
-  issue(u) {
-    const now = Math.floor(Date.now() / 1000);
-    const access_token = `${b64url({ alg: 'HS256', typ: 'JWT' })}.${b64url({ sub: u.id, email: u.email, aud: 'authenticated', role: 'authenticated', exp: now + 3600, iat: now, session_id: `s${now}${u.id}` })}.sig`;
-    const s = { access_token, token_type: 'bearer', expires_in: 3600, expires_at: now + 3600, refresh_token: `rt-${u.id}-${now}-${Math.random()}`, user: userObj(u) };
-    this.tokens.set(access_token, u); this.tokens.set(s.refresh_token, u);
-    return s;
-  }
-  revokeAll() { this.tokens.clear(); }
-  async handle(route) {
-    const req = route.request();
-    // 실제 Supabase처럼 API 버전 헤더를 노출해야 SDK가 오류 code를 읽는다.
-    const cors = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': '*', 'access-control-expose-headers': 'x-supabase-api-version', 'x-supabase-api-version': '2024-01-01' };
-    if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: cors });
-    if (this.offline) return route.abort('internetdisconnected');
-    if (this.delayMs) await new Promise((r) => setTimeout(r, this.delayMs));
-    const url = new URL(req.url());
-    const path = url.pathname.replace('/auth/v1', '');
-    this.calls.push(`${req.method()} ${path}${url.searchParams.get('grant_type') ? `?${url.searchParams.get('grant_type')}` : ''}`);
-    const body = (() => { try { return req.postDataJSON() ?? {}; } catch { return {}; } })();
-    const bearer = (req.headers().authorization ?? '').replace(/^Bearer /, '');
-    const json = (status, data) => route.fulfill({ status, headers: { ...cors, 'content-type': 'application/json' }, body: JSON.stringify(data) });
-    if (path === '/signup' && req.method() === 'POST') {
-      if (this.users.has(body.email)) return json(422, { code: 'user_already_exists', msg: 'User already registered' });
-      const u = this.add(body);
-      if (this.confirmEmail) { u.confirmed = false; return json(200, { ...userObj(u), confirmation_sent_at: '2026-10-08T00:00:00Z' }); }
-      return json(200, this.issue(u));
-    }
-    if (path === '/token' && url.searchParams.get('grant_type') === 'password') {
-      const u = this.users.get(body.email);
-      if (!u || u.password !== body.password) return json(400, { code: 'invalid_credentials', msg: 'Invalid login credentials' });
-      if (!u.confirmed) return json(400, { code: 'email_not_confirmed', msg: 'Email not confirmed' });
-      return json(200, this.issue(u));
-    }
-    if (path === '/token' && url.searchParams.get('grant_type') === 'refresh_token') {
-      const u = this.tokens.get(body.refresh_token);
-      return u ? json(200, this.issue(u)) : json(400, { code: 'refresh_token_not_found', msg: 'Invalid Refresh Token' });
-    }
-    if (path === '/user' && req.method() === 'GET') {
-      const u = this.tokens.get(bearer);
-      return u ? json(200, userObj(u)) : json(403, { code: 'bad_jwt', msg: 'invalid JWT' });
-    }
-    if (path === '/user' && req.method() === 'PUT') {
-      const u = this.tokens.get(bearer);
-      if (!u) return json(401, { code: 'no_authorization', msg: 'no auth' });
-      if (body.password) u.password = body.password;
-      return json(200, userObj(u));
-    }
-    if (path === '/logout') { this.tokens.delete(bearer); return route.fulfill({ status: 204, headers: cors }); }
-    if (path === '/recover') return json(200, {});
-    return json(404, { code: 'not_found', msg: 'not found' });
-  }
-}
+// 헤드리스 Chrome은 기본으로 스크롤바를 숨긴다. 스크롤바가 자리를 차지하는 데스크톱(Windows 등) 환경 점검용으로 따로 띄운다.
+const browserSB = await chromium.launch({ executablePath: CHROME, args: ['--no-sandbox'], ignoreDefaultArgs: ['--hide-scrollbars'] });
 
 // ───────── 도우미 ─────────
 const results = [];
 const only = process.env.E2E_ONLY;
 async function test(name, fn, opts = {}) {
   if (only && !name.includes(only)) return;
-  const ctx = await browser.newContext({ viewport: { width: opts.width ?? 390, height: 844 } });
-  const fake = new FakeSupabase();
-  await ctx.route(`${SB_URL}/**`, (route) => fake.handle(route));
+  const ctx = await (opts.browser ?? browser).newContext({ viewport: { width: opts.width ?? 390, height: opts.height ?? 844 } });
   const page = await ctx.newPage();
-  page.fake = fake;
   const errors = [];
   page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
   page.on('console', (m) => { if (m.type() === 'error' && !/ERR_INTERNET_DISCONNECTED|Failed to load resource|Failed to fetch/.test(m.text())) errors.push(`console: ${m.text()}`); });
@@ -136,19 +64,14 @@ const eq = (a, b, msg) => { if (a !== b) throw new Error(`${msg}: 기대 ${JSON.
 const truthy = (v, msg) => { if (!v) throw new Error(msg); };
 
 /**
- * 새 세션으로 시작. patch(db)로 목업 상태를 미리 바꿀 수 있다.
- * login=true(기본)면 가짜 Supabase가 발급한 세션을 SDK 저장 위치(localStorage)에 넣고 시작한다.
+ * 새 세션으로 시작(로그인 없는 데모: 가상 데모 고객). patch(db)로 목업 상태를 미리 바꿀 수 있다.
+ * address를 주면 업체 찾기 탐색 주소(이 탭의 화면 상태)로 넣는다. null이면 미설정으로 시작.
  */
-async function start(page, { path = '/', address = 'ad-apt', patch, latency = 30, login = true } = {}) {
-  await page.goto(`${BASE}/login`); // 같은 출처에서 저장소 준비
-  const session = login ? page.fake.issue(page.fake.users.get(E2E_USER.email)) : null;
-  await page.evaluate(([sbKey, s]) => {
-    sessionStorage.clear(); localStorage.clear();
-    if (s) localStorage.setItem(sbKey, JSON.stringify(s));
-  }, [SB_STORAGE, session]);
-  await page.goto(`${BASE}${path}`); // 앱이 시드 DB를 만들어 저장
-  // 로그인 계정이 정해질 때 이전 사용자 상태(방문 지역 등)를 지우므로, 방문 지역은 그 뒤에 넣는다(다음 이동 때 읽힘).
-  if (login) await page.waitForFunction((k) => !!JSON.parse(sessionStorage.getItem(k) ?? '{}').ownerAccountId, DB_KEY);
+async function start(page, { path = '/', address = 'ad-apt', patch, latency = 30 } = {}) {
+  await page.goto(`${BASE}/`); // 같은 출처에서 저장소 준비
+  await page.evaluate(() => { sessionStorage.clear(); localStorage.clear(); });
+  await page.goto(`${BASE}${path}`); // 앱이 시드 DB를 만들고 데모 고객으로 소유 계정을 정한다
+  await page.waitForFunction((k) => JSON.parse(sessionStorage.getItem(k) ?? '{}').ownerAccountId === 'demo-customer', DB_KEY);
   await page.evaluate(([appKey, addr]) => { if (addr) sessionStorage.setItem(appKey, JSON.stringify({ addressId: addr })); }, [APP_KEY, address]);
   await page.evaluate(() => new Promise((r) => setTimeout(r, 50)));
   const fns = [new Function('db', `db.settings.latencyMs = ${Number(latency)};`)];
@@ -162,6 +85,11 @@ async function patchDb(page, fn, path) {
   const src = [].concat(fn).map((f) => `(${f.toString()})(db);`).join('\n');
   await page.evaluate(([k, code]) => { const db = JSON.parse(sessionStorage.getItem(k)); (new Function('db', code))(db); sessionStorage.setItem(k, JSON.stringify(db)); }, [DB_KEY, src]);
   if (path === null) await page.reload(); else await page.goto(`${BASE}${path ?? '/'}`);
+}
+/** 화면 없는 개발용 시나리오 훅(window.__sagoDev, 데모 빌드 전용)으로 업체 응답·시간 경과 같은 이벤트를 일으킨다. */
+async function dev(page, method, ...args) {
+  await page.waitForFunction(() => !!window.__sagoDev);
+  return page.evaluate(([m, a]) => Promise.resolve(window.__sagoDev[m](...a)), [method, args]);
 }
 const db = (page) => page.evaluate((k) => JSON.parse(sessionStorage.getItem(k)), DB_KEY);
 const txt = (page, t, o = {}) => page.getByText(t, { exact: false, ...o }).first();
@@ -919,23 +847,18 @@ await test('요청 필터: 목록 위치 유지(상세 → 뒤로) · 필터 변
   eq(await page.evaluate(() => window.scrollY), 0, '필터 변경 시 목록 처음으로');
 });
 
-await test('요청 필터: 로그아웃·계정 전환 시 필터 초기화', async (page) => {
+await test('요청 필터: 다른 소유 계정의 목업 상태가 남아 있으면 데모 고객 데이터로 초기화(필터·위치·방문 지역 포함)', async (page) => {
   await start(page, { path: '/requests' });
-  await waitText(page, '업체 승인 완료 · 결제 대기');
   await pickStatus(page, '종료');
-  await page.locator('.tabbar').getByRole('link', { name: '내 정보' }).click();
-  await page.getByRole('button', { name: '로그아웃' }).click();
-  await onPath(page, '/login');
-  truthy(!(await page.evaluate(() => JSON.stringify({ ...sessionStorage }))).includes('list-filter'), '로그아웃 후 저장된 필터');
-  page.fake.add({ email: 'user-c@ongimae.test', password: 'user-c-pass' });
-  await page.getByLabel('이메일', { exact: true }).fill('user-c@ongimae.test');
-  await page.getByLabel('비밀번호', { exact: true }).fill('user-c-pass');
-  await page.getByRole('button', { name: '로그인', exact: true }).click();
-  await onPath(page, '/');
-  await page.locator('.tabbar').getByRole('link', { name: '내 요청' }).click();
+  truthy((await page.evaluate(() => JSON.stringify({ ...sessionStorage }))).includes('list-filter'), '필터 저장');
+  // 이전 버전·다른 계정의 상태를 흉내 낸다(사용자 구분 구조는 유지된다)
+  await page.evaluate((k) => { const d = JSON.parse(sessionStorage.getItem(k)); d.ownerAccountId = 'someone-else'; d.requests[0].tasks[0].title = '다른 계정 데이터'; sessionStorage.setItem(k, JSON.stringify(d)); }, DB_KEY);
+  await page.goto(`${BASE}/requests`);
   await waitText(page, '업체 승인 완료 · 결제 대기');
-  eq(search(page), '', '새 계정 쿼리');
-  await statusBtn(page).filter({ hasText: '요청 상태' }).waitFor();
+  const dump = await page.evaluate(() => JSON.stringify({ ...sessionStorage }));
+  truthy(!dump.includes('다른 계정 데이터'), '다른 계정 목업 데이터가 남음');
+  truthy(!dump.includes('status=ended'), '다른 계정 필터가 남음');
+  eq(new URL(page.url()).search, '', '필터 초기화');
 });
 
 await test('요청: 추가 정보 요청 → 보완 제출 → 검토 중', async (page) => {
@@ -1023,10 +946,7 @@ await test('결제 처리 중·결과 확인 중: 재결제 차단, 결과 확�
 await test('결제: 승인 조건 버전이 바뀌면 동의가 초기화된다', async (page) => {
   await start(page, { path: '/requests/rq-3/approval' });
   await page.getByRole('checkbox').check();
-  await page.getByRole('button', { name: '개발용 시나리오 도구 열기' }).click();
-  await page.locator('select[aria-label="요청 선택"]').selectOption('rq-3');
-  await page.getByRole('button', { name: '조건 버전 올리기' }).click();
-  await page.getByRole('button', { name: '닫기' }).click();
+  await dev(page, 'bumpApprovalVersion', 'rq-3');
   await page.waitForFunction(() => !document.querySelector('input[type=checkbox]').checked);
   truthy(await page.getByRole('button', { name: /모의 결제하기/ }).isDisabled(), '버전 변경 후 결제 버튼 비활성');
 });
@@ -1048,24 +968,17 @@ await test('결제: 승인 만료·종료 요청은 결제 불가 안내', async
   await waitText(page, '지금은 결제할 수 없는 상태예요');
 });
 
-await test('개발 도구: 업체 승인 이벤트 → 알림 진입(S-02) → 결제 대기 / 상태 변경 후 최신 안내', async (page) => {
+await test('시나리오 훅: 업체 승인 이벤트 → 알림 진입(S-02) → 결제 대기 / 상태 변경 후 최신 안내', async (page) => {
   await start(page, { path: '/requests/rq-1' });
-  await page.getByRole('button', { name: '개발용 시나리오 도구 열기' }).click();
-  await page.locator('select[aria-label="요청 선택"]').selectOption('rq-1');
-  await page.getByRole('button', { name: '업체 승인' }).click(); // 방문 시각 없이 승인하면 거절
-  await waitText(page, '업체 제안 방문 시각이 필요해요');
-  await page.getByLabel('업체 제안 방문 시각').fill('20:00'); // 고객 가능 시간 밖
-  await page.getByRole('button', { name: '업체 승인' }).click();
-  await waitText(page, '고객 가능 시간(09:00~12:00, 13:00~16:00) 안의 시각이어야 해요');
-  await page.getByLabel('업체 제안 방문 시각').fill('10:30');
-  await page.getByRole('button', { name: '업체 승인' }).click();
-  await waitText(page, '승인했어요');
+  let r = await dev(page, 'approveRequest', 'rq-1', ''); // 방문 시각 없이 승인하면 거절
+  truthy(!r.ok && r.message.includes('업체 제안 방문 시각이 필요해요'), r.message);
+  r = await dev(page, 'approveRequest', 'rq-1', '20:00'); // 고객 가능 시간 밖
+  truthy(!r.ok && r.message.includes('고객 가능 시간(09:00~12:00, 13:00~16:00) 안의 시각이어야 해요'), r.message);
+  r = await dev(page, 'approveRequest', 'rq-1', '10:30');
+  truthy(r.ok && r.message.includes('승인했어요'), r.message);
   eq((await db(page)).approvals.find((a) => a.requestId === 'rq-1').visitTime, '10:30', '업체 제안 방문 시각');
   const noticeId = (await db(page)).notices[0].id;
-  await page.getByRole('button', { name: '닫기' }).click();
-  await page.getByRole('button', { name: '개발용 시나리오 도구 열기' }).click();
-  await page.getByRole('button', { name: '승인 만료' }).click();
-  await page.getByRole('button', { name: '닫기' }).click();
+  await dev(page, 'expireApproval', 'rq-1');
   await page.goto(`${BASE}/notice/${noticeId}`);
   await waitText(page, '알림 이후 내용이 바뀌었어요');
 });
@@ -1169,10 +1082,7 @@ await test('취소(마감 전): 출장비 공제 없음 · 남은 세대 재계�
 await test('취소 금액이 바뀌면 동의가 초기화되고 새 금액을 다시 확인해야 한다', async (page) => {
   await start(page, { path: '/bookings/bk-k5/cancel' });
   await page.getByRole('checkbox').check();
-  await page.getByRole('button', { name: '개발용 시나리오 도구 열기' }).click();
-  await page.locator('select[aria-label="예약 선택"]').selectOption('bk-k5');
-  await page.getByRole('button', { name: '자재 선결제·주문됨' }).click();
-  await page.getByRole('button', { name: '닫기' }).click();
+  await dev(page, 'payAndOrderMaterial', 'bk-k5');
   await page.waitForFunction(() => !document.querySelector('input[type=checkbox]').checked);
   truthy(await page.getByRole('button', { name: /예약 취소하고 환불 요청/ }).isDisabled(), '금액 변경 후 취소 버튼 비활성');
   await waitText(page, '−30,000원'); // 자재비 공제는 출장비와 별도 항목
@@ -1417,255 +1327,154 @@ await test('정책 문구: 할인·채팅·보증 표현 금지', async (page) =
   }
 });
 
-// ───────── 인증(Supabase Auth — e2e에서는 가짜 서버) ─────────
-const field = (page, label) => page.getByLabel(label, { exact: true });
-const loginBtn = (page) => page.getByRole('button', { name: '로그인', exact: true });
-async function signInUi(page, { email, password }) {
-  await field(page, '이메일').fill(email);
-  await field(page, '비밀번호').fill(password);
-  await loginBtn(page).click();
-}
-const waitPath = (page, p) => page.waitForURL((u) => u.pathname === p);
+// ───────── 로그인 없는 데모 ─────────
 const pathOf = (page) => new URL(page.url()).pathname;
-const hasSbSession = (page) => page.evaluate((k) => !!localStorage.getItem(k), SB_STORAGE);
-const storageDump = (page) => page.evaluate(() => JSON.stringify({ ...sessionStorage }) + JSON.stringify({ ...localStorage }));
-/** 내부 화면(하단 탭·업체 찾기 안내 카드)이 한 번이라도 그려졌는지 기록한다 — 로그인 확인 전 노출 점검용 */
-const watchInternalFlash = (page) => page.addInitScript(() => {
-  window.__internalSeen = [];
-  new MutationObserver(() => { if (document.querySelector('.tabbar, .guide, .top-nav')) window.__internalSeen.push(location.pathname); })
-    .observe(document, { subtree: true, childList: true });
-});
+const AUTH_WORDS = /로그인|로그아웃|회원가입|비밀번호/;
+const ROUTES_FOR_AUTH_SCAN = ['/', '/address', '/providers?category=c2', '/providers/p1', '/providers/p1/request?group=g1', '/requests', '/requests/rq-3', '/requests/rq-3/approval', '/bookings', '/bookings?tab=past', '/bookings/bk-k2', '/bookings/bk-k2/cancel', '/bookings/bk-k9/final', '/ledger', '/me', '/guide', '/없는화면'];
 
-await test('인증 진입: 비로그인 앱 실행·내부 URL 직접 접근은 로그인 화면(내부 화면 미노출)', async (page) => {
-  await watchInternalFlash(page);
-  await start(page, { path: '/', login: false });
-  for (const p of ['/', '/providers?category=c2', '/providers/p1', '/requests/rq-3', '/bookings/bk-k2', '/ledger', '/me', '/guide', '/없는화면']) {
-    await page.goto(`${BASE}${p}`);
-    await waitPath(page, '/login');
-    await waitText(page, '아직 회원이 아니신가요?');
-  }
-  eq(JSON.stringify(await page.evaluate(() => window.__internalSeen)), '[]', '로그인 전 내부 화면 노출');
-  eq(await page.locator('.tabbar').count(), 0, '로그인 화면 하단 탭');
-});
-
-await test('인증: 회원가입 → 가입 완료 → 로그인 화면 → 로그인 → 업체 찾기', async (page) => {
-  await start(page, { path: '/login', login: false });
-  await page.getByRole('link', { name: '회원가입' }).click();
-  await waitPath(page, '/signup');
-  await waitText(page, '8자 이상 입력해 주세요'); // 비밀번호 기준 안내(설정값)
-  await field(page, '이메일').fill('new-user@ongimae.test');
-  await field(page, '비밀번호').fill('newpass-01');
-  await field(page, '비밀번호 확인').fill('newpass-01');
-  await page.getByRole('button', { name: '가입하기' }).click();
-  await waitPath(page, '/signup/done');
-  await waitText(page, '회원가입이 완료됐어요');
-  truthy(page.fake.calls.includes('POST /signup'), 'Supabase 가입 요청');
-  truthy(page.fake.calls.includes('POST /logout'), '가입 직후 로그아웃');
-  eq(await hasSbSession(page), false, '가입 후 세션이 남음');
-  await page.getByRole('link', { name: '로그인하러 가기' }).click();
-  await waitPath(page, '/login');
-  eq(await field(page, '이메일').inputValue(), 'new-user@ongimae.test', '이메일 미리 채움');
-  await field(page, '비밀번호').fill('newpass-01');
-  await field(page, '비밀번호').press('Enter'); // Enter 제출
-  await waitPath(page, '/');
+await test('로그인 없는 데모: 첫 접속은 바로 업체 찾기(로그인 화면·대기 없음)', async (page) => {
+  await page.goto(`${BASE}/`);
   await waitText(page, '이웃과 같은 날 예약하면 출장비를 나눠 내요.');
-  truthy(!(await storageDump(page)).includes('newpass-01'), '브라우저 저장소에 비밀번호가 남음');
+  eq(pathOf(page), '/', '첫 화면');
+  eq(await page.locator('.boot, [aria-busy="true"] .btn__spin').count(), 0, '세션 확인 대기 화면 없음');
+  truthy(!AUTH_WORDS.test(await page.locator('body').innerText()), '로그인 관련 문구');
 });
 
-await test('인증: 이메일 확인이 켜진 환경이면 확인 메일 안내, 확인 전 로그인은 확인 필요 안내', async (page) => {
-  await start(page, { path: '/signup', login: false });
-  page.fake.confirmEmail = true;
-  await field(page, '이메일').fill('confirm-me@ongimae.test');
-  await field(page, '비밀번호').fill('newpass-02');
-  await field(page, '비밀번호 확인').fill('newpass-02');
-  await page.getByRole('button', { name: '가입하기' }).click();
-  await waitText(page, '확인 메일을 보냈어요');
-  truthy(!page.fake.calls.includes('POST /logout'), '세션 없는 가입에서 로그아웃 호출');
-  await page.getByRole('link', { name: '로그인하러 가기' }).click();
-  await field(page, '비밀번호').fill('newpass-02');
-  await loginBtn(page).click();
-  await waitText(page, '이메일 확인이 필요해요');
-});
-
-await test('인증: 입력 검증·잘못된 비밀번호·네트워크 실패 후 다시 시도·중복 제출 방지', async (page) => {
-  await start(page, { path: '/login', login: false });
-  // 임시: 이메일·비밀번호 칸이 모두 채워져야 로그인 버튼이 활성화된다(AuthPages.tsx 주석 참고)
-  eq(await loginBtn(page).isDisabled(), true, '빈 입력에서 버튼 비활성');
-  await field(page, '이메일').fill('abc');
-  eq(await loginBtn(page).isDisabled(), true, '비밀번호 없을 때 버튼 비활성');
-  await field(page, '비밀번호').fill('x');
-  eq(await loginBtn(page).isDisabled(), false, '두 칸 입력 시 버튼 활성');
-  await loginBtn(page).click();
-  await waitText(page, '이메일 형식을 확인해 주세요');
-  await page.waitForFunction(() => document.activeElement?.getAttribute('aria-invalid') === 'true'); // 첫 오류로 포커스
-  await signInUi(page, { email: E2E_USER.email, password: 'wrong-password' });
-  await waitText(page, '이메일 또는 비밀번호를 확인해주세요');
-  const body = await page.locator('main').innerText();
-  truthy(!body.includes('wrong-password'), '오류 안내에 비밀번호 포함');
-  eq(pathOf(page), '/login', '실패 후 위치');
-  page.fake.offline = true;
-  await field(page, '비밀번호').fill(E2E_USER.password);
-  await loginBtn(page).click();
-  await waitText(page, '네트워크에 연결할 수 없어요');
-  page.fake.offline = false;
-  page.fake.delayMs = 700;
-  const before = page.fake.calls.filter((c) => c === 'POST /token?password').length;
-  await page.getByRole('button', { name: '다시 시도' }).click();
-  await loginBtn(page).click({ force: true }).catch(() => {}); // 처리 중 연타
-  eq(await loginBtn(page).isDisabled(), true, '처리 중 버튼 잠금');
-  await waitPath(page, '/');
-  eq(page.fake.calls.filter((c) => c === 'POST /token?password').length - before, 1, '로그인 요청 수');
-  // 회원가입 검증
-  await page.evaluate(() => localStorage.clear());
-  await page.goto(`${BASE}/signup`);
-  await field(page, '이메일').fill('a@b.co');
-  await field(page, '비밀번호').fill('short');
-  await field(page, '비밀번호 확인').fill('different');
-  await page.getByRole('button', { name: '가입하기' }).click();
-  await waitText(page, '비밀번호는 8자 이상 입력해 주세요');
-  await waitText(page, '비밀번호가 일치하지 않아요');
-  page.fake.offline = true;
-  await field(page, '비밀번호').fill('longenough-1');
-  await field(page, '비밀번호 확인').fill('longenough-1');
-  await page.getByRole('button', { name: '가입하기' }).click();
-  await waitText(page, '네트워크에 연결할 수 없어요');
-  page.fake.offline = false;
-  await page.getByRole('button', { name: '다시 시도' }).click();
-  await waitText(page, '회원가입이 완료됐어요');
-});
-
-await test('인증: 새로고침해도 세션 유지, 세션이 무효면 로그인 화면', async (page) => {
-  await start(page, { path: '/login', login: false });
-  await signInUi(page, E2E_USER);
-  await waitPath(page, '/');
-  await page.reload();
-  await waitText(page, '이웃과 같은 날 예약하면 출장비를 나눠 내요.');
-  eq(pathOf(page), '/', '새로고침 후 위치');
-  await page.goto(`${BASE}/bookings/bk-k2`);
-  await waitText(page, '예약 상세').catch(() => {});
-  eq(pathOf(page), '/bookings/bk-k2', '새로고침 후 내부 화면 직접 접근');
-  // 서버에서 세션이 무효가 되면(예: 다른 곳에서 폐기) 다음 실행 때 로그인 화면으로
-  page.fake.revokeAll();
-  await page.reload();
-  await waitPath(page, '/login');
-  eq(await hasSbSession(page), false, '무효 세션 정리');
-});
-
-await test('인증: 시작할 때 네트워크가 끊겨도 저장된 세션으로 진입(로그인 화면으로 보내지 않음)', async (page) => {
+await test('로그인 없는 데모: 내부 화면 직접 접근·새로고침 정상(내 요청·내 예약·내 정보·상세)', async (page) => {
   await start(page, { path: '/' });
-  page.fake.offline = true;
-  await page.reload();
-  await waitText(page, '이웃과 같은 날 예약하면 출장비를 나눠 내요.');
-  eq(pathOf(page), '/', '오프라인 시작 위치');
-});
-
-await test('인증: 로그아웃 → 로그인 화면, 뒤로가기·내부 화면 접근 차단', async (page) => {
-  await start(page, { path: '/requests' });
-  await waitText(page, '업체 승인 완료 · 결제 대기');
-  await page.locator('.tabbar').getByRole('link', { name: '내 정보' }).click();
-  await waitText(page, E2E_USER.email);
-  await page.getByRole('button', { name: '로그아웃' }).click();
-  await waitPath(page, '/login');
-  eq(await hasSbSession(page), false, '로그아웃 후 세션');
-  const d = await db(page);
-  eq(d.ownerAccountId, null, '로그아웃 후 목업 상태 주인');
-  await page.goBack();
-  await page.waitForTimeout(300);
-  eq(pathOf(page), '/login', '뒤로가기 후 위치');
-  for (const p of ['/requests', '/bookings/bk-k2', '/me']) {
+  for (const [p, text] of [['/requests', '업체 승인 완료 · 결제 대기'], ['/bookings', '예약'], ['/me', '내역·안내'], ['/bookings/bk-k2', '예약 금액·결제'], ['/requests/rq-3', '업체가 제안한 방문 시각']]) {
     await page.goto(`${BASE}${p}`);
-    await waitPath(page, '/login');
+    await waitText(page, text);
+    eq(pathOf(page), p, `${p} 직접 접근`);
+    await page.reload();
+    await waitText(page, text);
+    eq(pathOf(page), p, `${p} 새로고침`);
   }
 });
 
-await test('인증: 계정 전환 시 이전 사용자의 요청·예약·방문 지역이 남지 않는다', async (page) => {
-  await start(page, { path: '/providers/p1/request?group=g1' });
-  await page.getByLabel('어떤 작업인가요?').fill('계정A 전용 작업');
-  await page.getByLabel('상세 주소', { exact: true }).fill('101동 101호');
-  await page.getByRole('button', { name: '09:00~12:00' }).click();
-  await page.getByRole('button', { name: '요청 보내기' }).click();
-  await waitText(page, '요청을 보냈어요');
-  const ownerA = (await db(page)).ownerAccountId;
-  await page.goto(`${BASE}/me`);
-  await page.getByRole('button', { name: '로그아웃' }).click();
-  await waitPath(page, '/login');
-  truthy(!(await storageDump(page)).includes('계정A 전용 작업'), '로그아웃 후 저장소에 A의 요청');
-  page.fake.add({ email: 'user-b@ongimae.test', password: 'user-b-pass' });
-  await signInUi(page, { email: 'user-b@ongimae.test', password: 'user-b-pass' });
-  await waitPath(page, '/');
-  await page.locator('.tabbar').getByRole('link', { name: '내 요청' }).click();
-  await waitText(page, '업체 승인 완료 · 결제 대기'); // 데모 시드는 새로 시작
-  truthy(!(await page.locator('main').innerText()).includes('계정A 전용 작업'), 'B에게 A의 요청이 보임');
-  const d = await db(page);
-  truthy(d.ownerAccountId && d.ownerAccountId !== ownerA, '목업 상태 주인 교체');
-  truthy(!JSON.stringify(d).includes('계정A 전용 작업'), 'B의 목업 상태에 A의 요청');
-  eq(JSON.parse(await page.evaluate((k) => sessionStorage.getItem(k) ?? '{}', APP_KEY)).addressId ?? null, null, 'A의 방문 지역');
-});
-
-await test('인증: 비밀번호 재설정 — 동일 안내, 링크 없이 열면 만료 안내, 복구 링크로 변경 후 새 비밀번호 로그인', async (page) => {
-  await start(page, { path: '/login', login: false });
-  await page.getByRole('link', { name: '비밀번호를 잊으셨나요?' }).click();
-  await field(page, '이메일').fill('nobody@ongimae.test');
-  await page.getByRole('button', { name: '재설정 링크 받기' }).click();
-  await waitText(page, '메일함을 확인해 주세요');
-  const a = (await page.locator('main').innerText()).replace('nobody@ongimae.test', 'X');
-  await page.getByRole('link', { name: '다시 요청하기' }).click();
-  await field(page, '이메일').fill(E2E_USER.email);
-  await page.getByRole('button', { name: '재설정 링크 받기' }).click();
-  await waitText(page, '메일함을 확인해 주세요');
-  eq((await page.locator('main').innerText()).replace(E2E_USER.email, 'X'), a, '계정 유무와 관계없이 같은 안내');
-  await page.goto(`${BASE}/password/new`);
-  await waitText(page, '재설정 링크가 만료됐거나 올바르지 않아요');
-  // 재설정 메일 링크(implicit flow 해시)로 진입
-  const s = page.fake.issue(page.fake.users.get(E2E_USER.email));
-  const hash = new URLSearchParams({ access_token: s.access_token, refresh_token: s.refresh_token, expires_in: '3600', expires_at: String(s.expires_at), token_type: 'bearer', type: 'recovery' });
-  await page.goto(`${BASE}/login`); // 메일 링크는 새 페이지로 열린다(같은 경로의 해시만 바뀌면 다시 읽지 않음)
-  await page.goto(`${BASE}/password/new#${hash}`);
-  await waitText(page, '새 비밀번호를 입력해 주세요');
-  await field(page, '새 비밀번호').fill('changed-pass-1');
-  await field(page, '새 비밀번호 확인').fill('changed-pass-1');
-  await page.getByRole('button', { name: '비밀번호 변경' }).click();
-  await waitPath(page, '/login');
-  await waitText(page, '비밀번호를 바꿨어요');
-  eq(await hasSbSession(page), false, '변경 후 복구 세션 정리');
-  await signInUi(page, { email: E2E_USER.email, password: 'changed-pass-1' });
-  await waitPath(page, '/');
-});
-
-await test('인증 화면 접근성: 라벨·autocomplete·비밀번호 표시 버튼·하단 탭 없음', async (page) => {
-  await start(page, { path: '/login', login: false });
-  for (const [p, expected] of [['/login', ['email', 'current-password']], ['/signup', ['email', 'new-password', 'new-password']], ['/password/reset', ['email']]]) {
+await test('로그인 없는 데모: 이전 인증 주소는 업체 찾기로 이동', async (page) => {
+  await start(page, { path: '/' });
+  for (const p of ['/login', '/signup', '/signup/done', '/password/reset', '/password/reset/sent', '/password/new', '/login?next=/bookings']) {
     await page.goto(`${BASE}${p}`);
-    await page.waitForSelector('form');
-    const info = await page.evaluate(() => Array.from(document.querySelectorAll('main input')).map((el) => ({
-      named: !!((el.id && document.querySelector(`label[for="${el.id}"]`)) || el.getAttribute('aria-label')), ac: el.getAttribute('autocomplete'),
-    })));
-    eq(info.filter((i) => !i.named).length, 0, `${p} 이름 없는 입력`);
-    eq(JSON.stringify(info.map((i) => i.ac)), JSON.stringify(expected), `${p} autocomplete`);
-    eq(await page.locator('.tabbar, .top-nav').count(), 0, `${p} 내비게이션`);
-    eq(await page.locator('h1').count(), 1, `${p} h1`);
+    await page.waitForURL((u) => u.pathname === '/');
+    await waitText(page, '이웃과 같은 날 예약하면 출장비를 나눠 내요.');
   }
-  await page.goto(`${BASE}/login`);
-  const pw = field(page, '비밀번호');
-  eq(await pw.getAttribute('type'), 'password', '기본 숨김');
-  await page.getByRole('button', { name: '비밀번호 표시' }).click();
-  eq(await pw.getAttribute('type'), 'text', '표시');
-  await page.getByRole('button', { name: '비밀번호 숨기기' }).click();
-  eq(await pw.getAttribute('type'), 'password', '다시 숨김');
-  // 키보드만으로 이메일 → 비밀번호 → 표시 버튼 → 로그인 버튼(두 칸이 채워져 활성화된 상태)
-  await field(page, '이메일').fill(E2E_USER.email);
-  await pw.fill('anything');
-  await field(page, '이메일').focus();
-  await page.keyboard.press('Tab'); eq(await page.evaluate(() => document.activeElement?.getAttribute('autocomplete')), 'current-password', 'Tab 순서 1');
-  await page.keyboard.press('Tab'); eq(await page.evaluate(() => document.activeElement?.getAttribute('aria-label')), '비밀번호 표시', 'Tab 순서 2');
-  await page.keyboard.press('Tab'); eq(await page.evaluate(() => document.activeElement?.textContent), '로그인', 'Tab 순서 3');
 });
+
+await test('로그인 없는 데모: 어느 화면에도 로그인·회원가입·로그아웃·계정 이메일이 없다', async (page) => {
+  await start(page, { path: '/me' });
+  await waitText(page, '로그인 없는 데모예요');
+  const me = await page.locator('main').innerText();
+  truthy(!/@|로그아웃|로그인하|회원가입/.test(me.replace('로그인 없는 데모예요', '')), `내 정보: ${me}`);
+  const bad = [];
+  for (const r of ROUTES_FOR_AUTH_SCAN) {
+    await page.goto(`${BASE}${r}`); await page.waitForTimeout(250);
+    const t = (await page.locator('body').innerText()).replace('로그인 없는 데모예요', '');
+    if (AUTH_WORDS.test(t)) bad.push(r);
+    if (await page.locator('input[type="password"], input[type="email"]').count()) bad.push(`${r}(입력)`);
+  }
+  truthy(!bad.length, `인증 UI가 남은 화면: ${bad.join(', ')}`);
+});
+
+await test('로그인 없는 데모: 실제 서버로 데이터를 보내거나 받지 않는다(목업만)', async (page) => {
+  const external = [];
+  page.on('request', (r) => { const u = new URL(r.url()); if (u.origin !== BASE && !u.protocol.startsWith('data')) external.push(u.origin); });
+  await start(page, { path: '/' });
+  for (const p of ['/requests', '/bookings', '/me', '/providers/p1/request?new=1']) { await page.goto(`${BASE}${p}`); await page.waitForTimeout(300); }
+  truthy(!external.length, `외부 요청: ${[...new Set(external)].join(', ')}`);
+  const store = await page.evaluate(() => Object.keys(localStorage).join(','));
+  truthy(!/sb-|supabase|auth/i.test(store), `인증 세션 저장값: ${store}`);
+});
+
+await test('DEV 버튼 제거: 모바일·데스크톱 어느 화면에도 개발 도구 버튼·패널과 그 빈 자리가 없다', async (page) => {
+  await start(page, { path: '/' });
+  const bad = [];
+  for (const w of [360, 1280]) {
+    await page.setViewportSize({ width: w, height: 800 });
+    for (const r of ROUTES_FOR_AUTH_SCAN) {
+      await page.goto(`${BASE}${r}`); await page.waitForTimeout(200);
+      const n = await page.evaluate(() => Array.from(document.querySelectorAll('body *')).filter((el) =>
+        el.matches('.dev-fab,.dev-panel') || (el.children.length === 0 && (el.textContent ?? '').trim() === 'DEV') || /개발용 시나리오/.test(el.getAttribute('aria-label') ?? '')).length);
+      if (n) bad.push(`${w}px ${r}`);
+      // 헤더 밖에서 화면 오른쪽 위에 떠 있는 요소가 없다
+      const fixed = await page.evaluate(() => Array.from(document.querySelectorAll('body *')).filter((el) => {
+        if (getComputedStyle(el).position !== 'fixed' || el.closest('.app-header')) return false;
+        const rc = el.getBoundingClientRect(); return rc.width > 0 && rc.top < 64 && rc.right > innerWidth - 120;
+      }).length);
+      if (fixed) bad.push(`${w}px ${r}(오른쪽 위 고정 요소)`);
+    }
+    // 헤더 안쪽 좌우 여백이 같다(오른쪽에 버튼 자리를 비워 두지 않음)
+    const pad = await page.evaluate(() => { const cs = getComputedStyle(document.querySelector('.app-header__inner')); return [cs.paddingLeft, cs.paddingRight]; });
+    eq(pad[0], pad[1], `${w}px 헤더 좌우 여백`);
+  }
+  truthy(!bad.length, `DEV 버튼·빈 자리가 남은 화면: ${bad.join(', ')}`);
+  eq(await page.evaluate(() => typeof window.__sagoDev), 'object', '데모 빌드에서는 화면 없는 시나리오 훅 유지');
+});
+
+// ───────── 필터 열기·닫기 시 가로 밀림(스크롤바 자리) ─────────
+/** 헤더·본문·카드·필터 버튼의 가로 위치와 화면 너비 */
+const layoutX = (page) => page.evaluate(() => {
+  const x = (sel) => { const el = Array.from(document.querySelectorAll(sel)).find((e) => !e.closest('[role="dialog"]')); return el ? Math.round(el.getBoundingClientRect().left * 10) / 10 : null; };
+  return { header: x('.app-header__brand'), title: x('main h2'), card: x('main .card'), capsule: x('.capsule'), clientW: document.documentElement.clientWidth };
+});
+/** 열고(→ 위치·잠금 확인) 닫고(→ 위치·스크롤·포커스 확인)를 닫는 방법을 바꿔 가며 반복한다. */
+async function openCloseRepeat(page, opener, label, { popover }) {
+  const base = await layoutX(page);
+  for (const how of ['Escape', '닫기 버튼', '바깥 누르기']) {
+    await opener.scrollIntoViewIfNeeded();
+    const y0 = await page.evaluate(() => scrollY);
+    await opener.click();
+    const dlg = page.getByRole('dialog');
+    await dlg.waitFor();
+    const open = await layoutX(page);
+    eq(JSON.stringify({ ...open, clientW: 0 }), JSON.stringify({ ...base, clientW: 0 }), `${label} 연 동안 가로 위치(${how})`);
+    eq(await page.evaluate(() => document.documentElement.style.overflow), 'hidden', `${label} 배경 스크롤 잠금`);
+    eq(await page.evaluate(() => scrollY), y0, `${label} 연 동안 스크롤 위치`);
+    if (popover !== undefined) {
+      const box = await dlg.boundingBox(); const ob = await opener.boundingBox();
+      eq(await dlg.evaluate((el) => el.classList.contains('dialog--popover')), popover, `${label} 팝오버 여부`);
+      if (popover) truthy(Math.abs(box.x - ob.x) < 1 && box.y > ob.y + ob.height, `${label} 팝오버가 버튼 바로 아래에 붙지 않음: ${box.x}/${ob.x}`);
+    }
+    if (how === 'Escape') await page.keyboard.press('Escape');
+    else if (how === '닫기 버튼') await dlg.getByRole('button', { name: '닫기' }).first().click();
+    else await page.mouse.click(4, popover ? 600 : 80);
+    await dlg.waitFor({ state: 'detached' });
+    eq(JSON.stringify(await layoutX(page)), JSON.stringify(base), `${label} 닫은 뒤 가로 위치(${how})`);
+    eq(await page.evaluate(() => scrollY), y0, `${label} 닫은 뒤 스크롤 위치(${how})`);
+    eq(await page.evaluate(() => document.documentElement.style.overflow), '', `${label} 잠금 해제`);
+    truthy(await opener.evaluate((el) => el === document.activeElement), `${label} 닫은 뒤 포커스 복원(${how})`);
+  }
+}
+const FILTER_PAGES = [['/requests', '내 요청'], ['/bookings', '내 예약 진행 중'], ['/bookings?tab=past', '내 예약 이용 내역']];
+for (const [w, hgt] of [[1280, 720], [390, 844]]) {
+  for (const scroll of [true, false]) {
+    await test(`필터 열기·닫기: 화면이 옆으로 밀리지 않음(${w}px, 스크롤바 ${scroll ? '있음' : '없음'}, 내 요청·내 예약 모든 필터 3회 반복)`, async (page) => {
+      for (const [path, name] of FILTER_PAGES) {
+        // 스크롤바 없는 페이지: 목록을 1건씩만 남긴다
+        await start(page, { path, patch: scroll ? undefined : (db) => { db.requests = db.requests.slice(0, 1); db.bookings = db.bookings.filter((b) => b.id === 'bk-k1' || b.id === 'bk-k15'); } });
+        await page.locator('.capsule').first().waitFor();
+        await page.locator('main .card').first().waitFor(); // 목록이 그려진 뒤 측정
+        await page.waitForTimeout(150);
+        const sc = await page.evaluate(() => document.documentElement.scrollHeight > innerHeight + 1);
+        eq(sc, scroll, `${name} 스크롤 여부`);
+        if (scroll) await page.evaluate(() => window.scrollTo(0, 60)); // 스크롤된 상태에서 열고 닫아도 위치 유지
+        const n = await page.locator('.capsule[aria-haspopup="dialog"]').count();
+        truthy(n >= 2, `${name} 필터 수`);
+        for (let i = 0; i < n; i++) await openCloseRepeat(page, page.locator('.capsule[aria-haspopup="dialog"]').nth(i), `${name} 필터 ${i + 1}`, { popover: w >= 768 });
+      }
+    }, { browser: browserSB, width: w, height: hgt });
+  }
+  await test(`다른 대화상자 부작용 없음: 공동 예약 안내(${w}px, 스크롤바 표시 환경)`, async (page) => {
+    await start(page, { path: '/' });
+    await page.locator('main .card').first().waitFor(); // 업종 카드까지 그려진 뒤 측정
+    await openCloseRepeat(page, guideBtn(page), '공동 예약 안내', {});
+  }, { browser: browserSB, width: w, height: hgt });
+}
 
 // ───────── 키보드·접근성 ─────────
 await test('접근성: 모든 입력에 이름이 있고 키보드로 대화상자를 닫을 수 있다', async (page) => {
   await start(page, { path: '/providers/p1/request?group=g1' });
   const unnamed = await page.evaluate(() => Array.from(document.querySelectorAll('input,textarea,select')).filter((el) => {
-    if (el.closest('.dev-panel')) return false;
     const id = el.id; const lab = id && document.querySelector(`label[for="${id}"]`);
     return !(lab || el.getAttribute('aria-label') || el.closest('label'));
   }).length);
@@ -1686,9 +1495,7 @@ const WIDTHS = [360, 390, 430, 768, 1280];
 const ROUTES = ['/', '/address', '/providers?category=c2', '/providers/p1', '/providers/p1/request?group=g1', '/requests', '/requests/bundle/b-sink', '/requests/rq-3', '/requests/rq-2/supplement',
   '/requests/rq-3/approval', '/requests/rq-10/recheck', '/bookings', '/bookings/bk-k2', '/bookings/bk-k4', '/bookings/bk-k5', '/bookings/bk-k16', '/bookings/bk-k2/change', '/bookings/bk-k2/cancel', '/delays/dl-k3', '/proposals/pr-k4', '/materials/mt-1',
   '/additional/aw-1', '/bookings/bk-k9/final', '/bookings/bk-k14', '/bookings/bk-k13/review', '/ledger', '/me', '/guide'];
-/** 로그아웃 상태로 확인하는 인증 화면 */
-const AUTH_ROUTES = ['/login', '/signup', '/password/reset', '/password/reset/sent', '/password/new'];
-await test('브랜드: 탭 제목·파비콘·헤더 로고(싸고 홈)·인증 화면 로고, 화면에 이전 서비스명 없음', async (page) => {
+await test('브랜드: 탭 제목·파비콘·헤더 로고(싸고 홈), 화면에 이전 서비스명 없음', async (page) => {
   await start(page, { path: '/' });
   truthy((await page.title()).startsWith('싸고'), `탭 제목: ${await page.title()}`);
   const icon = await page.locator('link[rel="icon"]').getAttribute('href');
@@ -1706,12 +1513,6 @@ await test('브랜드: 탭 제목·파비콘·헤더 로고(싸고 홈)·인증 
     if ((await page.locator('body').innerText()).includes('온김에')) bad.push(r);
   }
   eq(await page.locator('.guide__art').count(), 0, '일러스트는 업체 찾기에만'); // 마지막 화면(/guide)
-  await page.evaluate(() => localStorage.clear());
-  for (const r of ['/login', '/signup']) {
-    await page.goto(`${BASE}${r}`); await page.waitForURL((u) => u.pathname === r);
-    await waitText(page, '싸게 고치고');
-    if ((await page.locator('body').innerText()).includes('온김에')) bad.push(r);
-  }
   truthy(!bad.length, `이전 서비스명이 남은 화면: ${bad.join(', ')}`);
 });
 
@@ -1720,11 +1521,9 @@ for (const w of WIDTHS) {
   await test(`반응형 ${w}px: 모든 화면에서 가로 넘침·잘림 없음`, async (page) => {
     await start(page, { path: '/' });
     const bad = [];
-    const all = [...ROUTES.map((r) => [r, '']), ...AUTH_ROUTES.map((r) => [r, 'out'])];
+    const all = ROUTES.map((r) => [r, '']);
     for (const [r, mode] of all) {
-      if (mode === 'out') await page.evaluate(() => localStorage.clear()); // 세션 제거 → 로그아웃 상태
       await page.goto(`${BASE}${r}`);
-      if (mode === 'out') await page.waitForURL((u) => u.pathname === r);
       await page.waitForTimeout(350);
       const info = await page.evaluate(() => {
         const vw = document.documentElement.clientWidth;
@@ -1732,7 +1531,7 @@ for (const w of WIDTHS) {
         // 텍스트·버튼이 화면 밖으로 나가거나 부모에서 잘리는지
         const clipped = [];
         for (const el of document.querySelectorAll('main *, header *')) {
-          if (el.closest('.dev-panel,.dev-fab,.sr-only') || el.classList.contains('sr-only')) continue;
+          if (el.closest('.sr-only') || el.classList.contains('sr-only')) continue;
           const cs = getComputedStyle(el);
           if (cs.display === 'none' || cs.visibility === 'hidden') continue;
           const rc = el.getBoundingClientRect();
@@ -1742,53 +1541,16 @@ for (const w of WIDTHS) {
         }
         return { over, clipped: clipped.slice(0, 3) };
       });
-      if (info.over || info.clipped.length) bad.push(`${mode ? '(로그아웃) ' : ''}${r} ${info.over ? '[가로 스크롤]' : ''} ${info.clipped.join(',')}`);
+      if (info.over || info.clipped.length) bad.push(`${r} ${info.over ? '[가로 스크롤]' : ''} ${info.clipped.join(',')}`);
       if (process.env.E2E_SHOTS !== '0') await page.screenshot({ path: join(ROOT, `e2e/screens/${w}_${mode ? `${mode}_` : ''}${r.replace(/[^a-z0-9]+/gi, '_')}.png`), fullPage: true });
     }
     truthy(!bad.length, bad.join(' / '));
   }, { width: w });
 }
 
-// ───────── 임시 데모 로그인(Supabase 값 없는 빌드) ─────────
-// Supabase 연결 전 상태를 그대로 재현한다: VITE_SUPABASE_* 없이 빌드해 별도 포트로 띄운다.
-if (!only || '데모 로그인'.includes(only) || only.includes('데모')) {
-  const DEMO_PORT = 4175;
-  const DEMO_BASE = `http://localhost:${DEMO_PORT}`;
-  const env = { ...process.env }; for (const k of Object.keys(env)) if (k.startsWith('VITE_SUPABASE')) delete env[k];
-  const built = vite(['build', '--mode', 'demo', '--outDir', 'dist-demo-auth', '--emptyOutDir'], { env, stdio: 'pipe' });
-  const demoServer = spawn(process.execPath, [VITE, 'preview', '--outDir', 'dist-demo-auth', '--port', String(DEMO_PORT), '--strictPort'], { cwd: ROOT, stdio: 'ignore' });
-  for (let i = 0; i < 50; i++) { try { if ((await fetch(DEMO_BASE)).ok) break; } catch { /* wait */ } await new Promise((r) => setTimeout(r, 200)); }
-  await test('데모 로그인(Supabase 미연결): 처음 쓰는 이메일로 바로 로그인 → 새로고침 유지 → 로그아웃 → 틀린 비밀번호 거절', async (page) => {
-    truthy(built.status === 0, '데모 빌드 실패');
-    const f = (l) => page.getByLabel(l, { exact: true });
-    await page.goto(`${DEMO_BASE}/requests`);
-    await page.waitForURL((u) => u.pathname === '/login');
-    await waitText(page, '데모 로그인 · 실제 계정이 아니에요');
-    await f('이메일').fill('first-time@ongimae.test');
-    await f('비밀번호').fill('demo-pass-1');
-    await page.getByRole('button', { name: '로그인', exact: true }).click();
-    await page.waitForURL((u) => u.pathname === '/');
-    await waitText(page, '이웃과 같은 날 예약하면 출장비를 나눠 내요.');
-    truthy(!(await page.evaluate(() => JSON.stringify({ ...localStorage }))).includes('demo-pass-1'), '비밀번호 원문 저장');
-    await page.reload();
-    await waitText(page, '이웃과 같은 날 예약하면 출장비를 나눠 내요.');
-    await page.goto(`${DEMO_BASE}/me`);
-    await waitText(page, 'first-time@ongimae.test');
-    await page.getByRole('button', { name: '로그아웃' }).click();
-    await page.waitForURL((u) => u.pathname === '/login');
-    await f('이메일').fill('first-time@ongimae.test');
-    await f('비밀번호').fill('wrong-pass-1');
-    await page.getByRole('button', { name: '로그인', exact: true }).click();
-    await waitText(page, '이메일 또는 비밀번호를 확인해주세요');
-    await f('비밀번호').fill('demo-pass-1');
-    await page.getByRole('button', { name: '로그인', exact: true }).click();
-    await page.waitForURL((u) => u.pathname === '/');
-  });
-  try { demoServer.kill(); } catch { /* ignore */ }
-}
-
 // ═════════ 정리 ═════════
 await browser.close();
+await browserSB.close();
 stopServer();
 
 // 운영 빌드에 개발 도구가 포함되지 않았는지 확인
@@ -1797,10 +1559,10 @@ if (!only) {
   const env = { ...process.env }; for (const k of Object.keys(env)) if (k.startsWith('VITE_')) delete env[k];
   const r = vite(['build', '--outDir', 'dist-prod', '--emptyOutDir'], { encoding: 'utf8', stdio: 'pipe', env });
   const files = readdirSync(join(ROOT, 'dist-prod/assets')).filter((f) => f.endsWith('.js'));
-  const leaked = files.filter((f) => /개발용 시나리오|service_role/.test(readFileSync(join(ROOT, 'dist-prod/assets', f), 'utf8')));
-  prodOk = r.status === 0 && leaked.length === 0 && !files.some((f) => f.startsWith('DevPanel'));
-  results.push({ name: '운영 빌드에는 개발용 시나리오 도구가 포함되지 않는다', ok: prodOk, ms: 0, error: prodOk ? undefined : `포함됨: ${leaked.join(',')}` });
-  console.log(`  ${prodOk ? '✓' : '✕'} 운영 빌드에는 개발용 시나리오 도구가 포함되지 않는다`);
+  const leaked = files.filter((f) => /__sagoDev|승인 조건 버전을|service_role/.test(readFileSync(join(ROOT, 'dist-prod/assets', f), 'utf8')));
+  prodOk = r.status === 0 && leaked.length === 0 && !files.some((f) => /^dev(Hook|Controller)/i.test(f));
+  results.push({ name: '운영 빌드에는 개발용 시나리오 훅이 포함되지 않는다', ok: prodOk, ms: 0, error: prodOk ? undefined : `포함됨: ${leaked.join(',')}` });
+  console.log(`  ${prodOk ? '✓' : '✕'} 운영 빌드에는 개발용 시나리오 훅이 포함되지 않는다`);
 }
 
 const failed = results.filter((r) => !r.ok);
