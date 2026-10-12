@@ -138,9 +138,10 @@ export class MockRepository implements Repository {
     if (!a) throw new RepoError('not_found');
     return { id: a.id, label: a.label, line1: a.line1, kind: a.kind };
   }
-  /** 이 주소로 참여 가능하고 접수가 열린 그룹만 반환한다. 주소 판단이 불가하면 null. */
+  /** 이 주소로 참여 가능하고 접수가 열린 그룹만 반환한다. 주소 판단이 불가하면(주소 판단 서비스 장애·주소록에 없는 주소) null. */
   private eligibleGroups(providerId: string, addressId: string | null): GroupRecord[] | null {
     if (addressId === null || this.db.settings.addressServiceDown) return null;
+    if (!byId(this.db.addressBook, addressId)) return null; // 확인할 수 없는 주소: 참여 가능 여부를 단정하지 않는다
     const anchors = addressAnchors(this.db, addressId);
     return this.db.groups.filter((g) => g.providerId === providerId && !g.closed && !g.ended && anchors.includes(g.anchorKey));
   }

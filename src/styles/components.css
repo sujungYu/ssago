@@ -284,6 +284,10 @@ a.list-row:hover { background: #fafbfd; }
 .disclosure[open] > * + * { margin-top: var(--sp-2); }
 
 /* ───────── 주소 ───────── */
+/* 업체 목록 ‘현재 조회 지역’: 긴 주소는 줄바꿈하고 버튼은 오른쪽에 고정(겹치지 않음) */
+.region-card { align-items: center; }
+.region-card > .grow { min-width: 0; }
+.region-card__actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--sp-2); flex: none; }
 .explore-address { text-decoration: none; color: inherit; padding: var(--sp-3) var(--sp-4); }
 .explore-address > svg:first-child { color: var(--c-primary); flex: none; }
 /* 모바일 키보드·하단 고정 버튼에 입력란이 가리지 않게 포커스 이동 시 여유를 둔다 */

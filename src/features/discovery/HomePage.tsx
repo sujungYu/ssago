@@ -1,15 +1,16 @@
 import { Link } from 'react-router-dom';
 import { Page } from '../../app/Page';
-import { useAppState, useRepo } from '../../app/context';
+import { useRepo } from '../../app/context';
 import { useAsync } from '../../app/hooks';
 import { Icon } from '../../components/Icon';
 import { AsyncView, Banner, CoopGuideHint, LinkButton, Section, Skeleton } from '../../components/ui';
+import { addressSubline, addressTitle, useExploreAddress } from './exploreAddress';
 
 export function HomePage() {
   const repo = useRepo();
-  const { addressId } = useAppState();
+  // 카테고리별 업체 목록과 같은 탐색 주소 상태를 쓴다
+  const { addressId, address: addr } = useExploreAddress();
   const cats = useAsync(() => repo.listCategories(), [repo]);
-  const addr = useAsync(() => (addressId ? repo.getAddress(addressId) : Promise.resolve(null)), [repo, addressId]);
   return (
     <Page title="업체 찾기" tabs>
       {/* 업체 찾기 상단: 지역·건물 주소만 간결하게(동·호수는 표시하지 않음). 누르면 설정·변경 */}
@@ -22,11 +23,11 @@ export function HomePage() {
         ) : (
           <AsyncView state={addr} loading={<Skeleton h={60} />}>
             {(a) => a && (
-              <Link to="/address?back=/" className="card list-row explore-address" aria-label={`지역·건물 주소 변경: ${a.label}`}>
+              <Link to="/address?back=/" className="card list-row explore-address" aria-label={`지역·건물 주소 변경: ${addressTitle(a)}`}>
                 <Icon name="pin" />
                 <span className="list-row__main">
-                  <span className="list-row__title">{a.label}</span>
-                  <span className="small muted">{a.line1}</span>
+                  <span className="list-row__title">{addressTitle(a)}</span>
+                  {addressSubline(a) && <span className="small muted">{addressSubline(a)}</span>}
                 </span>
                 <span className="small strong nowrap" style={{ color: 'var(--c-primary)' }}>변경</span>
               </Link>

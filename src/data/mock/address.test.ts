@@ -52,6 +52,33 @@ describe('탐색 주소(업체 찾기)', () => {
   });
 });
 
+describe('탐색 주소로 업체 목록·공동 예약 후보 조회', () => {
+  it('같은 카테고리라도 주소에 따라 공동 예약 후보가 달라진다(목업: 가상 주소록의 기준 키 일치로만 판정)', async () => {
+    const r = repo();
+    const near = await r.listProviders({ categoryId: 'c2', addressId: 'ad-apt' });
+    const far = await r.listProviders({ categoryId: 'c2', addressId: 'ad-far' });
+    expect(near.some((p) => p.jointAvailable)).toBe(true);
+    expect(far.every((p) => p.jointAvailable === false && !p.nextJoint)).toBe(true);
+  });
+  it('주소가 없거나 확인할 수 없으면 참여 가능 여부를 단정하지 않는다(null)', async () => {
+    const r = repo();
+    for (const addressId of [null, 'ad-gone']) {
+      const list = await r.listProviders({ categoryId: 'c2', addressId });
+      expect(list.every((p) => p.jointAvailable === null && !p.nextJoint)).toBe(true);
+    }
+    expect(await code(r.getAddress('ad-gone'))).toBe('not_found');
+  });
+  it('탐색 주소를 바꿔도 기존 요청·예약 방문 주소와 재사용 상세 주소는 그대로다', async () => {
+    const r = repo();
+    const before = structuredClone(r.__db());
+    await r.setExploreAddress('ad-far');
+    const after = r.__db();
+    expect(after.requests.map((x) => x.visitAddress)).toEqual(before.requests.map((x) => x.visitAddress));
+    expect(after.bookings.map((x) => x.visitAddress)).toEqual(before.bookings.map((x) => x.visitAddress));
+    expect(after.savedVisitAddress).toEqual(before.savedVisitAddress);
+  });
+});
+
 describe('신청서 주소 저장', () => {
   it('저장 선택 시 제출 성공과 함께 재사용 주소를 저장하고, 이번 요청에는 정확한 방문 주소를 보존한다', async () => {
     const r = repo();

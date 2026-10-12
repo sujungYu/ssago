@@ -1328,6 +1328,155 @@ await test('정책 문구: 할인·채팅·보증 표현 금지', async (page) =
   }
 });
 
+// ───────── 탐색 주소 공유(업체 찾기 ↔ 카테고리별 업체 목록) ─────────
+const region = (page) => page.locator('.region-card');
+const regionText = async (page) => (await region(page).innerText()).replace(/\s+/g, ' ').trim();
+/** 업체 목록의 공동 예약 배지 문구(업체 순서대로) */
+const jointBadges = (page) => page.locator('ul[aria-label="업체 목록"] .badge').allInnerTexts();
+async function pickAddress(page, label) {
+  await page.locator('ul[aria-label="검색 결과"] .list-row__title', { hasText: new RegExp(`^${label}$`) }).click();
+}
+
+await test('탐색 주소: 업체 찾기에서 고른 주소가 카테고리 목록 ‘현재 조회 지역’에 실제 값으로 표시(업체 찾기와 일치)', async (page) => {
+  await start(page, { path: '/', address: null, patch: (db) => { db.exploreAddressId = null; } });
+  await page.getByRole('link', { name: '지역·건물 주소 설정하기' }).click();
+  await pickAddress(page, '햇살마을 3단지');
+  await waitText(page, '서울 가상구 햇살로 100 (햇살마을 3단지)');
+  const home = await page.locator('.explore-address').innerText();
+  await page.locator('a.cat').nth(1).click();
+  await region(page).getByText('햇살마을 3단지', { exact: true }).waitFor();
+  const t = await regionText(page);
+  truthy(t.includes('현재 조회 지역') && t.includes('햇살마을 3단지') && t.includes('서울 가상구 햇살로 100 (햇살마을 3단지)'), t);
+  truthy(!t.includes('설정한 지역·건물 주소') && !/301동|1204호/.test(t), `안내 문구·상세 주소 노출: ${t}`);
+  for (const line of home.split('\n').filter((l) => l && l !== '변경')) truthy(t.includes(line), `업체 찾기와 다름: ${line}`);
+});
+
+await test('탐색 주소: 업체 목록에서 변경 → 목록·업체 찾기 함께 반영, 카테고리 유지·다시 조회, 요청·예약 주소는 그대로', async (page) => {
+  await start(page, { path: '/providers?category=c2' });
+  await region(page).getByText('햇살마을 3단지', { exact: true }).waitFor();
+  const before = await db(page);
+  truthy((await jointBadges(page)).includes('공동 예약 후보'), '변경 전 공동 예약 후보');
+  await region(page).getByRole('link', { name: '변경' }).click();
+  await page.waitForURL((u) => u.pathname === '/address');
+  await pickAddress(page, '먼바다로 빌라');
+  await page.waitForURL((u) => u.pathname === '/providers' && u.searchParams.get('category') === 'c2');
+  await region(page).getByText('먼바다로 빌라', { exact: true }).waitFor();
+  truthy((await regionText(page)).includes('서울 가상구 먼바다로 77 (빌라)'), '새 기본 주소');
+  const badges = await jointBadges(page);
+  truthy(badges.length > 0 && !badges.includes('공동 예약 후보'), `이전 주소 결과가 남음: ${badges}`);
+  truthy(!(await page.getByText('가까운 공동 날짜').count()), '이전 주소의 공동 날짜');
+  await page.goto(`${BASE}/`);
+  await page.locator('.explore-address').getByText('먼바다로 빌라').waitFor();
+  const after = await db(page);
+  eq(after.exploreAddressId, 'ad-far', '저장된 탐색 주소');
+  eq(JSON.stringify(after.requests.map((r) => [r.id, r.addressId, r.visitAddress])), JSON.stringify(before.requests.map((r) => [r.id, r.addressId, r.visitAddress])), '요청 방문 주소');
+  eq(JSON.stringify(after.bookings.map((b) => [b.id, b.addressId, b.visitAddress])), JSON.stringify(before.bookings.map((b) => [b.id, b.addressId, b.visitAddress])), '예약 방문 주소');
+  eq(JSON.stringify(after.savedVisitAddress), JSON.stringify(before.savedVisitAddress), '재사용 상세 주소');
+});
+
+await test('탐색 주소: 변경 취소(뒤로)·브라우저 뒤로가기·카테고리 전환·새로고침에도 같은 주소', async (page) => {
+  await start(page, { path: '/providers?category=c2', address: 'ad-apt2' });
+  await region(page).getByText('푸른숲 2단지', { exact: true }).waitFor();
+  // 변경 화면에서 고르지 않고 돌아오면 기존 주소 유지
+  await region(page).getByRole('link', { name: '변경' }).click();
+  await page.waitForURL((u) => u.pathname === '/address');
+  await page.getByRole('link', { name: /뒤로/ }).first().click();
+  await page.waitForURL((u) => u.pathname === '/providers');
+  await region(page).getByText('푸른숲 2단지', { exact: true }).waitFor();
+  await region(page).getByRole('link', { name: '변경' }).click();
+  await page.waitForURL((u) => u.pathname === '/address');
+  await page.goBack();
+  await region(page).getByText('푸른숲 2단지', { exact: true }).waitFor();
+  // 업체 찾기로 뒤로 → 다른 카테고리
+  await page.goto(`${BASE}/`);
+  await page.locator('.explore-address').getByText('푸른숲 2단지', { exact: true }).waitFor();
+  await page.locator('a.cat').nth(4).click();
+  await region(page).getByText('푸른숲 2단지', { exact: true }).waitFor();
+  await page.goBack();
+  await page.locator('.explore-address').getByText('푸른숲 2단지', { exact: true }).waitFor();
+  await page.goForward();
+  await region(page).getByText('푸른숲 2단지', { exact: true }).waitFor();
+  await page.reload();
+  await region(page).getByText('푸른숲 2단지', { exact: true }).waitFor();
+  eq((await db(page)).exploreAddressId !== undefined, true, '저장소 유지');
+});
+
+await test('탐색 주소: 빠르게 연속 변경해도 마지막 주소 결과만 표시(이전 주소 결과가 덮어쓰지 않음)', async (page) => {
+  // 기준: 처음부터 먼바다로 빌라(공동 예약 후보 없음)로 연 결과
+  await start(page, { path: '/providers?category=c2', address: 'ad-far' });
+  await region(page).getByText('먼바다로 빌라', { exact: true }).waitFor();
+  await page.locator('ul[aria-label="업체 목록"]').waitFor();
+  const expected = await jointBadges(page);
+  truthy(!expected.includes('공동 예약 후보'), `기준 주소에 후보가 있으면 점검이 약해짐: ${expected}`);
+  // 응답을 느리게 하고(900ms) 응답이 오기 전에 연달아 바꾼다: 햇살마을(후보 있음) → 달빛길(후보 있음) → 먼바다로 빌라
+  await start(page, { path: '/providers?category=c2', address: 'ad-apt', latency: 900 });
+  await region(page).getByText('햇살마을 3단지', { exact: true }).waitFor();
+  const seen = [];
+  const sample = setInterval(() => { regionText(page).then((t) => jointBadges(page).then((b) => seen.push([t, b.join('|')]))).catch(() => {}); }, 50);
+  for (const label of ['달빛길 단독주택', '먼바다로 빌라']) {
+    await region(page).getByRole('link', { name: '변경' }).click();
+    await page.waitForURL((u) => u.pathname === '/address');
+    await pickAddress(page, label);
+    await page.waitForURL((u) => u.pathname === '/providers');
+  }
+  await region(page).getByText('먼바다로 빌라', { exact: true }).waitFor();
+  await page.locator('ul[aria-label="업체 목록"]').waitFor();
+  await page.waitForTimeout(2000); // 늦게 오는 이전 주소의 응답이 있어도
+  clearInterval(sample);
+  eq(JSON.stringify(await jointBadges(page)), JSON.stringify(expected), '최종 목록이 마지막 주소 기준');
+  // ‘먼바다로 빌라’가 표시된 순간에 이전 주소의 ‘공동 예약 후보’가 함께 보인 적이 없어야 한다
+  const mixed = seen.filter(([t, b]) => t.includes('먼바다로 빌라') && b.includes('공동 예약 후보'));
+  truthy(seen.some(([t]) => t.includes('먼바다로 빌라')), '표본 수집');
+  truthy(!mixed.length, `이전 주소 결과가 새 주소와 함께 보임: ${JSON.stringify(mixed[0])}`);
+});
+
+await test('탐색 주소: 미설정이면 설정 안내·버튼(임의 기본 주소로 대체하지 않음)', async (page) => {
+  await start(page, { path: '/providers?category=c2', address: null, patch: (db) => { db.exploreAddressId = null; } });
+  await region(page).getByText('조회할 지역·건물 주소를 설정해주세요').waitFor();
+  const t = await regionText(page);
+  truthy(!/햇살|달빛|푸른숲|가상구/.test(t), `기본 주소로 대체됨: ${t}`);
+  await page.locator('ul[aria-label="업체 목록"]').waitFor();
+  const badges = await jointBadges(page);
+  truthy(badges.every((b) => b === '지역·건물 주소를 정하면 확인할 수 있어요'), `미설정 배지: ${badges}`);
+  await region(page).getByRole('link', { name: '설정' }).click();
+  await page.waitForURL((u) => u.pathname === '/address' && u.searchParams.get('back') === '/providers?category=c2');
+});
+
+await test('탐색 주소: 불러오는 중에는 로딩 표시(안내 문구·목록을 실제 주소처럼 보여주지 않음)', async (page) => {
+  await start(page, { path: '/', latency: 1500 });
+  await page.goto(`${BASE}/providers?category=c2`);
+  await page.locator('.region-card[aria-busy="true"]').waitFor();
+  const t = await regionText(page);
+  truthy(!/설정한 지역|햇살|설정해주세요/.test(t), `로딩 중 문구: ${t}`);
+  eq(await page.locator('ul[aria-label="업체 목록"]').count(), 0, '로딩 중 목록');
+  await region(page).getByText('햇살마을 3단지', { exact: true }).waitFor({ timeout: 8000 });
+  await page.locator('ul[aria-label="업체 목록"]').waitFor({ timeout: 8000 });
+});
+
+await test('탐색 주소: 주소를 확인하지 못하면 오류 안내·다시 시도·변경, 공동 예약 가능 여부를 단정하지 않음', async (page) => {
+  await start(page, { path: '/providers?category=c2', address: 'ad-gone' });
+  await region(page).getByText('주소를 확인하지 못했어요').waitFor();
+  await waitText(page, '주소를 확인하지 못해 공동 예약 참여 가능 여부를 알 수 없어요');
+  const badges = await jointBadges(page);
+  truthy(badges.length > 0 && badges.every((b) => b === '공동 예약 가능 여부 확인 필요'), `오류 시 배지: ${badges}`);
+  truthy(!(await page.getByText('가까운 공동 날짜').count()), '오류 시 공동 날짜 표시');
+  truthy(await region(page).getByRole('button', { name: '다시 시도' }).isVisible(), '다시 시도');
+  truthy(await region(page).getByRole('link', { name: '변경' }).isVisible(), '변경');
+});
+
+await test('탐색 주소: 모바일(360px) 긴 주소 줄바꿈 · 버튼과 겹치지 않음', async (page) => {
+  await page.setViewportSize({ width: 360, height: 800 });
+  await start(page, { path: '/providers?category=c2', patch: (db) => { const a = db.addressBook.find((x) => x.id === 'ad-apt'); a.label = '햇살마을 3단지 행복한우리집아파트 주민공동시설동'; a.line1 = '서울특별시 가상구 아주아주긴도로명햇살로123번길 100-25 (햇살마을 3단지 행복한우리집아파트)'; } });
+  await region(page).getByText('주민공동시설동', { exact: false }).waitFor();
+  const r = await page.evaluate(() => {
+    const card = document.querySelector('.region-card'); const text = card.querySelector('.grow').getBoundingClientRect(); const btn = card.querySelector('.region-card__actions').getBoundingClientRect(); const c = card.getBoundingClientRect();
+    return { overlap: text.right > btn.left + 0.5 && text.bottom > btn.top && text.top < btn.bottom, inside: btn.right <= c.right + 0.5 && text.left >= c.left, over: document.documentElement.scrollWidth > innerWidth, lines: Math.round(card.querySelector('.grow .strong').getBoundingClientRect().height / 20) };
+  });
+  truthy(!r.overlap && r.inside && !r.over, `겹침·넘침 ${JSON.stringify(r)}`);
+  truthy(r.lines >= 2, `긴 주소가 줄바꿈되지 않음 ${JSON.stringify(r)}`);
+  await page.screenshot({ path: join(ROOT, 'e2e/screens/360_region_long_address.png') });
+});
+
 // ───────── 로그인 없는 데모 ─────────
 const pathOf = (page) => new URL(page.url()).pathname;
 const AUTH_WORDS = /로그인|로그아웃|회원가입|비밀번호/;
