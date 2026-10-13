@@ -1,15 +1,20 @@
 import type { ReactNode } from 'react';
-import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Icon } from '../components/Icon';
 import { BrandLogo } from '../components/brand/Brand';
 import { Banner } from '../components/ui';
 
-const TABS = [
-  { to: '/', label: '업체 찾기', icon: 'find', end: true },
-  { to: '/requests', label: '내 요청', icon: 'list' },
-  { to: '/bookings', label: '내 예약', icon: 'calendar' },
-  { to: '/me', label: '내 정보', icon: 'user' },
+/**
+ * 상단·하단 메뉴. ‘내 예약’은 보낸 요청·확정된 예약·완료·취소를 함께 보여주는 메뉴라
+ * 요청 상세·비교 요청·요청 보완·승인 조건 확인(/requests/…)과 예약 상세(/bookings/…)에서도 활성으로 표시한다.
+ */
+const TABS: { to: string; label: string; icon: string; match: string[] }[] = [
+  { to: '/', label: '업체 찾기', icon: 'find', match: ['/'] },
+  { to: '/bookings', label: '내 예약', icon: 'calendar', match: ['/bookings', '/requests'] },
+  { to: '/me', label: '내 정보', icon: 'user', match: ['/me'] },
 ];
+const isTabActive = (t: (typeof TABS)[number], pathname: string) =>
+  t.match.some((m) => (m === '/' ? pathname === '/' : pathname === m || pathname.startsWith(`${m}/`)));
 
 /** 헤더 + 본문 + (최상위 화면에서만) 하단 탭. 고정 하단 버튼은 ActionBar로 흐름 안에 둔다. */
 /**
@@ -41,8 +46,8 @@ export function Page({ title, back, onBack, tabs, progress, children }: { title:
           <nav className="top-nav" aria-label="주요 메뉴">
             {/* ‘업체 찾기’는 처음 화면(홈)으로 가는 메뉴라 홈 아이콘을 앞에 둔다. 아이콘은 장식(aria-hidden), 링크 이름은 ‘업체 찾기 홈으로 이동’ */}
             {TABS.map((t) => t.to === '/' ? (
-              <NavLink key={t.to} to={t.to} end={t.end} aria-label="업체 찾기 홈으로 이동" className="top-nav__home"><Icon name="home" size={19} /><span>{t.label}</span></NavLink>
-            ) : <NavLink key={t.to} to={t.to} end={t.end}>{t.label}</NavLink>)}
+              <Link key={t.to} to={t.to} aria-current={isTabActive(t, loc.pathname) ? 'page' : undefined} aria-label="업체 찾기 홈으로 이동" className="top-nav__home"><Icon name="home" size={19} /><span>{t.label}</span></Link>
+            ) : <Link key={t.to} to={t.to} aria-current={isTabActive(t, loc.pathname) ? 'page' : undefined}>{t.label}</Link>)}
           </nav>
         </div>
       </header>
@@ -59,7 +64,7 @@ export function Page({ title, back, onBack, tabs, progress, children }: { title:
           <ul>
             {TABS.map((t) => (
               <li key={t.to}>
-                <NavLink to={t.to} end={t.end}><Icon name={t.icon} />{t.label}</NavLink>
+                <Link to={t.to} aria-current={isTabActive(t, loc.pathname) ? 'page' : undefined}><Icon name={t.icon} />{t.label}</Link>
               </li>
             ))}
           </ul>

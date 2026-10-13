@@ -6,6 +6,7 @@ import { useAsync } from '../../app/hooks';
 import { useListScrollRestore, useUrlFilter, type UrlFilterCodec } from '../../app/listFilter';
 import { formatDateTime, formatRemaining } from '../../domain/time';
 import { formatWon } from '../../domain/money';
+import { listPath } from '../../domain/reservationTabs';
 import { approvalEstimate } from '../../domain/approvalCost';
 import {
   BUNDLE_STATUS_OPTIONS, filterBundleItems, hasBundleFilterParams, parseBundleFilter, writeBundleFilter, type BundleStatusFilter,
@@ -97,6 +98,9 @@ function ResponseCard({ d, now }: { d: RequestDetail; now: string }) {
 }
 
 /** C-07 비교 요청 묶음: 같은 작업에 대한 업체별 응답을 요약 카드로 비교한다. 상태로 거를 수 있다(조회 조건만). */
+/** 이 묶음에서 확정된 예약(있으면). 확정된 묶음은 보낸 요청 목록에 없으므로 뒤로는 그 예약 상세로 */
+const bookedOf = (b?: { items: { request: { bookingId?: string } }[] }): string | undefined => b?.items.find((i) => i.request.bookingId)?.request.bookingId;
+
 export function BundlePage() {
   const { bundleId = '' } = useParams();
   const repo = useRepo();
@@ -112,7 +116,7 @@ export function BundlePage() {
   useListScrollRestore(codec.list, !!q.data, filter);
   const label = BUNDLE_STATUS_OPTIONS.find((o) => o.value === filter)?.label ?? '전체';
   return (
-    <Page title="비교 요청" back="/requests">
+    <Page title="비교 요청" back={bookedOf(q.data) ? `/bookings/${bookedOf(q.data)}` : listPath('requests')}>
       <AsyncView state={q}>
         {(b) => {
           const shown = filterBundleItems(b.items, filter);

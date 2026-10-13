@@ -19,10 +19,9 @@ export function NoticePage() {
 export function NotFoundPage({ reason }: { reason?: string }) {
   return (
     <Page title="확인할 수 없어요" back="/">
-      <Banner tone="warn" title={reason ?? '찾을 수 없는 화면이에요'}>삭제되었거나 볼 수 있는 권한이 없는 내용일 수 있어요. 아래에서 내 요청·예약을 확인해 주세요.</Banner>
+      <Banner tone="warn" title={reason ?? '찾을 수 없는 화면이에요'}>삭제되었거나 볼 수 있는 권한이 없는 내용일 수 있어요. 아래에서 내 예약(보낸 요청·확정된 예약·완료·취소)을 확인해 주세요.</Banner>
       <div className="stack--sm stack">
-        <LinkButton to="/requests" variant="primary" block>내 요청 보기</LinkButton>
-        <LinkButton to="/bookings" variant="secondary" block>내 예약 보기</LinkButton>
+        <LinkButton to="/bookings" variant="primary" block>내 예약 보기</LinkButton>
         <LinkButton to="/" variant="secondary" block>업체 찾기</LinkButton>
       </div>
     </Page>

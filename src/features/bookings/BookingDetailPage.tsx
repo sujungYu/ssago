@@ -13,6 +13,7 @@ import { ContactText, PAYMENT_STATUS, VisitAddressText, VisitText, bookingBadge,
 import { BookingCostCard } from './BookingCostCard';
 import { DURATION_NOTE, formatVisit } from '../../domain/visitTime';
 import { visitLabel } from './BookingsPage';
+import { LIST_LINK_LABEL, bookingTabOf, listPath } from '../../domain/reservationTabs';
 
 function ActionRow({ to, title, desc, tone = 'action' }: { to: string; title: string; desc?: string; tone?: 'action' | 'warn' }) {
   return (
@@ -119,6 +120,13 @@ function Body({ d }: { d: BookingDetail }) {
           {/* 예약 확정 당시 이름·연락처(요청에서 복사한 스냅숏, 내 정보 수정과 무관) */}
           {b.contact && <p className="small"><span className="muted">연락처</span> <ContactText c={b.contact} /></p>}
           <p className="xs muted">정확한 주소와 연락처는 나와 이 업체만 볼 수 있어요.</p>
+          {/* 최초 요청 내용과 업체 응답 기록(원본은 지우지 않는다). 비교 요청이면 다른 업체 응답·종료 사유도 볼 수 있다 */}
+          {d.origin && (
+            <p className="small row row--wrap" style={{ gap: 'var(--sp-3)' }}>
+              <Link to={`/requests/${d.origin.requestId}`}>최초 요청 내용 보기</Link>
+              {d.origin.bundleSize > 1 && <Link to={`/requests/bundle/${d.origin.bundleId}`}>비교 요청 보기 · 업체 {d.origin.bundleSize}곳</Link>}
+            </p>
+          )}
         </div>
       </Section>
 
@@ -203,8 +211,13 @@ export function BookingDetailPage() {
   const repo = useRepo();
   const q = useAsync(() => repo.getBooking(id), [repo, id]);
   return (
-    <Page title="예약 상세" back="/bookings" progress={q.data && <ProgressSteps progress={progressOfBooking(q.data.booking)} />}>
-      <AsyncView state={q}>{(d) => <Body d={d} />}</AsyncView>
+    <Page title="예약 상세" back={q.data ? listPath(bookingTabOf(q.data.booking)) : '/bookings'} progress={q.data && <ProgressSteps progress={progressOfBooking(q.data.booking)} />}>
+      <AsyncView state={q}>{(d) => (
+        <>
+          <Body d={d} />
+          <p className="xs muted"><Link to={listPath(bookingTabOf(d.booking))}>{LIST_LINK_LABEL[bookingTabOf(d.booking)]}</Link></p>
+        </>
+      )}</AsyncView>
     </Page>
   );
 }

@@ -7,14 +7,14 @@
 | C-03 | 카테고리별 업체 목록 | `/providers?category=` | ProviderListPage |
 | C-04 | 업체 상세 | `/providers/:id` | ProviderDetailPage |
 | C-05 | 수리 요청서 | `/providers/:id/request?group=\|new=1` | requests/RequestFormPage |
-| C-06 | 내 요청 | `/requests` | RequestsPage |
+| C-06 | 내 예약 > 보낸 요청 | `/bookings?tab=requests` (이전 `/requests`는 이동) | bookings/BookingsPage + requests/RequestsPage(SentRequestList) |
 | C-07 | 비교 요청 묶음 | `/requests/bundle/:id` | BundlePage |
 | C-08 | 업체별 요청 상세 | `/requests/:id` | RequestDetailPage |
 | C-09 | 요청서 보완 | `/requests/:id/supplement` | SupplementPage |
 | C-10 | 요청 철회 확인 | C-08 내 대화상자 | RequestDetailPage |
 | C-11 | 승인 내용 확인 | `/requests/:id/approval` | payment/ApprovalPage |
 | C-12 | 새 그룹 조건 재확인 | `/requests/:id/recheck` | ApprovalPage(mode=recheck) |
-| C-13 | 내 예약 | `/bookings` | bookings/BookingsPage |
+| C-13 | 내 예약 > 확정된 예약 · 완료·취소 | `/bookings?tab=active` · `/bookings?tab=past` | bookings/BookingsPage |
 | C-14 | 예약 상세 | `/bookings/:id` | BookingDetailPage |
 | C-15 | 날짜·시간 변경 요청 | `/bookings/:id/change` | changes/ChangeRequestPage |
 | C-16 | 변경 제안 확인 | `/proposals/:id` | ProposalPage |

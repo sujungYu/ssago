@@ -2,7 +2,7 @@
  * 진행 단계(안내용). 기존 업무 상태를 단계로 옮겨 보여줄 뿐, 상태를 바꾸거나 단계를 건너뛰는 기능은 없다.
  * 화면은 단계 숫자를 직접 정하지 않고 이 매핑을 쓴다(상태와 표시가 어긋나지 않게). 두 과정을 나눈다.
  *
- * 내 요청(request): 1 수리 요청 · 2 업체 검토·견적 · 3 예약금 결제
+ * 보낸 요청(request): 1 수리 요청 · 2 업체 검토·견적 · 3 예약금 결제
  *   - 요청서 작성 = 1, reviewing·needs_info = 2, approved_pending_payment(조건 재확인 포함) = 3
  *   - 예약금 결제 실패·처리 중·결과 확인 중도 3. booked(예약 완료)는 요청 과정 완료 → 진행 표시 대신 완료 요약
  *   - 거절·철회·승인 만료·다른 업체 예약으로 종료 → 진행 표시 대신 기존 종료 상태·사유
@@ -59,13 +59,13 @@ export type ProgressView =
   | { kind: 'ended' };
 export interface Progress { flow: Flow; view: ProgressView }
 
-/** 내 요청 화면용: 요청 과정이 끝난(예약 완료) 경우 진행 표시를 그리지 않고 화면의 완료 요약을 쓴다 */
+/** 보낸 요청 화면용: 요청 과정이 끝난(예약 완료) 경우 진행 표시를 그리지 않고 화면의 완료 요약을 쓴다 */
 export const unlessComplete = (p: Progress): Progress | null => (p.view.kind === 'complete' ? null : p);
 
 /** 요청서 작성 화면(아직 요청이 없음) */
 export const FORM_PROGRESS: Progress = { flow: 'request', view: { kind: 'step', step: 1 } };
 
-/** 개별 업체 요청 → 내 요청 과정. inFlight: 이 요청의 예약금 결제가 처리 중·결과 확인 중 */
+/** 개별 업체 요청 → 보낸 요청 과정. inFlight: 이 요청의 예약금 결제가 처리 중·결과 확인 중 */
 export function progressOfRequest(status: RequestStatus, opts: { inFlight?: boolean } = {}): Progress {
   const v = (view: ProgressView): Progress => ({ flow: 'request', view });
   switch (status) {
@@ -92,8 +92,8 @@ export function progressOfBooking(b: Pick<Booking, 'status' | 'workStatus'>): Pr
 }
 
 /**
- * 예약금 결제 거래 → 과정. 성공 + 예약 생성 확인 = 내 예약 1단계. 성공했지만 예약을 확인하지 못하면 내 요청 3단계 + 결과 확인 안내.
- * 실패·대기·처리 중·결과 확인 중 = 내 요청 3단계. 예약금이 아닌 결제(자재·변경·잔금)는 이 진행 표시와 무관(null).
+ * 예약금 결제 거래 → 과정. 성공 + 예약 생성 확인 = 내 예약 1단계. 성공했지만 예약을 확인하지 못하면 보낸 요청 3단계 + 결과 확인 안내.
+ * 실패·대기·처리 중·결과 확인 중 = 보낸 요청 3단계. 예약금이 아닌 결제(자재·변경·잔금)는 이 진행 표시와 무관(null).
  */
 export function progressOfPayment(kind: TxKind, status: PaymentStatus, hasBooking: boolean): Progress | null {
   if (kind !== 'deposit') return null;

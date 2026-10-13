@@ -136,15 +136,15 @@ await test('탐색: 업체 없는 카테고리는 빈 상태', async (page) => {
 });
 
 await test('탐색: 조회 실패 → 다시 시도로 복구', async (page) => {
-  await start(page, { path: '/requests', patch: (d) => { d.settings.failNextQuery = true; } });
+  await start(page, { path: '/bookings?tab=requests', patch: (d) => { d.settings.failNextQuery = true; } });
   await waitText(page, '정보를 불러오지 못했습니다');
   await page.getByRole('button', { name: /다시 시도/ }).click();
-  await waitText(page, '내 요청');
+  await waitText(page, '보낸 요청');
   await waitText(page, '업체 승인 완료 · 결제 대기');
 });
 
 await test('로딩 상태 표시', async (page) => {
-  await start(page, { path: '/requests', latency: 1500 });
+  await start(page, { path: '/bookings?tab=requests', latency: 1500 });
   await page.waitForSelector('[aria-busy="true"]');
   await waitText(page, '업체 승인 완료 · 결제 대기');
 });
@@ -187,7 +187,7 @@ await test('요청: 새 날짜 요청은 희망 날짜가 필요하다', async (
 });
 
 await test('요청: 비교 묶음에서 업체별 승인 조건 비교', async (page) => {
-  await start(page, { path: '/requests' });
+  await start(page, { path: '/bookings?tab=requests' });
   await page.getByRole('link', { name: /욕실 세면대 수전 교체/ }).first().click();
   await waitText(page, '업체별 응답');
   await waitText(page, '한빛설비'); await waitText(page, '새봄수리');
@@ -520,8 +520,8 @@ async function bkPick(page, which, label) {
   await dlg.waitFor({ state: 'detached' });
 }
 
-await test('내 예약 필터: 진행 중 상태·방문일·확인 필요(AND), 건수 일치, 전체로 그 조건만 해제, 초기화 없음', async (page) => {
-  await start(page, { path: '/bookings' });
+await test('내 예약 필터: 확정된 예약 상태·방문일·확인 필요(AND), 건수 일치, 전체로 그 조건만 해제, 초기화 없음', async (page) => {
+  await start(page, { path: '/bookings?tab=active' });
   await bkCount(page, 11);
   eq((await bkStatus(page).innerText()).trim(), '상태', '기본 표시');
   eq((await bkVisit(page).innerText()).trim(), '방문일', '기본 표시');
@@ -553,39 +553,40 @@ await test('내 예약 필터: 진행 중 상태·방문일·확인 필요(AND),
   await bkCount(page, 5);
   await bkPick(page, 'visit', '오늘');
   await bkCount(page, 1);
-  await bkPick(page, 'status', '전체'); // 상태만 해제 → 오늘 방문(진행 중) 전체
-  eq(new URL(page.url()).search, '?a_visit=today', '상태만 해제');
+  await bkPick(page, 'status', '전체'); // 상태만 해제 → 오늘 방문(확정된 예약) 전체
+  eq(new URL(page.url()).search, '?tab=active&a_visit=today', '상태만 해제');
   await bkPick(page, 'visit', '전체 기간');
-  eq(new URL(page.url()).search, '', '방문일만 해제');
+  eq(new URL(page.url()).search, '?tab=active', '방문일만 해제');
   await bkCount(page, 11);
 });
 
 await test('내 예약 필터: 탭별 독립 조건 · 탭 전환 후 유지 · 상세 복귀 시 탭·조건 복원', async (page) => {
-  await start(page, { path: '/bookings' });
+  await start(page, { path: '/bookings?tab=active' });
   await bkCount(page, 11);
   await bkPick(page, 'status', '방문 예정');
-  await bkTab(page, '이용 내역').click();
+  await bkTab(page, '완료·취소').click();
   await bkCount(page, 6);
-  eq((await bkStatus(page).innerText()).trim(), '상태', '이용 내역은 별도 조건(기본)');
-  eq(await bkToggle(page).count(), 0, '이용 내역에는 확인 필요만 없음');
-  await bkPick(page, 'status', '취소됨');
-  truthy((await bkBadges(page, ['취소됨'])).every((x) => x === '취소됨'), '취소됨만');
+  eq((await bkStatus(page).innerText()).trim(), '상태', '완료·취소는 별도 조건(기본)');
+  eq(await bkToggle(page).count(), 0, '완료·취소에는 확인 필요만 없음');
+  await bkPick(page, 'status', '예약 취소');
+  truthy((await bkBadges(page, ['취소됨'])).every((x) => x === '취소됨'), '취소된 예약만');
   await bkCount(page, 4);
   await bkPick(page, 'status', '이용 완료');
   await bkCount(page, 2);
-  await bkPick(page, 'status', '취소됨');
-  await bkTab(page, '진행 중').click();
+  await bkPick(page, 'status', '예약 취소');
+  await bkTab(page, '확정된 예약').click();
   await bkStatus(page).filter({ hasText: '방문 예정' }).waitFor();
   await bkCount(page, 5);
-  await bkTab(page, '이용 내역').click();
-  await bkStatus(page).filter({ hasText: '취소됨' }).waitFor();
+  await bkTab(page, '완료·취소').click();
+  await bkStatus(page).filter({ hasText: '예약 취소' }).waitFor();
   await bkCount(page, 4);
   await bkCards(page).first().getByRole('link').click();
   await page.waitForURL((u) => u.pathname.startsWith('/bookings/bk-'));
-  await page.getByRole('link', { name: '뒤로 가기' }).click(); // 쿼리 없는 /bookings 링크
+  await page.getByRole('link', { name: '완료·취소 내역으로' }).waitFor(); // 완료·취소 예약 상세의 목록 문구
+  await page.getByRole('link', { name: '뒤로 가기' }).click(); // 탭만 있는 /bookings?tab=past 링크 → 마지막 조건 복원
   await page.waitForURL((u) => u.pathname === '/bookings' && u.search.includes('tab=past'));
-  eq(await bkTab(page, '이용 내역').getAttribute('aria-selected'), 'true', '이용 내역 탭 복원');
-  await bkStatus(page).filter({ hasText: '취소됨' }).waitFor();
+  eq(await bkTab(page, '완료·취소').getAttribute('aria-selected'), 'true', '완료·취소 탭 복원');
+  await bkStatus(page).filter({ hasText: '예약 취소' }).waitFor();
   await bkCount(page, 4);
   const qs = decodeURIComponent(new URL(page.url()).search);
   truthy(!/bk-|ad-|동|호/.test(qs), `URL에 조건 외 정보: ${qs}`);
@@ -610,11 +611,11 @@ await test('내 예약 필터: 방문일 직접 선택 오류 · 결과 없음�
   await waitText(page, '선택한 조건에 맞는 예약이 없어요.');
   await waitText(page, '날짜나 상태를 변경해주세요.');
   eq(await page.getByRole('button', { name: /초기화/ }).count(), 0, '빈 결과에도 초기화 없음');
-  truthy(!(await page.locator('main').innerText()).includes('이용 내역이 없어요'), '예약 없음과 구분');
+  truthy(!(await page.locator('main').innerText()).includes('완료되거나 취소된 예약이 없어요'), '예약 없음과 구분');
   // 적용 전 닫으면 유지(키보드: Enter로 열고 Esc로 닫으면 버튼으로 포커스 복귀)
   await bkStatus(page).focus();
   await page.keyboard.press('Enter');
-  await page.getByRole('dialog', { name: '상태' }).getByRole('radio', { name: /^취소됨/ }).check();
+  await page.getByRole('dialog', { name: '상태' }).getByRole('radio', { name: /^예약 취소/ }).check();
   await page.keyboard.press('Escape');
   await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label')?.startsWith('상태 필터')).catch(() => {});
   eq(await page.evaluate(() => document.activeElement?.getAttribute('aria-label')), '상태 필터: 전체', '닫으면 포커스 복귀·적용 안 됨');
@@ -634,24 +635,25 @@ await test('내 예약 필터: 일정 변경 합의 전에는 기존 방문일, 
 });
 
 await test('내 예약 필터: 조회 오류는 빈 결과와 구분하고 다시 시도', async (page) => {
-  await start(page, { path: '/bookings', patch: (d) => { d.settings.failNextQuery = true; } });
+  await start(page, { path: '/bookings?tab=active', patch: (d) => { d.settings.failNextQuery = true; } });
   await waitText(page, '정보를 불러오지 못했습니다');
   truthy(!(await page.locator('main').innerText()).includes('선택한 조건에 맞는 예약이 없어요'), '오류를 빈 결과로 표시');
   await page.getByRole('button', { name: /다시 시도/ }).click();
   await bkCount(page, 11);
 });
 
-// ───────── 내 요청 필터(캡슐형: 요청 상태 단일 선택 + 접수일) ─────────
+// ───────── 보낸 요청 필터(캡슐형: 요청 상태 단일 선택 + 접수일) ─────────
 const statusBtn = (page) => page.getByRole('button', { name: /^요청 상태 필터/ });
 const periodBtn = (page) => page.getByRole('button', { name: /^접수일 필터/ });
 const cards = (page) => page.locator('main .request-list > li');
 const badges = (page) => page.locator('main .request-list > li .badge').allInnerTexts();
 /** 조회가 끝난 뒤의 건수 문구(조회 중에는 비어 있다) */
 const countText = async (page) => { await page.locator('.filter-bar__count', { hasText: '요청 묶음' }).waitFor(); await page.waitForSelector('.request-list[aria-busy]', { state: 'detached' }).catch(() => {}); return page.locator('.filter-bar__count').innerText(); };
-const search = (page) => new URL(page.url()).search;
+/** 보낸 요청 탭의 필터 쿼리(tab은 따로 확인한다) */
+const search = (page) => { const p = new URLSearchParams(new URL(page.url()).search); eq(p.get('tab'), 'requests', '보낸 요청 탭'); p.delete('tab'); const q = p.toString(); return q ? `?${q}` : ''; };
 const onPath = (page, p) => page.waitForURL((u) => u.pathname === p);
 const listBadges = async (page) => { await page.locator('main .request-list .badge').first().waitFor(); return badges(page); };
-const ENDED = ['업체 거절', '철회', '승인 만료', '다른 업체 예약으로 종료'];
+const ENDED = ['업체 거절', '철회', '승인 만료'];
 async function pickStatus(page, label) {
   await statusBtn(page).click();
   const dlg = page.getByRole('dialog', { name: '요청 상태' });
@@ -668,7 +670,7 @@ async function pickPeriod(page, label) {
 }
 
 await test('요청 필터: 캡슐 버튼 [요청 상태][접수일] 순서·높이·기본 표시, 건수 일치, 초기화 버튼 없음', async (page) => {
-  await start(page, { path: '/requests' });
+  await start(page, { path: '/bookings?tab=requests' });
   await waitText(page, '업체 승인 완료 · 결제 대기');
   const sb = await statusBtn(page).boundingBox(); const pb = await periodBtn(page).boundingBox();
   truthy(sb.x < pb.x && Math.abs(sb.y - pb.y) < 2, '요청 상태가 먼저, 같은 줄');
@@ -681,8 +683,8 @@ await test('요청 필터: 캡슐 버튼 [요청 상태][접수일] 순서·높�
   eq(await page.getByRole('button', { name: /초기화/ }).count(), 0, '초기화 버튼 없음');
 });
 
-await test('요청 필터: 상태 그룹 단일 선택(결제 대기·추가 정보 필요·업체 검토 중·예약 완료·종료) · 전체로 그 조건만 해제', async (page) => {
-  await start(page, { path: '/requests' });
+await test('요청 필터: 상태 그룹 단일 선택(결제 대기·추가 정보 필요·업체 검토 중·종료, 예약 완료 없음) · 전체로 그 조건만 해제', async (page) => {
+  await start(page, { path: '/bookings?tab=requests' });
   await waitText(page, '업체 승인 완료 · 결제 대기');
   const total = await cards(page).count();
   const expectGroup = async (label, query, allowed) => {
@@ -700,7 +702,9 @@ await test('요청 필터: 상태 그룹 단일 선택(결제 대기·추가 정
   await expectGroup('결제 대기', 'payment_pending', ['업체 승인 완료 · 결제 대기']);
   await expectGroup('추가 정보 필요', 'needs_info', ['추가 정보 필요']);
   await expectGroup('업체 검토 중', 'reviewing', ['업체 검토 중']);
-  await expectGroup('예약 완료', 'booked', ['예약 완료']);
+  await statusBtn(page).click();
+  eq(await page.getByRole('dialog', { name: '요청 상태' }).getByRole('radio', { name: /^예약 완료/ }).count(), 0, '보낸 요청 필터에 예약 완료 없음');
+  await page.keyboard.press('Escape');
   const ended = await expectGroup('종료', 'ended', ENDED);
   truthy(new Set(ended).size >= 3, `종료에 구체 상태가 그대로 보임: ${ended}`);
   // 접수일과 함께 적용한 뒤 상태만 ‘전체’로 → 접수일은 유지
@@ -717,7 +721,7 @@ await test('요청 필터: 상태 그룹 단일 선택(결제 대기·추가 정
 
 await test('요청 필터: 접수일 직접 선택(오류·경계) + 상태 AND → 결과 없음에서도 필터 조작, 적용 전 닫으면 유지', async (page) => {
   await page.setViewportSize({ width: 360, height: 760 });
-  await start(page, { path: '/requests' });
+  await start(page, { path: '/bookings?tab=requests' });
   await waitText(page, '업체 승인 완료 · 결제 대기');
   await periodBtn(page).click();
   const dlg = page.getByRole('dialog', { name: '접수일' });
@@ -742,7 +746,7 @@ await test('요청 필터: 접수일 직접 선택(오류·경계) + 상태 AND 
   truthy(labels.length === 2 && labels.every((t) => t.includes('요청 접수일 2026.10.12')), '모두 10-12 접수');
   // 적용 전에 닫으면 기존 조건 유지(편집값 ≠ 적용값)
   await statusBtn(page).click();
-  await page.getByRole('dialog', { name: '요청 상태' }).getByRole('radio', { name: /^예약 완료/ }).check();
+  await page.getByRole('dialog', { name: '요청 상태' }).getByRole('radio', { name: /^결제 대기/ }).check();
   await page.keyboard.press('Escape');
   await statusBtn(page).filter({ hasText: '요청 상태' }).waitFor();
   eq(search(page).includes('status'), false, '닫으면 적용 안 됨');
@@ -753,7 +757,7 @@ await test('요청 필터: 접수일 직접 선택(오류·경계) + 상태 AND 
   await ((n) => process.env.E2E_SHOTS !== '0' && page.screenshot({ path: join(ROOT, `e2e/screens/360_filter_${n}.png`) }))('no_result');
   eq(await countText(page), '요청 묶음 0건', '결과 없음 건수');
   eq(await page.getByRole('button', { name: /초기화/ }).count(), 0, '빈 상태에도 초기화 버튼 없음');
-  truthy(!(await page.locator('main').innerText()).includes('아직 보낸 수리 요청이 없어요'), '요청 없음과 구분');
+  truthy(!(await page.locator('main').innerText()).includes('보낸 요청이 없어요'), '요청 없음과 구분');
   // 결과가 없어도 필터를 계속 조작
   await pickPeriod(page, '전체 기간');
   const shown = await listBadges(page);
@@ -762,7 +766,7 @@ await test('요청 필터: 접수일 직접 선택(오류·경계) + 상태 AND 
 
 await test('요청 필터: 키보드로 열기·선택·적용, 포커스 이동·복귀 · 데스크톱 팝오버/모바일 하단 시트', async (page) => {
   await page.setViewportSize({ width: 1280, height: 800 });
-  await start(page, { path: '/requests' });
+  await start(page, { path: '/bookings?tab=requests' });
   await waitText(page, '업체 승인 완료 · 결제 대기');
   await statusBtn(page).focus();
   await page.keyboard.press('Enter');
@@ -792,9 +796,9 @@ await test('요청 필터: 키보드로 열기·선택·적용, 포커스 이동
 
 await test('요청 필터: 묶음 안 서로 다른 상태 — 선택 상태 요청만 표시, 상세 비교에는 전체 유지', async (page) => {
   // b-sink: rq-3(결제 대기) + rq-4 철회로 상태를 나눈다
-  await start(page, { path: '/requests', patch: (d) => { d.requests.find((r) => r.id === 'rq-4').status = 'withdrawn'; } });
+  await start(page, { path: '/bookings?tab=requests', patch: (d) => { d.requests.find((r) => r.id === 'rq-4').status = 'withdrawn'; } });
   await pickStatus(page, '종료');
-  await page.waitForURL((u) => u.search === '?status=ended');
+  await page.waitForURL((u) => u.search === '?tab=requests&status=ended');
   await countText(page); // 조회가 끝난 목록을 읽는다
   const sink = cards(page).filter({ hasText: '욕실 세면대 수전 교체 · 배수 트랩 교체' }).filter({ hasText: '2개 업체에 요청' });
   await sink.first().waitFor();
@@ -806,27 +810,28 @@ await test('요청 필터: 묶음 안 서로 다른 상태 — 선택 상태 요
 });
 
 await test('요청 필터: 상세 진입 후 복귀·새로고침·뒤로가기·잘못된 쿼리', async (page) => {
-  await start(page, { path: '/requests?status=needs_info' });
+  await start(page, { path: '/bookings?tab=requests&status=needs_info' });
   eq((await listBadges(page)).join(), '추가 정보 필요', '주소의 필터 적용');
   await page.getByRole('link', { name: /현관문 손잡이 교체/ }).click();
   await onPath(page, '/requests/rq-2');
-  await page.getByRole('link', { name: '뒤로 가기' }).click(); // 헤더 ‘뒤로’는 쿼리 없는 /requests 링크
-  await page.waitForURL((u) => u.pathname === '/requests' && u.search === '?status=needs_info');
+  await page.getByRole('link', { name: '보낸 요청으로' }).waitFor(); // 요청 상세의 목록 문구
+  await page.getByRole('link', { name: '뒤로 가기' }).click(); // 헤더 ‘뒤로’는 탭만 있는 /bookings?tab=requests 링크 → 마지막 조건 복원
+  await page.waitForURL((u) => u.pathname === '/bookings' && u.search === '?tab=requests&status=needs_info');
   eq((await listBadges(page)).join(), '추가 정보 필요', '상세 복귀 후 필터 유지');
   await page.reload();
   eq((await listBadges(page)).join(), '추가 정보 필요', '새로고침 후 유지');
   await pickStatus(page, '업체 검토 중');
   eq(search(page), '?status=reviewing', '두 번째 적용');
   await page.goBack();
-  await page.waitForURL((u) => u.search === '?status=needs_info');
+  await page.waitForURL((u) => u.search === '?tab=requests&status=needs_info');
   await page.waitForTimeout(200);
   eq((await badges(page)).join(), '추가 정보 필요', '뒤로가기로 이전 조건');
   await page.locator('.tabbar').getByRole('link', { name: '내 정보' }).click();
-  await page.locator('.tabbar').getByRole('link', { name: '내 요청' }).click();
-  await page.waitForURL((u) => u.search === '?status=needs_info');
-  for (const bad of ['period=custom&from=2026-99-01&to=x&status=zzz', 'status=reviewing,needs_info', 'status=approved_pending_payment']) {
-    await page.goto(`${BASE}/requests?${bad}`);
-    await page.waitForURL((u) => u.pathname === '/requests' && u.search === '');
+  await page.locator('.tabbar').getByRole('link', { name: '내 예약' }).click();
+  await page.waitForURL((u) => u.search === '?tab=requests&status=needs_info');
+  for (const bad of ['period=custom&from=2026-99-01&to=x&status=zzz', 'status=reviewing,needs_info', 'status=approved_pending_payment', 'status=booked']) {
+    await page.goto(`${BASE}/requests?${bad}`); // 이전 내 요청 주소 → 보낸 요청 탭(쿼리 유지 후 검증)
+    await page.waitForURL((u) => u.pathname === '/bookings' && u.search === '?tab=requests');
     await periodBtn(page).filter({ hasText: '접수일' }).waitFor();
     await statusBtn(page).filter({ hasText: '요청 상태' }).waitFor();
   }
@@ -834,7 +839,7 @@ await test('요청 필터: 상세 진입 후 복귀·새로고침·뒤로가기�
 
 await test('요청 필터: 목록 위치 유지(상세 → 뒤로) · 필터 변경 시 처음으로', async (page) => {
   await page.setViewportSize({ width: 390, height: 600 });
-  await start(page, { path: '/requests' });
+  await start(page, { path: '/bookings?tab=requests' });
   await waitText(page, '업체 승인 완료 · 결제 대기');
   const last = cards(page).last();
   await last.scrollIntoViewIfNeeded();
@@ -842,31 +847,31 @@ await test('요청 필터: 목록 위치 유지(상세 → 뒤로) · 필터 변
   const y = await page.evaluate(() => window.scrollY);
   truthy(y > 100, `스크롤 가능한 목록 (${y})`);
   await last.getByRole('link').click();
-  await page.waitForURL((u) => u.pathname !== '/requests');
+  await page.waitForURL((u) => u.pathname !== '/bookings');
   await page.goBack();
-  await page.waitForURL((u) => u.pathname === '/requests');
+  await page.waitForURL((u) => u.pathname === '/bookings');
   await page.waitForTimeout(400);
   const back = await page.evaluate(() => window.scrollY);
   truthy(Math.abs(back - y) < 40, `복귀 위치 ${back} / 이전 ${y}`);
   await statusBtn(page).scrollIntoViewIfNeeded();
   await page.evaluate(() => window.scrollTo(0, 200));
-  await pickStatus(page, '예약 완료');
+  await pickStatus(page, '결제 대기');
   await page.waitForTimeout(200);
   eq(await page.evaluate(() => window.scrollY), 0, '필터 변경 시 목록 처음으로');
 });
 
 await test('요청 필터: 다른 소유 계정의 목업 상태가 남아 있으면 데모 고객 데이터로 초기화(필터·위치·방문 지역 포함)', async (page) => {
-  await start(page, { path: '/requests' });
+  await start(page, { path: '/bookings?tab=requests' });
   await pickStatus(page, '종료');
   truthy((await page.evaluate(() => JSON.stringify({ ...sessionStorage }))).includes('list-filter'), '필터 저장');
   // 이전 버전·다른 계정의 상태를 흉내 낸다(사용자 구분 구조는 유지된다)
   await page.evaluate((k) => { const d = JSON.parse(sessionStorage.getItem(k)); d.ownerAccountId = 'someone-else'; d.requests[0].tasks[0].title = '다른 계정 데이터'; sessionStorage.setItem(k, JSON.stringify(d)); }, DB_KEY);
-  await page.goto(`${BASE}/requests`);
+  await page.goto(`${BASE}/bookings`);
   await waitText(page, '업체 승인 완료 · 결제 대기');
   const dump = await page.evaluate(() => JSON.stringify({ ...sessionStorage }));
   truthy(!dump.includes('다른 계정 데이터'), '다른 계정 목업 데이터가 남음');
   truthy(!dump.includes('status=ended'), '다른 계정 필터가 남음');
-  eq(new URL(page.url()).search, '', '필터 초기화');
+  eq(new URL(page.url()).search, '?tab=requests', '필터 초기화(첫 탭·기본 조건)');
 });
 
 await test('요청: 추가 정보 요청 → 보완 제출 → 검토 중', async (page) => {
@@ -992,10 +997,10 @@ await test('시나리오 훅: 업체 승인 이벤트 → 알림 진입(S-02) �
   await waitText(page, '알림 이후 내용이 바뀌었어요');
 });
 
-await test('예약 목록·상세: 진행/이용 내역, 마감 후 확정 출장비, 타 세대 정보 비노출', async (page) => {
-  await start(page, { path: '/bookings' });
+await test('예약 목록·상세: 확정된 예약/완료·취소, 마감 후 확정 출장비, 타 세대 정보 비노출', async (page) => {
+  await start(page, { path: '/bookings?tab=active' });
   await waitText(page, '지연되고 있어요');
-  await page.getByRole('tab', { name: '이용 내역' }).click();
+  await page.getByRole('tab', { name: '완료·취소' }).click();
   await waitText(page, '취소됨');
   await page.goto(`${BASE}/bookings/bk-k2`);
   await waitText(page, '내 확정 출장비'); await waitText(page, '12,500원'); await waitText(page, '4세대');
@@ -1195,7 +1200,7 @@ await test('방문 시각: 요청(가능 시간) → 승인(제안 시각) → �
   await waitText(page, '방문 예정');
   main = await page.locator('main').innerText();
   truthy(main.includes('10월 16일 (금) 14:00'), '예약 상세 방문 시각');
-  await page.goto(`${BASE}/bookings`);
+  await page.goto(`${BASE}/bookings?tab=active`);
   await page.getByText('방문 예정 · 10월 16일 (금) 14:00').first().waitFor();
   truthy(!(await page.locator('main').innerText()).includes('13:00~16:00'), '목록에 가능 시간 범위를 방문 시각으로 표시하지 않음');
 });
@@ -1204,7 +1209,7 @@ await test('방문 시각: 데이터에 없으면 추정하지 않고 ‘방문 
   await start(page, { path: '/bookings/bk-k1', patch: (d) => { delete d.bookings.find((b) => b.id === 'bk-k1').visitTime; } });
   await waitText(page, '방문 시각 확인 필요');
   truthy(!(await page.locator('main').innerText()).includes('10월 17일 (토) 13:00'), '범위 시작값으로 추정하지 않음');
-  await page.goto(`${BASE}/bookings`);
+  await page.goto(`${BASE}/bookings?tab=active`);
   await waitText(page, '방문 시각 확인 필요');
 });
 
@@ -1310,11 +1315,13 @@ await test('결제·환불 내역: 목록·상세·환불 상태 문구', async 
 });
 
 await test('빈 상태: 요청·예약·내역이 없을 때', async (page) => {
-  await start(page, { path: '/requests', patch: (d) => { d.requests = []; d.approvals = []; d.bookings = []; d.transactions = []; d.refunds = []; d.deductions = []; d.proposals = []; d.delays = []; d.materials = []; d.additionalWorks = []; d.statements = []; d.reviews = []; } });
-  await waitText(page, '아직 보낸 수리 요청이 없어요.');
+  await start(page, { path: '/bookings?tab=requests', patch: (d) => { d.requests = []; d.approvals = []; d.bookings = []; d.transactions = []; d.refunds = []; d.deductions = []; d.proposals = []; d.delays = []; d.materials = []; d.additionalWorks = []; d.statements = []; d.reviews = []; } });
+  await waitText(page, '보낸 요청이 없어요');
   eq(await page.locator('.filter-bar').count(), 0, '요청이 없으면 필터 숨김');
-  await page.locator('.empty').getByRole('link', { name: '업체 찾기' }).waitFor();
-  await page.goto(`${BASE}/bookings`); await waitText(page, '진행 중인 예약이 없어요');
+  await page.locator('.empty').getByRole('link', { name: '업체 찾아보기' }).waitFor();
+  await page.getByRole('tab', { name: '확정된 예약' }).click(); await waitText(page, '확정된 예약이 없어요');
+  eq(await page.locator('.filter-bar').count(), 0, '예약이 없으면 필터 숨김');
+  await page.getByRole('tab', { name: '완료·취소' }).click(); await waitText(page, '완료되거나 취소된 예약이 없어요');
   await page.goto(`${BASE}/ledger`); await waitText(page, '내역이 없어요');
 });
 
@@ -1715,6 +1722,7 @@ await test('비교 요청: 상태 필터(결제 대기·추가 정보 필요·�
   eq(await bundleTitle(page).innerText(), '업체별 응답 · 전체 5곳 중 0곳', '빈 결과 건수');
   await pickBundleStatus(page, '전체');
   await page.waitForURL((u) => !u.searchParams.has('status'));
+  await page.waitForFunction(() => document.querySelectorAll('.resp-card').length === 5).catch(() => {});
   eq(await respCards(page).count(), 5, '전체로 해제');
   // 다른 비교 요청에는 이 필터가 적용되지 않는다
   await pickBundleStatus(page, '종료');
@@ -1904,10 +1912,11 @@ await test('진행 과정: 비교 요청은 합친 단계 없음, 예약한 업�
   await page.goto(`${BASE}/requests/rq-4`);
   await waitText(page, '다른 업체 예약이 확정됐어요');
   eq(await stepState(page), null, '종료 요청에는 진행 표시 없음');
-  // 내 요청 목록 필터 표시는 ‘예약 완료’
-  await page.goto(`${BASE}/requests`);
+  // 보낸 요청 목록: 예약이 확정된 묶음은 없고, 필터에도 예약 완료·예약 확정 선택지가 없다
+  await page.goto(`${BASE}/bookings?tab=requests`);
   await page.getByRole('button', { name: /^요청 상태 필터/ }).click();
-  await page.getByRole('dialog').getByText('예약 완료', { exact: true }).waitFor();
+  await page.getByRole('dialog').getByText('업체 검토 중', { exact: true }).waitFor();
+  eq(await page.getByRole('dialog').getByText('예약 완료', { exact: true }).count(), 0, '보낸 요청 필터에 ‘예약 완료’ 없음');
   eq(await page.getByRole('dialog').getByText('예약 확정', { exact: true }).count(), 0, '요청 필터에 ‘예약 확정’ 문구 없음');
 });
 
@@ -1936,10 +1945,12 @@ await test('진행 과정: 결제 실패·결과 확인 중은 내 요청 3단�
   await waitText(page, '예약이 확정됐어요');
   await expectStep(page, 'booking', '예약 확정', 0, null, '확인 성공 후 예약 상세');
   eq((await db(page)).transactions.filter((t) => t.requestId === 'rq-3' && t.kind === 'deposit' && t.status === 'success').length, 1, '성공 거래 1건');
-  // 기존 결제 결과 화면도 내 예약 과정과 ‘예약 보기’
+  // 기존 결제 결과 화면도 내 예약 과정과 ‘예약 확인하기’(생성된 예약 상세) · ‘확정된 예약 목록’
   await page.goto(payUrl);
   await expectStep(page, 'booking', '예약 확정', 0, null, '결제 결과(성공)');
-  eq(await page.getByRole('link', { name: '예약 보기' }).count(), 1, '예약 보기');
+  const bkHref = await page.getByRole('link', { name: '예약 확인하기' }).getAttribute('href');
+  truthy(/^\/bookings\/bk-/.test(bkHref), `예약 확인하기 → 생성된 예약 상세(${bkHref})`);
+  eq(await page.getByRole('link', { name: '확정된 예약 목록' }).getAttribute('href'), '/bookings?tab=active', '확정된 예약 탭으로');
   // 성공했지만 예약을 확인하지 못한 경우: 결과 확인만(재결제 유도 없음)
   await patchDb(page, (d) => { const t = d.transactions.find((x) => x.requestId === 'rq-3' && x.status === 'success'); delete t.bookingId; }, null);
   await waitText(page, '예약 생성 결과를 확인하고 있어요');
@@ -1966,7 +1977,7 @@ await test('진행 과정: 내 예약 — 방문 예정(1)·작업 중(2)·후�
   await patchDb(page, (d) => { d.bookings.find((b) => b.id === 'bk-k2').status = 'terms_recheck'; }, '/bookings/bk-k2');
   await expectStep(page, 'booking', '예약 확정', 0, '조건이 바뀌어', '조건 재확인');
   // 예약 하위 화면·목록에는 표시하지 않음, 변경·취소 화면 정상
-  for (const p of ['/bookings', '/bookings?tab=past', '/bookings/bk-k1/change', '/bookings/bk-k1/cancel', '/bookings/bk-k9/final', '/requests', '/', '/providers/p1', '/me']) {
+  for (const p of ['/bookings?tab=active', '/bookings?tab=past', '/bookings/bk-k1/change', '/bookings/bk-k1/cancel', '/bookings/bk-k9/final', '/bookings?tab=requests', '/', '/providers/p1', '/me']) {
     await page.goto(`${BASE}${p}`); await page.waitForTimeout(250);
     eq(await page.locator('nav.steps').count(), 0, `${p}에는 표시하지 않음`);
   }
@@ -2472,13 +2483,290 @@ for (const w of [390, 1280]) {
   }, { width: w });
 }
 
+// ───────── 내 예약 통합 메뉴: 보낸 요청 / 확정된 예약 / 완료·취소 ─────────
+const resTab = (page, name) => page.getByRole('tab', { name, exact: true });
+const resCount = async (page) => {
+  await page.locator('.filter-bar__count b').waitFor();
+  await page.waitForSelector('main [aria-busy="true"]', { state: 'detached' }).catch(() => {});
+  return Number(await page.locator('.filter-bar__count b').innerText());
+};
+const listLinks = (page) => page.locator('main [role="tabpanel"] ul.request-list > li > a, main [role="tabpanel"] ul.booking-list > li > a');
+const hrefs = async (page) => listLinks(page).evaluateAll((as) => as.map((a) => a.getAttribute('href')));
+async function openTab(page, name) {
+  await resTab(page, name).click();
+  await page.waitForFunction((n) => document.querySelector('[role=tab][aria-selected=true]')?.textContent === n, name);
+  await resCount(page);
+  return hrefs(page);
+}
+
+await test('내 예약 통합: 메뉴 3개·탭 순서·기본 탭·URL 반영, 상세 뒤로·새로고침·브라우저 뒤로로 탭 복원, 키보드 탭 이동', async (page) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await start(page, { path: '/bookings' });
+  await page.waitForURL((u) => u.search === '?tab=requests');
+  eq((await page.getByRole('tab').allInnerTexts()).join('/'), '보낸 요청/확정된 예약/완료·취소', '탭 순서');
+  eq(await resTab(page, '보낸 요청').getAttribute('aria-selected'), 'true', '처음은 보낸 요청');
+  eq((await page.locator('nav.top-nav a').allInnerTexts()).map((x) => x.trim()).join('/'), '업체 찾기/내 예약/내 정보', '상단 메뉴');
+  eq(await page.locator('nav.top-nav').getByRole('link', { name: '내 예약' }).getAttribute('aria-current'), 'page', '내 예약 활성');
+  eq(await page.getByRole('link', { name: '내 요청' }).count(), 0, '내 요청 메뉴 없음');
+  await openTab(page, '확정된 예약');
+  eq(new URL(page.url()).search, '?tab=active', '탭 선택이 URL에');
+  await page.reload();
+  await resTab(page, '확정된 예약').waitFor();
+  eq(await resTab(page, '확정된 예약').getAttribute('aria-selected'), 'true', '새로고침 후 탭 유지');
+  await listLinks(page).first().click();
+  await page.waitForURL((u) => u.pathname.startsWith('/bookings/bk-'));
+  eq(await page.locator('nav.top-nav').getByRole('link', { name: '내 예약' }).getAttribute('aria-current'), 'page', '예약 상세에서도 내 예약 활성');
+  await page.goBack();
+  await page.waitForURL((u) => u.pathname === '/bookings');
+  eq(await resTab(page, '확정된 예약').getAttribute('aria-selected'), 'true', '브라우저 뒤로 → 탭 복원');
+  // 키보드: 좌우 화살표로 탭 이동(선택 포함), 선택 탭만 Tab 순서에 있음
+  await resTab(page, '확정된 예약').focus();
+  await page.keyboard.press('ArrowRight');
+  await page.waitForURL((u) => u.search.includes('tab=past'));
+  eq(await page.evaluate(() => document.activeElement?.textContent), '완료·취소', '화살표로 다음 탭');
+  await page.keyboard.press('ArrowRight');
+  await page.waitForURL((u) => u.search.includes('tab=requests'));
+  eq(await page.locator('[role=tab][tabindex="0"]').count(), 1, '선택 탭만 Tab 순서');
+  eq(await page.locator('[role=tabpanel]').getAttribute('aria-labelledby'), 'res-tab-requests', '탭 패널 연결');
+  // 요청 상세·비교 요청에서도 내 예약 활성
+  for (const p of ['/requests/rq-3', '/requests/bundle/b-sink', '/requests/rq-3/approval']) {
+    await page.goto(`${BASE}${p}`);
+    await page.locator('nav.top-nav').waitFor();
+    eq(await page.locator('nav.top-nav').getByRole('link', { name: '내 예약' }).getAttribute('aria-current'), 'page', `${p} 내 예약 활성`);
+  }
+});
+
+await test('내 예약 통합: 각 요청·예약은 한 탭에만(건수 = 표시 수), 확정 전 종료 요청은 보낸 요청에 사유와 함께', async (page) => {
+  await start(page, { path: '/bookings?tab=requests' });
+  const nSent = await resCount(page);
+  const sent = await hrefs(page);
+  eq(nSent, sent.length, '보낸 요청 건수 = 표시 묶음 수');
+  const active = await openTab(page, '확정된 예약');
+  eq(await resCount(page), active.length, '확정된 예약 건수 = 표시 수');
+  const past = await openTab(page, '완료·취소');
+  eq(await resCount(page), past.length, '완료·취소 건수 = 표시 수');
+  const d = await db(page);
+  eq(active.filter((h) => past.includes(h)).length, 0, '예약 중복 없음');
+  eq([...active, ...past].sort().join(), d.bookings.map((b) => `/bookings/${b.id}`).sort().join(), '모든 예약이 정확히 한 탭에');
+  const converted = new Set(d.requests.filter((r) => r.status === 'booked' || r.bookingId).map((r) => r.bundleId));
+  const expectedBundles = [...new Set(d.requests.filter((r) => !converted.has(r.bundleId)).map((r) => r.bundleId))];
+  eq(sent.length, expectedBundles.length, '보낸 요청 = 예약으로 이어지지 않은 묶음');
+  truthy(!sent.some((h) => h === '/requests/bundle/b-lamp' || h === '/requests/rq-8'), '다른 업체 예약으로 종료된 묶음은 보낸 요청에 없음');
+  // 종료된 요청: 상태와 사유
+  await openTab(page, '보낸 요청');
+  const main = await page.locator('main').innerText();
+  truthy(main.includes('업체 거절') && main.includes('거절 사유: 서랍 레일 규격 확인이 어려워'), '거절 + 사유');
+  truthy(main.includes('철회') && main.includes('승인 만료') && main.includes('결제 기한이 지나 예약이 확정되지 않았어요'), '철회·만료 + 안내');
+  truthy(main.includes('업체 검토 중') && main.includes('추가 정보 필요') && main.includes('업체 승인 완료 · 결제 대기'), '검토·보완·결제 대기');
+  truthy(!main.includes('예약 완료'), '보낸 요청에 예약 완료 없음');
+  // 확정된 예약: 최종 금액 확인·정산 대기 유지 / 완료·취소: 이용 완료·취소(환불 상태)
+  await openTab(page, '확정된 예약');
+  const a = await page.locator('main').innerText();
+  truthy(a.includes('최종 금액 확인 필요') && a.includes('정산 대기'), '정산 전 예약은 확정된 예약');
+  await openTab(page, '완료·취소');
+  const p = await page.locator('main').innerText();
+  truthy(p.includes('이용 완료') && p.includes('취소됨') && /환불/.test(p), `완료·취소(환불 상태 표시): ${p.slice(0, 300)}`);
+});
+
+await test('내 예약 통합: 결제 실패·확인 중은 보낸 요청 유지 → 결제 성공이면 비교 묶음이 빠지고 선택한 예약만 확정된 예약 → 취소하면 완료·취소에만', async (page) => {
+  await start(page, { path: '/requests/rq-3/approval', patch: (d) => { d.settings.payOutcome = 'fail'; } });
+  await page.getByRole('checkbox').check();
+  await page.getByRole('button', { name: /모의 결제하기/ }).click();
+  await waitText(page, '결제가 완료되지 않았어요');
+  eq(await page.getByRole('link', { name: '보낸 요청 목록' }).getAttribute('href'), '/bookings?tab=requests', '실패 → 보낸 요청 목록');
+  await page.goto(`${BASE}/bookings?tab=requests`);
+  await resCount(page);
+  truthy((await hrefs(page)).includes('/requests/bundle/b-sink'), '결제 실패: 보낸 요청 유지');
+  await waitText(page, '예약금 결제 실패');
+  await patchDb(page, (d) => { d.settings.payOutcome = 'unknown'; d.settings.resolveOutcome = 'unknown'; }, '/requests/rq-3/approval');
+  await page.getByRole('checkbox').check();
+  await page.getByRole('button', { name: /모의 결제하기/ }).click();
+  await waitText(page, '결제 결과를 확인하고 있어요');
+  const payUrl = page.url();
+  await page.goto(`${BASE}/bookings?tab=requests`);
+  await resCount(page);
+  truthy((await hrefs(page)).includes('/requests/bundle/b-sink'), '결과 확인 중: 보낸 요청 유지');
+  await waitText(page, '예약금 결제 결과 확인 중');
+  const activeBefore = (await openTab(page, '확정된 예약')).length;
+  // 결제 성공(결과 확인)
+  await patchDb(page, (d) => { d.settings.resolveOutcome = 'success'; }, null);
+  await page.goto(payUrl);
+  await page.getByRole('button', { name: '결제 결과 확인하기' }).click();
+  await page.waitForURL((u) => u.pathname.startsWith('/bookings/bk-'));
+  const bkPath = new URL(page.url()).pathname;
+  await waitText(page, '최초 요청 내용 보기');
+  eq(await page.getByRole('link', { name: '비교 요청 보기 · 업체 2곳' }).getAttribute('href'), '/requests/bundle/b-sink', '비교 요청(다른 업체 응답·종료 사유) 연결');
+  await page.getByRole('link', { name: '확정된 예약으로' }).click();
+  await page.waitForURL((u) => u.pathname === '/bookings' && u.search.includes('tab=active'));
+  const active = (await resCount(page), await hrefs(page));
+  eq(active.length, activeBefore + 1, '선택한 업체 예약 하나만 추가');
+  eq(active.filter((h) => h === bkPath).length, 1, '확정된 예약에 한 번');
+  const sent = await openTab(page, '보낸 요청');
+  truthy(!sent.includes('/requests/bundle/b-sink') && !sent.includes('/requests/rq-4'), '비교 묶음(다른 업체 포함)은 보낸 요청에서 빠짐');
+  // 원본 기록은 상세에서 그대로
+  await page.goto(`${BASE}/requests/bundle/b-sink`);
+  await waitText(page, '다른 업체 예약으로 종료');
+  // 확정 후 취소 → 완료·취소에만, 묶음은 돌아오지 않음
+  const id = bkPath.split('/').pop();
+  await page.evaluate(async (bid) => { const r = window.__sagoDev.repo; const c = await r.getCancelContext(bid); await r.cancelBooking({ bookingId: bid, expectedRefund: c.preview.refundTotal, idempotencyKey: 'e2e-cancel' }); }, id);
+  await page.goto(`${BASE}${bkPath}`);
+  await page.getByRole('link', { name: '완료·취소 내역으로' }).click();
+  await page.waitForURL((u) => u.search.includes('tab=past'));
+  await resCount(page);
+  eq((await hrefs(page)).filter((h) => h === bkPath).length, 1, '취소 → 완료·취소');
+  truthy(!(await openTab(page, '확정된 예약')).includes(bkPath), '확정된 예약에서 빠짐');
+  truthy(!(await openTab(page, '보낸 요청')).includes('/requests/bundle/b-sink'), '취소돼도 비교 묶음은 보낸 요청으로 돌아오지 않음');
+  eq((await db(page)).requests.find((r) => r.id === 'rq-4').status, 'closed_other_booking', '다른 업체 요청은 다시 활성화하지 않음');
+});
+
+await test('내 예약 통합: 새 요청 제출 → 보낸 요청(목록 문구·이동), 확정 전 거절은 보낸 요청에만', async (page) => {
+  await start(page, { path: '/providers/p1/request?new=1' });
+  await fillNewDateRequest(page, '통합 탭 확인용 요청');
+  await detailInput(page).fill('301동 1204호');
+  await page.getByRole('button', { name: '요청 보내기' }).click();
+  await page.waitForURL((u) => /^\/requests\/rq-/.test(u.pathname));
+  const rid = new URL(page.url()).pathname.split('/').pop();
+  await page.getByRole('link', { name: '보낸 요청으로' }).click();
+  await page.waitForURL((u) => u.pathname === '/bookings' && u.search.includes('tab=requests'));
+  await resCount(page);
+  truthy((await hrefs(page)).includes(`/requests/${rid}`), '제출한 요청이 보낸 요청에');
+  await dev(page, 'rejectRequest', rid);
+  await page.reload();
+  await resCount(page);
+  truthy((await hrefs(page)).includes(`/requests/${rid}`), '거절돼도 보낸 요청에 남음');
+  const card = page.locator(`a[href="/requests/${rid}"]`);
+  truthy((await card.innerText()).includes('업체 거절'), '종료 상태 표시');
+  await openTab(page, '확정된 예약');
+  truthy(!(await hrefs(page)).some((h) => h.includes(rid)), '확정된 예약에는 없음');
+  truthy(!(await openTab(page, '완료·취소')).some((h) => h.includes(rid)), '완료·취소에도 없음');
+});
+
+await test('내 예약 통합: 탭별 필터·목록 위치가 독립적으로 유지된다', async (page) => {
+  await page.setViewportSize({ width: 390, height: 600 });
+  await start(page, { path: '/bookings?tab=active' });
+  await resCount(page);
+  await page.evaluate(() => window.scrollTo(0, 500));
+  await page.waitForTimeout(250);
+  const yActive = await page.evaluate(() => window.scrollY);
+  truthy(yActive > 300, `확정된 예약 스크롤 ${yActive}`);
+  // 탭은 헤더 아래에 붙어 있어 스크롤한 채로 바로 누를 수 있다
+  const tb = await page.locator('[role=tablist]').boundingBox();
+  truthy(tb.y >= 53 && tb.y <= 64, `탭이 헤더 아래 고정(${tb.y})`); // 헤더 52 + 1 + 띠 여백 8
+  await openTab(page, '보낸 요청');
+  await page.waitForTimeout(300);
+  eq(await page.evaluate(() => window.scrollY), 0, '처음 연 보낸 요청은 맨 위');
+  await page.evaluate(() => window.scrollTo(0, 240));
+  await page.waitForTimeout(250);
+  const ySent = await page.evaluate(() => window.scrollY);
+  await openTab(page, '확정된 예약');
+  await page.waitForTimeout(400);
+  truthy(Math.abs((await page.evaluate(() => window.scrollY)) - yActive) < 40, '확정된 예약으로 돌아오면 그 위치');
+  await openTab(page, '보낸 요청');
+  await page.waitForTimeout(400);
+  truthy(Math.abs((await page.evaluate(() => window.scrollY)) - ySent) < 40, '보낸 요청으로 돌아오면 그 위치');
+  await page.evaluate(() => window.scrollTo(0, 0));
+  // 필터 독립: 보낸 요청 조건이 확정된 예약 조건에 영향 없음
+  await openTab(page, '보낸 요청');
+  await pickStatus(page, '종료');
+  await openTab(page, '확정된 예약');
+  eq((await bkStatus(page).innerText()).trim(), '상태', '확정된 예약 조건은 기본');
+  await openTab(page, '보낸 요청');
+  await statusBtn(page).filter({ hasText: '종료' }).waitFor();
+});
+
+for (const w of [360, 1280, 320, 200]) {
+  await test(`내 예약 밑줄형 탭: ${w}px${w <= 320 ? '(확대·좁은 화면)' : ''} — 배경 없음·선택 밑줄(3px, 구분선과 겹침)·굵기·색, 카드 너비 구분선, 전환 시 움직임 없음, 잘림·가로 넘침 없음, 필터 간격`, async (page) => {
+    await page.setViewportSize({ width: w, height: 800 });
+    await start(page, { path: '/bookings?tab=active' });
+    await resCount(page);
+    const measure = () => page.evaluate(() => {
+      const list = document.querySelector('[role=tablist]'); const lr = list.getBoundingClientRect(); const lc = getComputedStyle(list);
+      const tabs = [...list.querySelectorAll('[role=tab]')];
+      const rects = tabs.map((t) => t.getBoundingClientRect());
+      const sel = tabs.find((t) => t.getAttribute('aria-selected') === 'true'); const other = tabs.find((t) => t !== sel);
+      const cs = getComputedStyle(sel), co = getComputedStyle(other);
+      const ul = getComputedStyle(sel, '::after'), ulo = getComputedStyle(other, '::after');
+      const filter = document.querySelector('.filter-bar').getBoundingClientRect();
+      const card = document.querySelector('#res-panel ul.request-list > li > a, #res-panel ul.booking-list > li > a')?.getBoundingClientRect();
+      const main = document.querySelector('main .stack').getBoundingClientRect();
+      return {
+        overflow: document.documentElement.scrollWidth > innerWidth,
+        clipped: tabs.some((t) => t.scrollWidth > t.clientWidth + 1 || t.scrollHeight > t.clientHeight + 1),
+        oneRow: rects.every((x) => Math.abs(x.top - rects[0].top) < 1),
+        sameWidth: rects.every((x) => Math.abs(x.width - rects[0].width) < 1),
+        inView: lr.left >= 0 && lr.right <= innerWidth + .5,
+        width: Math.round(lr.width), mainWidth: Math.round(main.width), cardWidth: card ? Math.round(card.width) : null, left: Math.round(lr.left - main.left),
+        listBg: lc.backgroundColor, listRadius: parseFloat(lc.borderTopLeftRadius), divider: lc.boxShadow,
+        tabBg: [cs.backgroundColor, co.backgroundColor], tabShadow: [cs.boxShadow, co.boxShadow], tabRadius: parseFloat(co.borderTopLeftRadius),
+        tallTabs: rects.every((x) => x.height >= 44),
+        ulH: parseFloat(ul.height), ulColor: ul.backgroundColor, ulOther: ulo.backgroundColor, ulW: Math.round(parseFloat(ul.width)), selW: Math.round(sel.getBoundingClientRect().width),
+        ulBottom: Math.round(sel.getBoundingClientRect().bottom), listBottom: Math.round(lr.bottom),
+        selWeight: Number(cs.fontWeight), otherWeight: Number(co.fontWeight), selColor: cs.color, otherColor: co.color,
+        gapToFilter: Math.round(filter.top - lr.bottom), gaps: rects.slice(1).map((x, i) => Math.round(x.left - rects[i].right)),
+        rects: rects.map((x) => [Math.round(x.left - lr.left), Math.round(x.top), Math.round(x.width), Math.round(x.height)]), listH: Math.round(lr.height), exact: rects.map((x) => [x.left - lr.left, x.top, x.width, x.height]),
+      };
+    });
+    const r = await measure();
+    truthy(!r.overflow && !r.clipped && r.oneRow && r.inView && r.tallTabs, `배치 ${JSON.stringify(r)}`);
+    truthy(r.listBg === 'rgba(0, 0, 0, 0)' && r.listRadius === 0 && r.tabBg.every((b) => b === 'rgba(0, 0, 0, 0)') && r.tabShadow.every((s) => s === 'none') && r.tabRadius === 0, `배경·그림자·둥근 모양 없음 ${JSON.stringify(r)}`);
+    truthy(/rgb\(228, 230, 234\).*inset|inset.*rgb\(228, 230, 234\)/.test(r.divider) && r.width === r.mainWidth, `1px 회색 구분선이 본문(카드) 너비 ${JSON.stringify(r)}`);
+    if (r.cardWidth) eq(r.width, r.cardWidth, '탭 영역 = 목록 카드 너비');
+    eq(r.ulH, 3, '밑줄 3px'); eq(r.ulColor, 'rgb(49, 93, 168)', '밑줄 브랜드 블루'); eq(r.ulOther, 'rgba(0, 0, 0, 0)', '비선택 밑줄 없음');
+    eq(r.ulW, r.selW, '밑줄 = 선택 탭 누르는 영역 너비'); eq(r.ulBottom, r.listBottom, '밑줄이 구분선과 같은 위치');
+    eq(r.selWeight, 600, '선택 600'); eq(r.otherWeight, 500, '비선택 500');
+    eq(r.selColor, 'rgb(49, 93, 168)', '선택 블루'); eq(r.otherColor, 'rgb(96, 103, 115)', '비선택 보조 회색');
+    truthy(r.gapToFilter >= 20 && r.gapToFilter <= 24, `필터까지 ${r.gapToFilter}px`);
+    if (w >= 360) eq(r.rects.every(([, , , h]) => h === 48), true, `평소 너비에서는 한 줄 48px(${JSON.stringify(r.rects)})`);
+    if (w < 600) truthy(r.sameWidth && r.width === r.mainWidth, `모바일: 세 칸 같은 너비·본문 너비 ${JSON.stringify(r)}`);
+    if (w === 1280) {
+      truthy(r.left === 0 && r.gaps.every((g) => g >= 16 && g <= 24) && r.rects[2][0] + r.rects[2][2] - r.rects[0][0] < r.mainWidth * 0.7, `데스크톱: 왼쪽부터 자연스러운 너비·사이 16~24px ${JSON.stringify(r)}`);
+      truthy(r.rects.every(([, , wd]) => wd >= 80 && wd <= 140), `데스크톱 탭 너비(패딩 16px) ${JSON.stringify(r.rects)}`);
+    }
+    if (w === 360) {
+      eq(await page.locator('.tabbar li').count(), 3, '하단 메뉴 3개');
+      eq(await page.locator('.tabbar').getByRole('link', { name: '내 예약' }).getAttribute('aria-current'), 'page', '하단 메뉴 내 예약 활성');
+    }
+    // 전환 시 레이아웃 움직임 없음: 탭 위치·크기와 목록 높이가 그대로
+    for (const name of ['완료·취소', '보낸 요청', '확정된 예약']) {
+      await openTab(page, name);
+      const r2 = await measure();
+      // 0.5px 미만(글자 렌더링 소수점 차이)은 눈에 보이지 않으므로 허용
+      truthy(r2.listH === r.listH && r2.exact.every((x, i) => x.every((v, j) => Math.abs(v - r.exact[i][j]) < 0.5)), `${name} 선택 후 탭 위치·크기·높이 동일 ${JSON.stringify([r.exact, r2.exact])}`);
+    }
+    // hover: 선택과 헷갈리지 않음(밑줄·블루·굵기 없음)
+    await resTab(page, '완료·취소').hover();
+    const h = await resTab(page, '완료·취소').evaluate((t) => { const c = getComputedStyle(t); return { ul: getComputedStyle(t, '::after').backgroundColor, color: c.color, weight: Number(c.fontWeight) }; });
+    truthy(h.ul === 'rgba(0, 0, 0, 0)' && h.color !== 'rgb(49, 93, 168)' && h.weight === 500, `hover 은은 ${JSON.stringify(h)}`);
+    // 키보드 포커스 표시: 실선, 버튼 안쪽(잘리지 않음)
+    await resTab(page, '확정된 예약').focus();
+    await page.keyboard.press('ArrowLeft');
+    await page.waitForURL((u) => u.search.includes('tab=requests'));
+    await page.locator('[role=tab][aria-selected=true]', { hasText: '보낸 요청' }).waitFor();
+    const f = await page.evaluate(() => {
+      const a = document.activeElement; const cs = getComputedStyle(a);
+      return { text: a.textContent, selected: a.getAttribute('aria-selected'), style: cs.outlineStyle, width: parseFloat(cs.outlineWidth), offset: parseFloat(cs.outlineOffset) };
+    });
+    truthy(f.text === '보낸 요청' && f.selected === 'true' && f.style === 'solid' && f.width >= 2 && f.offset <= -f.width, `포커스 표시 ${JSON.stringify(f)}`);
+    await resCount(page);
+    truthy((await hrefs(page)).length > 0, '보낸 요청 목록 표시');
+    if (w === 360 || w === 1280) { await page.mouse.move(5, 400); await page.waitForTimeout(250); await page.screenshot({ path: join(ROOT, `e2e/screens/${w}_reservations_tabs.png`) }); }
+    // 새로고침·뒤로가기에도 선택 유지
+    await page.reload(); await resCount(page);
+    eq(await resTab(page, '보낸 요청').getAttribute('aria-selected'), 'true', '새로고침 후 선택 유지');
+    await page.goto(`${BASE}/bookings?tab=past`); await resCount(page);
+    eq(await resTab(page, '완료·취소').getAttribute('aria-selected'), 'true', '직접 URL 접근 선택');
+    await page.goBack(); await resCount(page);
+    eq(await resTab(page, '보낸 요청').getAttribute('aria-selected'), 'true', '뒤로가기 후 선택 유지');
+  }, { width: w });
+}
+
 // ───────── 상단 메뉴: 업체 찾기 앞 홈 아이콘 ─────────
 const homeLink = (page) => page.locator('nav.top-nav').getByRole('link', { name: '업체 찾기 홈으로 이동', exact: true });
 
 await test('상단 메뉴 홈 아이콘: 주요 화면 공통·접근성 이름·아이콘 장식·크기·간격·색, 이동과 활성 표시, 뒤로가기·제목 유지', async (page) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await start(page, { path: '/' });
-  for (const [p, title] of [['/', null], ['/requests', null], ['/requests/rq-3', '요청 상세'], ['/requests/bundle/b-sink', '비교 요청'], ['/bookings/bk-k2', '예약 상세'], ['/me', null]]) {
+  for (const [p, title] of [['/', null], ['/bookings?tab=requests', null], ['/requests/rq-3', '요청 상세'], ['/requests/bundle/b-sink', '비교 요청'], ['/bookings/bk-k2', '예약 상세'], ['/me', null]]) {
     await page.goto(`${BASE}${p}`);
     await homeLink(page).waitFor();
     const r = await homeLink(page).evaluate((a) => {
@@ -2492,7 +2780,8 @@ await test('상단 메뉴 홈 아이콘: 주요 화면 공통·접근성 이름�
     eq(r.iconColor, r.color, `${p} 아이콘 색 = 메뉴 색`);
     eq(r.href, '/', `${p} 업체 찾기로`);
     eq(r.current, p === '/' ? 'page' : null, `${p} 활성 표시`);
-    eq(await page.locator('nav.top-nav a').count(), 4, `${p} 메뉴 4개`);
+    eq((await page.locator('nav.top-nav a').allInnerTexts()).map((x) => x.trim()).join('/'), '업체 찾기/내 예약/내 정보', `${p} 메뉴 3개`);
+    eq(await page.locator('nav.top-nav').getByRole('link', { name: '내 예약' }).getAttribute('aria-current'), p === '/' || p === '/me' ? null : 'page', `${p} 내 예약 활성`);
     if (title) {
       eq((await page.locator('.app-header__title').innerText()).trim(), title, `${p} 제목 유지`);
       eq(await page.locator('.app-header').getByRole('link', { name: '뒤로 가기' }).or(page.locator('.app-header').getByRole('button', { name: '뒤로 가기' })).count(), 1, `${p} 뒤로가기 유지`);
@@ -2706,16 +2995,20 @@ await test('로그인 없는 데모: 첫 접속은 바로 업체 찾기(로그�
   truthy(!AUTH_WORDS.test(await page.locator('body').innerText()), '로그인 관련 문구');
 });
 
-await test('로그인 없는 데모: 내부 화면 직접 접근·새로고침 정상(내 요청·내 예약·내 정보·상세)', async (page) => {
+await test('로그인 없는 데모: 내부 화면 직접 접근·새로고침 정상(내 예약 세 탭·내 정보·상세, 이전 내 요청 주소)', async (page) => {
   await start(page, { path: '/' });
-  for (const [p, text] of [['/requests', '업체 승인 완료 · 결제 대기'], ['/bookings', '예약'], ['/me', '내역·안내'], ['/bookings/bk-k2', '예약 금액·결제'], ['/requests/rq-3', '업체가 제안한 방문 시각']]) {
+  for (const [p, text] of [['/bookings?tab=requests', '업체 승인 완료 · 결제 대기'], ['/bookings?tab=active', '방문 예정'], ['/bookings?tab=past', '이용 완료'], ['/me', '내역·안내'], ['/bookings/bk-k2', '예약 금액·결제'], ['/requests/rq-3', '업체가 제안한 방문 시각']]) {
     await page.goto(`${BASE}${p}`);
     await waitText(page, text);
-    eq(pathOf(page), p, `${p} 직접 접근`);
+    eq(pathOf(page) + (p.includes('?') ? new URL(page.url()).search : ''), p, `${p} 직접 접근`);
     await page.reload();
     await waitText(page, text);
-    eq(pathOf(page), p, `${p} 새로고침`);
+    eq(pathOf(page) + (p.includes('?') ? new URL(page.url()).search : ''), p, `${p} 새로고침`);
   }
+  // 이전 내 요청 목록 주소 → 보낸 요청 탭
+  await page.goto(`${BASE}/requests`);
+  await page.waitForURL((u) => u.pathname === '/bookings' && u.search === '?tab=requests');
+  eq(await page.getByRole('tab', { name: '보낸 요청' }).getAttribute('aria-selected'), 'true', '이전 주소 → 보낸 요청 탭');
 });
 
 await test('로그인 없는 데모: 이전 인증 주소는 업체 찾기로 이동', async (page) => {
@@ -2812,10 +3105,10 @@ async function openCloseRepeat(page, opener, label, { popover }) {
     truthy(await opener.evaluate((el) => el === document.activeElement), `${label} 닫은 뒤 포커스 복원(${how})`);
   }
 }
-const FILTER_PAGES = [['/requests', '내 요청'], ['/bookings', '내 예약 진행 중'], ['/bookings?tab=past', '내 예약 이용 내역']];
+const FILTER_PAGES = [['/bookings?tab=requests', '보낸 요청'], ['/bookings?tab=active', '확정된 예약'], ['/bookings?tab=past', '완료·취소']];
 for (const [w, hgt] of [[1280, 720], [390, 844]]) {
   for (const scroll of [true, false]) {
-    await test(`필터 열기·닫기: 화면이 옆으로 밀리지 않음(${w}px, 스크롤바 ${scroll ? '있음' : '없음'}, 내 요청·내 예약 모든 필터 3회 반복)`, async (page) => {
+    await test(`필터 열기·닫기: 화면이 옆으로 밀리지 않음(${w}px, 스크롤바 ${scroll ? '있음' : '없음'}, 내 예약 세 탭 모든 필터 3회 반복)`, async (page) => {
       for (const [path, name] of FILTER_PAGES) {
         // 스크롤바 없는 페이지: 목록을 1건씩만 남긴다
         await start(page, { path, patch: scroll ? undefined : (db) => { db.requests = db.requests.slice(0, 1); db.bookings = db.bookings.filter((b) => b.id === 'bk-k1' || b.id === 'bk-k15'); } });
@@ -2852,7 +3145,7 @@ const ringInside = (loc) => loc.evaluate((el) => {
 for (const [w, hgt] of [[390, 844], [390, 520], [1280, 800], [1280, 560]]) {
   await test(`필터 선택지: 첫·마지막 항목 선택 테두리·키보드 포커스 표시가 잘리지 않음(${w}×${hgt}${hgt < 600 ? ', 내부 스크롤' : ''})`, async (page) => {
     let scrolledOnce = false;
-    for (const path of ['/requests', '/bookings', '/bookings?tab=past']) {
+    for (const path of ['/bookings?tab=requests', '/bookings?tab=active', '/bookings?tab=past']) {
       await start(page, { path });
       const n = await page.locator('.capsule[aria-haspopup="dialog"]').count();
       for (let i = 0; i < n; i++) {
@@ -2923,8 +3216,8 @@ await test('접근성: 모든 입력에 이름이 있고 키보드로 대화상�
 
 // ───────── 반응형 ─────────
 const WIDTHS = [360, 390, 430, 768, 1280];
-const ROUTES = ['/', '/address', '/providers?category=c2', '/providers/p1', '/providers/p1/request?group=g1', '/requests', '/requests/bundle/b-sink', '/requests/rq-3', '/requests/rq-2/supplement',
-  '/requests/rq-3/approval', '/requests/rq-10/recheck', '/bookings', '/bookings/bk-k2', '/bookings/bk-k4', '/bookings/bk-k5', '/bookings/bk-k16', '/bookings/bk-k2/change', '/bookings/bk-k2/cancel', '/delays/dl-k3', '/proposals/pr-k4', '/materials/mt-1',
+const ROUTES = ['/', '/address', '/providers?category=c2', '/providers/p1', '/providers/p1/request?group=g1', '/bookings?tab=requests', '/requests/bundle/b-sink', '/requests/rq-3', '/requests/rq-2/supplement',
+  '/requests/rq-3/approval', '/requests/rq-10/recheck', '/bookings?tab=active', '/bookings?tab=past', '/bookings/bk-k2', '/bookings/bk-k4', '/bookings/bk-k5', '/bookings/bk-k16', '/bookings/bk-k2/change', '/bookings/bk-k2/cancel', '/delays/dl-k3', '/proposals/pr-k4', '/materials/mt-1',
   '/additional/aw-1', '/bookings/bk-k9/final', '/bookings/bk-k14', '/bookings/bk-k13/review', '/ledger', '/me', '/guide'];
 await test('브랜드: 탭 제목·파비콘·헤더 로고(싸고 홈), 화면에 이전 서비스명 없음', async (page) => {
   await start(page, { path: '/' });

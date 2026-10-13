@@ -54,6 +54,8 @@ export interface RequestListItem {
   visitDate?: IsoDate;
   paymentDeadline?: IsoDateTime;
   depositAmount?: Won;
+  /** 결제 대기 중 마지막 예약금 결제 시도의 상태(실패·처리 중·결과 확인 중). 성공하면 예약이 생겨 보낸 요청에서 빠진다 */
+  depositAttempt?: 'failed' | 'processing' | 'unknown';
 }
 
 export interface BundleListItem {
@@ -68,7 +70,7 @@ export interface FilteredBundleListItem extends BundleListItem {
   hiddenItemCount: number;
 }
 
-/** 내 요청 조회 결과. hasAnyRequest로 ‘요청 자체 없음’과 ‘조건에 맞는 요청 없음’을 구분한다. */
+/** 보낸 요청 조회 결과(예약으로 이어진 묶음 제외). hasAnyRequest로 ‘보낸 요청 자체 없음’과 ‘조건에 맞는 요청 없음’을 구분한다. */
 export interface RequestListResult {
   /** 조건에 맞는 묶음(묶음 안에는 맞는 업체별 요청만). 요청 접수일 최신순 */
   bundles: FilteredBundleListItem[];
@@ -153,6 +155,8 @@ export interface PrepaidSummary {
 
 export interface BookingDetail {
   booking: Booking;
+  /** 이 예약의 원래 요청(최초 요청 내용·업체 응답 확인용). 비교 요청이면 묶음의 업체 수 */
+  origin?: { requestId: string; bundleId: string; bundleSize: number };
   provider: ProviderDetail | (ProviderSummary & { phone: string; afterServiceTerms: string[] });
   /** 승인·확정된 방문 주소. null이면 확인 필요 */
   visitAddress: VisitAddress | null;
@@ -291,7 +295,8 @@ export interface Repository {
   createRequest(input: NewRequestInput): Promise<RepairRequest>;
   listRequests(): Promise<BundleListItem[]>;
   /**
-   * 조건(요청 접수일 범위·상태)으로 내 요청을 조회한다. 필터는 조회 조건일 뿐 데이터를 바꾸지 않는다.
+   * 내 예약 > 보낸 요청: 예약으로 이어지지 않은 요청 묶음만(src/domain/reservationTabs.ts) 조건(요청 접수일 범위·상태)으로 조회한다.
+   * 필터는 조회 조건일 뿐 데이터를 바꾸지 않는다.
    * 서버 구현은 페이지네이션이 생겨도 이 조건을 전체 조회에 적용해야 한다(로드된 항목만 거르지 않는다).
    */
   queryRequests(query: RequestListQuery): Promise<RequestListResult>;

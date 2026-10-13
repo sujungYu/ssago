@@ -17,7 +17,7 @@ export class RepoError extends Error {
 const MESSAGES: Record<RepoErrorCode, { title: string; hint?: string }> = {
   network: { title: '정보를 불러오지 못했습니다. 다시 확인해 주세요.', hint: '예약·결제 내역은 그대로 보관되어 있어요.' },
   save_unknown: { title: '처리 결과를 확인하고 있습니다.', hint: '같은 요청을 다시 보내기 전에 내역에서 결과를 확인해 주세요.' },
-  not_found: { title: '이 내역을 확인할 수 없습니다. 내 요청 또는 예약에서 확인해 주세요.' },
+  not_found: { title: '이 내역을 확인할 수 없습니다. 내 예약의 보낸 요청 또는 예약 목록에서 확인해 주세요.' },
   address_unavailable: { title: '현재 공동 예약 참여 가능 여부를 확인하기 어렵습니다.', hint: '다시 확인하기 전에는 참여 가능 여부를 안내하지 않아요.' },
   address_not_eligible: { title: '입력한 주소로는 이 공동 예약에 참여할 수 없습니다.', hint: '주소를 확인하거나 새 날짜로 요청해 주세요.' },
   request_ended: { title: '이 요청은 종료되었습니다. 종료 사유를 확인해 주세요.' },

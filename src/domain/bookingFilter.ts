@@ -1,5 +1,5 @@
 /**
- * 내 예약(진행 중·이용 내역) 필터. 화면과 분리한 순수 함수. 조회 조건만 바꾸며 예약 상태·데이터를 바꾸지 않는다.
+ * 내 예약의 예약 탭(확정된 예약·완료·취소) 필터. 화면과 분리한 순수 함수. 조회 조건만 바꾸며 예약 상태·데이터를 바꾸지 않는다.
  * - 날짜 기준은 예약의 방문일(Booking.visitDate, 한국 날짜). 접수일·결제일·취소일이 아니다.
  *   일정 변경은 고객이 수락해야 visitDate가 바뀌고(제안 확인 대기 중에는 기존 날짜), 지연 안내는 바꾸지 않으며,
  *   취소 예약은 취소 직전 확정 방문일을 그대로 갖는다. 후속 방문(followUp)이 있어도 최초 방문일(visitDate)이 기준이다.
@@ -8,13 +8,11 @@
 import { addDaysYmd, customRangeError, formatYmdDots, isValidYmd } from './requestFilter';
 import { seoulYmd } from './time';
 import type { Booking, IsoDate, IsoDateTime } from './types';
+import { bookingTabOf, type BookingTab } from './reservationTabs';
 
-export type BookingTab = 'active' | 'past';
-
-/** 진행 중/이용 내역 구분(기존 화면 기준): 취소됐거나 작업이 완료되면 이용 내역 */
-export function tabOf(b: Pick<Booking, 'status' | 'workStatus'>): BookingTab {
-  return b.status === 'cancelled' || b.workStatus === 'completed' ? 'past' : 'active';
-}
+export type { BookingTab };
+/** 확정된 예약/완료·취소 구분 — 탭 분류 공통 규칙(src/domain/reservationTabs.ts)을 그대로 쓴다 */
+export const tabOf = bookingTabOf;
 
 // ───────── 상태 그룹 ─────────
 export type ActiveStatus = 'all' | 'scheduled' | 'in_progress' | 'final_confirm' | 'settlement_waiting';
@@ -30,11 +28,11 @@ export const ACTIVE_STATUS_OPTIONS: { value: ActiveStatus; label: string; hint?:
 export const PAST_STATUS_OPTIONS: { value: PastStatus; label: string }[] = [
   { value: 'all', label: '전체' },
   { value: 'completed', label: '이용 완료' },
-  { value: 'cancelled', label: '취소됨' },
+  { value: 'cancelled', label: '예약 취소' },
 ];
 
 /**
- * 진행 중 상태 그룹(작업 상태 workStatus 기준, 카드 배지와 같은 기준).
+ * 확정된 예약 상태 그룹(작업 상태 workStatus 기준, 카드 배지와 같은 기준).
  * - followup_waiting(후속 방문 대기): 작업이 끝나지 않은 다일 작업이라 ‘작업 중’.
  * - final_confirm_waiting: 금액 협의 중(statement disputed)이어도 작업 상태는 그대로라 ‘최종 금액 확인 필요’(spec 미정 사항).
  * - 예약 상태 terms_recheck(조건 재확인)는 만드는 흐름이 없어 그룹에 넣지 않는다 → ‘전체’에서만 보인다.
@@ -49,7 +47,7 @@ export function activeStatusOf(b: Pick<Booking, 'status' | 'workStatus'>): Exclu
     default: return null;
   }
 }
-/** 이용 내역 상태 그룹: 취소가 우선, 그다음 작업 완료(중단 후 정산 완료 포함) */
+/** 완료·취소 상태 그룹: 취소가 우선, 그다음 작업 완료(중단 후 정산 완료 포함) */
 export function pastStatusOf(b: Pick<Booking, 'status' | 'workStatus'>): Exclude<PastStatus, 'all'> | null {
   if (b.status === 'cancelled') return 'cancelled';
   if (b.workStatus === 'completed') return 'completed';
@@ -88,12 +86,12 @@ export const DEFAULT_BOOKINGS_FILTER: BookingsFilterState = { tab: 'active', act
 // ───────── 조회 조건(서버로 넘길 수 있는 형태) ─────────
 export interface BookingListQuery {
   tab: BookingTab;
-  /** 진행 중이면 ActiveStatus, 이용 내역이면 PastStatus 그룹. 없으면 전체 */
+  /** 확정된 예약이면 ActiveStatus, 완료·취소면 PastStatus 그룹. 없으면 전체 */
   statusGroup?: Exclude<ActiveStatus | PastStatus, 'all'>;
   /** 방문일(한국 날짜) 포함 범위 */
   visitFrom?: IsoDate;
   visitTo?: IsoDate;
-  /** 고객 행동이 필요한 예약만(진행 중 탭) */
+  /** 고객 행동이 필요한 예약만(확정된 예약 탭) */
   actionRequiredOnly?: boolean;
 }
 

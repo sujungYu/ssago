@@ -60,7 +60,7 @@ describe('비교 요청 상태 필터', () => {
     expect(BUNDLE_STATUS_OPTIONS.map((o) => o.value)).toEqual(['all', 'payment_pending', 'needs_info', 'reviewing', 'ended']);
     expect(matchesBundleStatus('booked', 'all')).toBe(true);
     expect((['payment_pending', 'needs_info', 'reviewing', 'ended'] as const).some((f) => matchesBundleStatus('booked', f))).toBe(false);
-    expect(STATUS_GROUP_STATUSES.booked).toEqual(['booked']);
+    expect(Object.values(STATUS_GROUP_STATUSES).flat()).not.toContain('booked'); // 보낸 요청 필터에도 없음
   });
   it('전체는 조건 해제, 필터는 항목을 바꾸지 않는다', () => {
     const items = ALL.map((status) => ({ request: { status } }));

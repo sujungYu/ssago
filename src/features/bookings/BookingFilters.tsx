@@ -12,7 +12,7 @@ const VISIT_NOTE = (
 );
 
 /**
- * 내 예약 필터 막대(탭별 독립). 진행 중: [상태 ▾] [방문일 ▾] [확인 필요만]  예약 N건 / 이용 내역: [상태 ▾] [방문일 ▾]  예약 N건.
+ * 예약 탭 필터 막대(탭별 독립). 확정된 예약: [상태 ▾] [방문일 ▾] [확인 필요만]  예약 N건 / 완료·취소: [상태 ▾] [방문일 ▾]  예약 N건.
  * 초기화 버튼 없음(‘전체’·‘전체 기간’으로 그 조건만 해제). 규칙·매핑은 src/domain/bookingFilter.ts.
  */
 export function BookingFilterBar({ filter, onApply, count }: { filter: BookingsFilterState; onApply: (f: BookingsFilterState) => void; count?: number }) {
@@ -22,7 +22,7 @@ export function BookingFilterBar({ filter, onApply, count }: { filter: BookingsF
   const a = filter.active, p = filter.past;
   return (
     <div className="filter-bar">
-      <div className="filter-bar__buttons" role="group" aria-label={active ? '진행 중 예약 필터' : '이용 내역 필터'}>
+      <div className="filter-bar__buttons" role="group" aria-label={active ? '확정된 예약 필터' : '완료·취소 필터'}>
         <CapsuleButton label="상태" defaultValue="전체" value={active ? activeStatusLabel(a) : pastStatusLabel(p)} onClick={(el) => setOpen({ kind: 'status', anchor: el })} />
         <CapsuleButton label="방문일" defaultValue="전체 기간" value={periodLabel(active ? a : p, active ? ACTIVE_PERIOD_OPTIONS : PAST_PERIOD_OPTIONS)} onClick={(el) => setOpen({ kind: 'period', anchor: el })} />
         {active && <ToggleCapsule label="확인 필요만" pressed={a.actionOnly} onToggle={() => onApply({ ...filter, active: { ...a, actionOnly: !a.actionOnly } })} />}
@@ -35,7 +35,7 @@ export function BookingFilterBar({ filter, onApply, count }: { filter: BookingsF
       )}
       {open?.kind === 'status' && !active && (
         <OptionPicker title="상태" name="booking-past-status" anchor={open.anchor} onClose={() => setOpen(null)} options={PAST_STATUS_OPTIONS}
-          note={<p className="small muted">환불 처리 중·완료는 각 예약 카드에서 확인해요.</p>}
+          note={<p className="small muted">취소된 예약의 환불 처리 중·완료는 각 예약 카드에서 확인해요.</p>}
           value={p.status} onApply={(status) => done({ ...filter, past: { ...p, status } })} />
       )}
       {open?.kind === 'period' && active && (

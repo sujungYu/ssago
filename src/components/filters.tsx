@@ -5,7 +5,7 @@ import { customRangeError, formatYmdDots } from '../domain/requestFilter';
 import type { IsoDate } from '../domain/types';
 
 /*
- * 목록 필터 공통 UI(내 요청·내 예약). 캡슐형 버튼 → 편집용 선택지(데스크톱 팝오버, 모바일 하단 시트, 공통 Dialog).
+ * 목록 필터 공통 UI(내 예약의 보낸 요청·확정된 예약·완료·취소, 비교 요청). 캡슐형 버튼 → 편집용 선택지(데스크톱 팝오버, 모바일 하단 시트, 공통 Dialog).
  * 편집 중인 값은 ‘적용’ 때만 반영하고, 적용 전에 닫으면 기존 조건을 유지한다. 초기화 버튼은 두지 않는다(‘전체’로 해제).
  */
 

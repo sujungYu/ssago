@@ -9,15 +9,18 @@ import { AsyncView, Banner, Button, KV, LinkButton, MockPayNotice } from '../../
 import { PAYMENT_STATUS } from '../shared';
 import { progressOfPayment } from '../../domain/progressStep';
 import { ProgressSteps } from '../../components/ProgressSteps';
+import { listPath } from '../../domain/reservationTabs';
 
 function nextLinks(d: TransactionDetail): { primary?: { to: string; label: string }; secondary?: { to: string; label: string } } {
   const t = d.tx;
   const ok = t.status === 'success';
   switch (t.kind) {
     case 'deposit':
-      if (ok && !d.bookingId) return { secondary: { to: '/requests', label: '내 요청 목록' } }; // 예약 생성 확인 전: 결과 확인만
-      return ok && d.bookingId ? { primary: { to: `/bookings/${d.bookingId}`, label: '예약 보기' }, secondary: { to: '/bookings', label: '내 예약 목록' } }
-        : { primary: { to: d.requestId ? `/requests/${d.requestId}/approval` : '/requests', label: '승인 내용으로 돌아가기' }, secondary: { to: '/requests', label: '내 요청 목록' } };
+      // 예약 생성 확인 전: 결과 확인만(보낸 요청에 남아 있다)
+      if (ok && !d.bookingId) return { secondary: { to: listPath('requests'), label: '보낸 요청 목록' } };
+      // 결제 성공 + 예약 생성: 생성된 예약 상세 / 확정된 예약 목록. 실패·확인 중: 승인 내용 / 보낸 요청 목록
+      return ok && d.bookingId ? { primary: { to: `/bookings/${d.bookingId}`, label: '예약 확인하기' }, secondary: { to: listPath('active'), label: '확정된 예약 목록' } }
+        : { primary: { to: d.requestId ? `/requests/${d.requestId}/approval` : listPath('requests'), label: '승인 내용으로 돌아가기' }, secondary: { to: listPath('requests'), label: '보낸 요청 목록' } };
     case 'material_prepay':
       return { primary: { to: d.bookingId ? `/bookings/${d.bookingId}` : '/bookings', label: '예약 상세 보기' } };
     case 'change_shortfall':
@@ -25,6 +28,13 @@ function nextLinks(d: TransactionDetail): { primary?: { to: string; label: strin
     case 'balance':
       return { primary: { to: d.bookingId ? `/bookings/${d.bookingId}` : '/bookings', label: '예약 상세 보기' } };
   }
+}
+
+/** 상단 뒤로: 예약금 결제 성공·예약 생성 → 확정된 예약, 그 밖의 예약금 결제 → 보낸 요청, 예약 중 결제 → 예약 상세 */
+function backOf(d?: TransactionDetail): string {
+  if (!d) return '/bookings';
+  if (d.tx.kind === 'deposit') return d.tx.status === 'success' && d.bookingId ? listPath('active') : listPath('requests');
+  return d.bookingId ? `/bookings/${d.bookingId}` : '/bookings';
 }
 
 /** S-01 결제 진행·결과(모의). 결과를 확인 중일 때는 재결제 대신 상태 조회만 제공한다. */
@@ -41,7 +51,7 @@ export function PaymentResultPage() {
     else q.reload();
   });
   return (
-    <Page title="결제 결과" back="/requests" progress={q.data && <ProgressSteps progress={progressOfPayment(q.data.tx.kind, q.data.tx.status, !!q.data.bookingId)} />}>
+    <Page title="결제 결과" back={backOf(q.data)} progress={q.data && <ProgressSteps progress={progressOfPayment(q.data.tx.kind, q.data.tx.status, !!q.data.bookingId)} />}>
       <AsyncView state={q}>
         {(d) => {
           const t = d.tx;

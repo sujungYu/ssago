@@ -14,6 +14,7 @@ import { progressOfRequest, unlessComplete } from '../../domain/progressStep';
 import { ProgressSteps } from '../../components/ProgressSteps';
 import { ContactText, VisitAddressText, VisitText, slotsText } from '../shared';
 import { DURATION_NOTE } from '../../domain/visitTime';
+import { LIST_LINK_LABEL, isConvertedToBooking, listPath } from '../../domain/reservationTabs';
 
 function Body({ d, now }: { d: RequestDetail; now: string }) {
   const repo = useRepo();
@@ -62,7 +63,7 @@ function Body({ d, now }: { d: RequestDetail; now: string }) {
           <p className="small muted">예약금 결제로 예약이 확정됐어요. 일정 변경·취소·작업·정산은 내 예약에서 관리해요.</p>
           {r.bookingId
             ? <LinkButton to={`/bookings/${r.bookingId}`} variant="primary" block>예약 보기</LinkButton>
-            : <LinkButton to="/bookings" variant="primary" block>내 예약에서 확인하기</LinkButton>}
+            : <LinkButton to={listPath('active')} variant="primary" block>확정된 예약에서 확인하기</LinkButton>}
         </div>
       )}
 
@@ -110,7 +111,8 @@ function Body({ d, now }: { d: RequestDetail; now: string }) {
       )}
 
       {action.error && !confirm && <Banner tone="danger" title={action.error.title}>{action.error.hint}</Banner>}
-      <p className="xs muted"><Link to="/requests">내 요청 목록으로</Link></p>
+      {/* 예약으로 이어진 요청은 보낸 요청 목록에 없으므로 목록 링크 대신 위 ‘예약 보기’로 이동한다 */}
+      {!isConvertedToBooking(r) && <p className="xs muted"><Link to={listPath('requests')}>{LIST_LINK_LABEL.requests}</Link></p>}
 
       {(r.status === 'needs_info' || r.status === 'approved_pending_payment' || canWithdraw) && (
         <ActionBar>
@@ -141,12 +143,16 @@ function Body({ d, now }: { d: RequestDetail; now: string }) {
   );
 }
 
+/** 상단 뒤로: 보낸 요청 탭. 예약으로 이어진 요청이면 그 예약 상세(보낸 요청 목록에는 없음) */
+const backOf = (d?: RequestDetail): string =>
+  d && isConvertedToBooking(d.request) && d.request.bookingId ? `/bookings/${d.request.bookingId}` : listPath('requests');
+
 export function RequestDetailPage() {
   const { id = '' } = useParams();
   const repo = useRepo();
   const q = useAsync(() => repo.getRequest(id), [repo, id]);
   return (
-    <Page title="요청 상세" back="/requests" progress={q.data && <ProgressSteps progress={unlessComplete(progressOfRequest(q.data.request.status))} />}>
+    <Page title="요청 상세" back={backOf(q.data)} progress={q.data && <ProgressSteps progress={unlessComplete(progressOfRequest(q.data.request.status))} />}>
       <AsyncView state={q}>{(d) => <Body d={d} now={repo.now()} />}</AsyncView>
     </Page>
   );

@@ -5,10 +5,10 @@ import {
 } from '../../domain/requestFilter';
 
 type Open = { kind: 'status' | 'period'; anchor: HTMLElement } | null;
-const ENDED_HINT = '업체 거절·철회·승인 만료·다른 업체 예약으로 종료';
+const ENDED_HINT = '업체 거절·철회·승인 만료 등 예약으로 이어지지 않고 끝난 요청';
 
 /**
- * 내 요청 필터 막대: [요청 상태 ▾] [접수일 ▾]  요청 묶음 N건. 초기화 버튼은 두지 않는다(각 필터의 ‘전체’로 그 조건만 해제).
+ * 보낸 요청 필터 막대: [요청 상태 ▾] [접수일 ▾]  요청 묶음 N건. 초기화 버튼은 두지 않는다(각 필터의 ‘전체’로 그 조건만 해제).
  * 공통 필터 UI(src/components/filters.tsx)를 쓰고, 규칙·상태 매핑은 src/domain/requestFilter.ts.
  */
 export function RequestFilterBar({ filter, onApply, count }: { filter: RequestFilter; onApply: (f: RequestFilter) => void; count?: number }) {
@@ -16,7 +16,7 @@ export function RequestFilterBar({ filter, onApply, count }: { filter: RequestFi
   const done = (f: RequestFilter) => { setOpen(null); onApply(f); };
   return (
     <div className="filter-bar">
-      <div className="filter-bar__buttons" role="group" aria-label="요청 필터">
+      <div className="filter-bar__buttons" role="group" aria-label="보낸 요청 필터">
         <CapsuleButton label="요청 상태" defaultValue="전체" value={statusSummary(filter)} onClick={(el) => setOpen({ kind: 'status', anchor: el })} />
         <CapsuleButton label="접수일" defaultValue="전체 기간" value={periodButtonLabel(filter)} onClick={(el) => setOpen({ kind: 'period', anchor: el })} />
       </div>

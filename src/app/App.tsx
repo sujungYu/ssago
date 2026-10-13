@@ -1,11 +1,11 @@
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { listPath } from '../domain/reservationTabs';
 import { useEffect } from 'react';
 import { HomePage } from '../features/discovery/HomePage';
 import { AddressPage } from '../features/discovery/AddressPage';
 import { ProviderListPage } from '../features/discovery/ProviderListPage';
 import { ProviderDetailPage } from '../features/discovery/ProviderDetailPage';
 import { RequestFormPage } from '../features/requests/RequestFormPage';
-import { RequestsPage } from '../features/requests/RequestsPage';
 import { BundlePage } from '../features/requests/BundlePage';
 import { RequestDetailPage } from '../features/requests/RequestDetailPage';
 import { SupplementPage } from '../features/requests/SupplementPage';
@@ -29,6 +29,17 @@ import { AppStateProvider } from './context';
 /** 로그인 없는 데모에서 없앤 인증 화면 주소. 들어오면 업체 찾기로 보낸다(이전 링크·북마크 대비). */
 const OLD_AUTH_PATHS = ['/login', '/signup', '/signup/done', '/password/reset', '/password/reset/sent', '/password/new'];
 
+/**
+ * 이전 ‘내 요청’ 목록 주소(/requests). 내 예약의 보낸 요청 탭으로 보낸다. 요청 필터 쿼리(status·period·from·to)는 그대로 넘긴다.
+ */
+function OldRequestsRedirect() {
+  const { search } = useLocation();
+  const p = new URLSearchParams(search);
+  p.delete('tab');
+  const rest = p.toString();
+  return <Navigate to={rest ? `${listPath('requests')}&${rest}` : listPath('requests')} replace />;
+}
+
 function ScrollTop() {
   const { pathname } = useLocation();
   useEffect(() => { window.scrollTo(0, 0); }, [pathname]);
@@ -49,7 +60,7 @@ export function App() {
           <Route path="/providers" element={<ProviderListPage />} />
           <Route path="/providers/:id" element={<ProviderDetailPage />} />
           <Route path="/providers/:id/request" element={<RequestFormPage />} />
-          <Route path="/requests" element={<RequestsPage />} />
+          <Route path="/requests" element={<OldRequestsRedirect />} />
           <Route path="/requests/bundle/:bundleId" element={<BundlePage />} />
           <Route path="/requests/:id" element={<RequestDetailPage />} />
           <Route path="/requests/:id/supplement" element={<SupplementPage />} />

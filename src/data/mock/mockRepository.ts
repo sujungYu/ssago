@@ -7,6 +7,7 @@ import { detailError, toVisitAddress } from '../../domain/address';
 import { maskPhone, normalizeContact } from '../../domain/profile';
 import type { TripFeeBasis } from '../../domain/bookingCost';
 import { filterBookings, tabOf, type BookingListQuery, type PendingAction } from '../../domain/bookingFilter';
+import { bundleInRequestsTab } from '../../domain/reservationTabs';
 import type {
   AdditionalWork, Booking, Category, ChangeProposal, CustomerContact, CustomerProfile, DelayNotice, FinalStatement, Address,
   ProviderDetail, ProviderSummary, RepairRequest, Review, Transaction, Won, GroupRecord, SavedVisitAddress, IsoDate, PublicGroup,
@@ -167,7 +168,12 @@ export class MockRepository implements Repository {
       request: r, provider: this.brief(this.provider(r.providerId)), visitDate: ap?.visitDate ?? g?.date ?? r.newDateWish,
       paymentDeadline: r.status === 'approved_pending_payment' ? ap?.paymentDeadline : undefined,
       depositAmount: ap ? (ap.recheck?.newDepositAmount ?? ap.depositAmount) : undefined,
+      depositAttempt: r.status === 'approved_pending_payment' ? this.depositAttemptOf(r.id) : undefined,
     };
+  }
+  private depositAttemptOf(requestId: string): RequestListItem['depositAttempt'] {
+    const last = this.db.transactions.filter((t) => t.kind === 'deposit' && t.requestId === requestId).at(-1);
+    return last && (last.status === 'failed' || last.status === 'processing' || last.status === 'unknown') ? last.status : undefined;
   }
   private reqDetail(r: RepairRequest): RequestDetail {
     const ap = this.db.approvals.find((a) => a.requestId === r.id);
@@ -283,7 +289,8 @@ export class MockRepository implements Repository {
   queryRequests(query: RequestListQuery): Promise<RequestListResult> {
     // 목업은 전체를 메모리에서 거른다. 서버 구현은 같은 조건을 조회 쿼리에 넣는다.
     return this.read(() => {
-      const all = this.bundleList();
+      // 보낸 요청 탭: 예약으로 이어진 요청이 있는 묶음은 통째로 뺀다(그 예약은 예약 탭에만 보인다). 원본 요청은 지우지 않는다.
+      const all = this.bundleList().filter((b) => bundleInRequestsTab(b.items.map((i) => i.request)));
       return { bundles: filterRequestBundles(all, query), hasAnyRequest: all.length > 0 };
     });
   }
@@ -499,8 +506,10 @@ export class MockRepository implements Repository {
       const g = this.group(b.groupId);
       const tf = this.tripFeeOf(b);
       const ledger = this.ledgerFor(b.id);
+      const req = byId(this.db.requests, b.requestId);
       return {
         booking: b,
+        origin: req ? { requestId: req.id, bundleId: req.bundleId, bundleSize: this.db.requests.filter((r) => r.bundleId === req.bundleId).length } : undefined,
         provider: { ...this.summary(p, null), phone: p.phone, afterServiceTerms: p.afterServiceTerms },
         visitAddress: b.visitAddress ?? null,
         group: toPublicGroup(g), groupClosed: g.closed, groupEnded: g.ended,

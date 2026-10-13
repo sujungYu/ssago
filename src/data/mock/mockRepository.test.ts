@@ -188,12 +188,14 @@ describe('계정별 목업 상태', () => {
   });
 });
 
-describe('내 요청 필터 조회', () => {
-  it('전체 기간·전체 상태는 기존 목록과 같은 묶음', async () => {
+describe('보낸 요청 필터 조회', () => {
+  it('전체 기간·전체 상태는 예약으로 이어지지 않은 묶음 전부(전체 목록에서 예약된 묶음만 뺌)', async () => {
     const r = repo();
     const [all, res] = await Promise.all([r.listRequests(), r.queryRequests({})]);
     expect(res.hasAnyRequest).toBe(true);
-    expect(res.bundles.map((b) => b.bundleId).sort()).toEqual(all.map((b) => b.bundleId).sort());
+    const unbooked = all.filter((b) => !b.items.some((i) => i.request.status === 'booked' || i.request.bookingId));
+    expect(res.bundles.map((b) => b.bundleId).sort()).toEqual(unbooked.map((b) => b.bundleId).sort());
+    expect(unbooked.length).toBeLessThan(all.length);
     expect(res.bundles.every((b) => b.hiddenItemCount === 0)).toBe(true);
   });
   it('비교 묶음은 조건에 맞는 업체 요청만 보여주고, 묶음 상세에는 모두 남는다', async () => {
@@ -206,14 +208,13 @@ describe('내 요청 필터 조회', () => {
     expect(sink.hiddenItemCount).toBe(1);
     expect((await r.getBundle('b-sink')).items).toHaveLength(2);
   });
-  it('승인 완료·결제 대기와 예약 확정을 구분한다', async () => {
+  it('승인 완료·결제 대기는 보낸 요청에 남고, 예약 확정(booked)은 보낸 요청에 없다(승인만으로 옮기지 않음)', async () => {
     const r = repo();
     const pending = await r.queryRequests({ statuses: ['approved_pending_payment'] });
     const booked = await r.queryRequests({ statuses: ['booked'] });
     expect(pending.bundles.flatMap((b) => b.items).every((i) => i.request.status === 'approved_pending_payment')).toBe(true);
-    expect(booked.bundles.flatMap((b) => b.items).every((i) => i.request.status === 'booked')).toBe(true);
     expect(pending.bundles.length).toBeGreaterThan(0);
-    expect(booked.bundles.length).toBeGreaterThan(0);
+    expect(booked.bundles).toEqual([]);
   });
   it('조건에 맞는 요청이 없으면 빈 목록이지만 요청은 있다', async () => {
     const res = await repo().queryRequests({ createdFrom: '2025-01-01', createdTo: '2025-01-31' });

@@ -2,7 +2,7 @@ import { Icon } from './Icon';
 import { FLOW_LABEL, FLOW_STEPS, PROGRESS_NOTE_TEXT, type Progress } from '../domain/progressStep';
 
 /**
- * 진행 표시(안내용, 누를 수 없음). 내 요청·내 예약 두 과정이 같은 컴포넌트를 쓰고, 단계 목록은 FLOW_STEPS 설정에서 온다.
+ * 진행 표시(안내용, 누를 수 없음). 보낸 요청·내 예약 두 과정이 같은 컴포넌트를 쓰고, 단계 목록은 FLOW_STEPS 설정에서 온다.
  * 단계는 progressOfRequest / progressOfBooking / progressOfPayment가 업무 상태에서 정한다.
  * 상태는 색만으로 구분하지 않는다: 완료 = 체크 + ‘완료’(스크린리더), 현재 = 굵은 블루 번호·글씨 + aria-current="step", 이후 = 회색 번호.
  * 좁은 화면에서는 짧은 라벨을 보여주고 전체 라벨은 스크린리더용으로 남긴다(가로 스크롤 없음).
