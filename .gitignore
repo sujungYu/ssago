@@ -7,3 +7,4 @@ e2e/output
 *.tsbuildinfo
 dist-prod
 dist-demo-auth
+e2e/failures
