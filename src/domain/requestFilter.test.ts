@@ -8,7 +8,7 @@ import { REQUEST_STATUS } from './rules';
 import type { RequestStatus } from './types';
 
 const item = (id: string, status: RequestStatus, createdAt: string) => ({ id, request: { status, createdAt } });
-const bundle = (id: string, ...items: ReturnType<typeof item>[]) => ({ bundleId: id, items });
+const bundle = (id: string, ...items: (ReturnType<typeof item> & { depositAttempt?: 'failed' | 'processing' | 'unknown' })[]) => ({ bundleId: id, items });
 const f = (p: Partial<RequestFilter>): RequestFilter => ({ ...DEFAULT_REQUEST_FILTER, ...p });
 const qs = (s: string) => new URLSearchParams(s);
 
@@ -149,5 +149,32 @@ describe('URL 쿼리', () => {
   it('기본값 판단', () => {
     expect(isDefaultFilter(parseRequestFilter(qs('')))).toBe(true);
     expect(isDefaultFilter(f({ status: 'reviewing' }))).toBe(false);
+  });
+});
+
+describe('확인 필요(보낸 요청)', () => {
+  const at = '2026-10-12T01:00:00Z';
+  const bs = [
+    bundle('b-pay', item('rq-pay', 'approved_pending_payment', at)),
+    bundle('b-paying', { ...item('rq-paying', 'approved_pending_payment', at), depositAttempt: 'processing' as const }),
+    bundle('b-info', item('rq-info', 'needs_info', '2026-10-01T01:00:00Z')),
+    bundle('b-review', item('rq-review', 'reviewing', at)),
+    bundle('b-rej', item('rq-rej', 'rejected', at)),
+  ];
+  const run = (p: Partial<RequestFilter>) => filterRequestBundles(bs, toListQuery(f(p), '2026-10-13T10:00:00+09:00')).map((b) => b.bundleId);
+  it('고객이 처리할 할 일(요청서 보완·예약금 결제)이 있는 요청만, 결제 처리 중·업체 검토 중·종료는 제외', () => {
+    expect(run({ actionOnly: true }).sort()).toEqual(['b-info', 'b-pay']);
+  });
+  it('요청 상태·요청일과 함께 적용(AND)', () => {
+    expect(run({ actionOnly: true, status: 'payment_pending' })).toEqual(['b-pay']);
+    expect(run({ actionOnly: true, period: '7d' })).toEqual(['b-pay']);
+    expect(run({ actionOnly: true, status: 'reviewing', period: '7d' })).toEqual([]);
+  });
+  it('URL: action=1로 저장·복원, 끄면 키를 지우고 기본 필터로 본다', () => {
+    const on = writeRequestFilter(new URLSearchParams(), f({ actionOnly: true }));
+    expect(on.get('action')).toBe('1');
+    expect(parseRequestFilter(on).actionOnly).toBe(true);
+    expect(isDefaultFilter(parseRequestFilter(on))).toBe(false);
+    expect(writeRequestFilter(on, f({})).has('action')).toBe(false);
   });
 });

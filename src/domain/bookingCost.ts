@@ -124,7 +124,7 @@ export function summarizeBookingCost(i: CostInput): CostSummary {
     const s = computeSettlement(st.items, p.available);
     const lines = st.items.map((it, n) => ({ key: `st-${n}`, label: it.label, amount: it.amount }));
     const repairLines = st.items.map((it, n) => ({ it, n })).filter(({ it }) => it.kind !== 'trip_fee').map(({ it, n }) => ({ key: `st-${n}`, label: it.label, amount: it.amount }));
-    const split = { repair: repairLines.reduce((a, l) => a + (l.amount ?? 0), 0), repairLines, trip: { label: '내 확정 출장비', amount: st.items.filter((it) => it.kind === 'trip_fee').reduce((a, it) => a + it.amount, 0) } };
+    const split = { repair: repairLines.reduce((a, l) => a + (l.amount ?? 0), 0), repairLines, trip: { label: '내 출장비', amount: st.items.filter((it) => it.kind === 'trip_fee').reduce((a, it) => a + it.amount, 0) } };
     if (st.status === 'settled') {
       return {
         ...base, ...split, stage: 'settled', lines, total: { label: '최종 금액', amount: s.finalTotal },
@@ -138,7 +138,7 @@ export function summarizeBookingCost(i: CostInput): CostSummary {
       total: { label: disputed ? '업체가 등록한 최종 금액(협의 중)' : '업체가 등록한 최종 금액(확인 전)', amount: sumItems(st.items) },
       balance: balanceOf(s.delta, disputed
         ? { pay: '합의 전 · 예상 추가 결제액', zero: '합의 전 · 예상 추가 결제 없음', refund: '합의 전 · 예상 환불액', unknown: '' }
-        : { pay: '결제할 금액', zero: '추가 결제 없음', refund: '환불 예정 금액', unknown: '' }),
+        : { pay: '추가로 결제할 금액', zero: '추가 결제 없음', refund: '환불 예정 금액', unknown: '' }),
       note: disputed ? '금액을 협의하는 동안에는 청구하거나 확정하지 않아요.' : '내용을 확인하고 동의해야 정산이 진행돼요. 지금 자동으로 결제·환불되지 않아요.',
     };
   }
@@ -177,4 +177,62 @@ export function showSettlementCard(i: { cancelled: boolean; hasStatement: boolea
   if (i.hasStatement) return true;
   if (i.cancelled) return i.moneyRecords > 0;
   return false;
+}
+
+// ───────── 예약 상세 ‘공동 예약 정보’의 내 출장비·절약 안내(spec 5.24) ─────────
+export interface TripShareView {
+  /** 다른 세대와 출장비를 나누는 예약인가. 아니면(일반 예약 — 분담 세대가 나 하나) 공동 예약 정보·절약 안내를 그리지 않는다 */
+  joint: boolean;
+  /** 마감 전 ‘예상 출장비’, 마감 후·유지값 ‘내 출장비’ */
+  label: string;
+  amount: Amount;
+  /** 기본 출장비(이 예약 그룹의 총 출장비 = 혼자 방문할 때 내는 출장비) − 내 출장비. 계산할 수 없거나 0원 이하면 null(안내 숨김) */
+  saving: Won | null;
+  /** 절약 안내 문장(saving이 있을 때만) */
+  savingText: string | null;
+  /** 분담 기준 문장(총 출장비·세대 수가 있을 때만) */
+  splitText: string | null;
+}
+
+/**
+ * 내 출장비와 공동 예약 절약 금액. 출장비만으로 계산한다(예약금·자재비·작업비를 쓰지 않는다). 절약 금액은 덜 낸 출장비이지 돌려받는 돈이 아니다.
+ * - 마감 전(expected): 지금 확정 세대 기준 예상값 → ‘예상 출장비’, ‘공동 예약으로 출장비 약 ○원 절약 예상’
+ * - 마감 후(confirmed): 마감 때 확정된 출장비·세대 수 → ‘내 출장비’, ‘공동 예약으로 출장비 ○원 절약했어요.’
+ * - 일정 변경으로 유지한 출장비(locked): 기준 그룹 총액을 알 수 없어 절약 금액·분담 문장 없이 ‘내 출장비’만
+ */
+export function tripShareView(tf: TripFeeBasis, fmt: (w: Won) => string): TripShareView {
+  const label = tf.kind === 'expected' ? '예상 출장비' : '내 출장비';
+  const joint = tf.kind === 'locked' || (tf.households ?? 0) >= 2;
+  const raw = tf.groupTotal !== null && tf.amount !== null && tf.kind !== 'locked' ? tf.groupTotal - tf.amount : null;
+  const saving = joint && raw !== null && raw > 0 ? raw : null;
+  const savingText = saving === null ? null
+    : tf.kind === 'expected' ? `공동 예약으로 출장비 약 ${fmt(saving)} 절약 예상` : `공동 예약으로 출장비 ${fmt(saving)} 절약했어요.`;
+  const splitText = joint && tf.groupTotal !== null && tf.households
+    ? `총 출장비 ${fmt(tf.groupTotal)}을 ${tf.kind === 'expected' ? '지금 ' : ''}${tf.households}세대가 나눠요.${tf.kind === 'expected' ? ' 접수 마감 때 확정 세대 수로 확정돼요.' : ''}`
+    : null;
+  return { joint, label, amount: tf.amount, saving, savingText, splitText };
+}
+
+// ───────── 최종 정산 ‘금액 상세’의 차감 행(spec 5.26) ─────────
+export interface AppliedPrepaidLine { key: 'deposit' | 'material' | 'change'; label: string; amount: Won; /** 이미 공제·환불돼 이번 정산에서 뺀 금액 */ excluded: Won }
+
+/**
+ * 이번 정산에 실제로 차감되는 선결제를 결제 종류별 행으로 나눈다. 합계는 정산 계산에 쓰는 잔액(available)과 항상 같다 — 계산을 바꾸지 않고 나눠 보여주기만 한다.
+ * 이미 공제·충당·취소 환불된 금액(paidIn − available)은 예약금 → 일정 변경 추가 결제 → 자재비 순으로 빼서 다시 차감하지 않는다
+ * (출장비·변경 수수료 공제는 예약금에서 충당되고, 자재 공제는 취소 때만 생긴다). 0원이 된 행은 숨긴다.
+ */
+export function appliedPrepaidLines(c: Pick<CostSummary, 'payments' | 'paidIn' | 'available'>): AppliedPrepaidLine[] {
+  const LABEL = { deposit: '결제한 예약금', material: '결제한 자재비', change: '일정 변경 추가 결제' } as const;
+  const order: AppliedPrepaidLine['key'][] = ['deposit', 'change', 'material'];
+  let used = Math.max(0, c.paidIn - c.available);
+  const out: AppliedPrepaidLine[] = [];
+  for (const key of order) {
+    const paid = c.payments.find((p) => p.key === key)?.amount ?? 0;
+    if (paid <= 0) continue;
+    const excluded = Math.min(paid, used);
+    used -= excluded;
+    if (paid - excluded > 0) out.push({ key, label: LABEL[key], amount: paid - excluded, excluded });
+  }
+  // 표시 순서: 예약금 → 자재비 → 일정 변경 추가 결제
+  return out.sort((a, b) => ['deposit', 'material', 'change'].indexOf(a.key) - ['deposit', 'material', 'change'].indexOf(b.key));
 }

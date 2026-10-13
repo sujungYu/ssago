@@ -554,9 +554,9 @@ await test('주소: 모바일 키보드(낮은 화면)에서 상세 주소 입�
 });
 
 // ───────── 내 예약 필터(진행 중·이용 내역) ─────────
-const bkStatus = (page) => page.getByRole('button', { name: /^상태 필터/ });
+const bkStatus = (page) => page.getByRole('button', { name: /^(예약 )?상태 필터/ });
 const bkVisit = (page) => page.getByRole('button', { name: /^방문일 필터/ });
-const bkToggle = (page) => page.getByRole('button', { name: '할 일 있는 예약만' });
+const bkToggle = (page) => page.getByRole('button', { name: '확인 필요' });
 /** 카드의 할 일 문구(없으면 '') */
 const todoOf = async (card) => (await card.locator('.card-todo').count()) ? (await card.locator('.card-todo').innerText()).trim() : '';
 const bkCards = (page) => page.locator('main .booking-list > li');
@@ -573,7 +573,7 @@ async function bkCount(page, n) {
 }
 async function bkPick(page, which, label) {
   await (which === 'status' ? bkStatus(page) : bkVisit(page)).click();
-  const dlg = page.getByRole('dialog', { name: which === 'status' ? '상태' : '방문일' });
+  const dlg = page.getByRole('dialog', { name: which === 'status' ? /^(예약 )?상태$/ : '방문일' });
   await dlg.getByRole('radio', { name: new RegExp('^' + label) }).check();
   await dlg.getByRole('button', { name: '적용', exact: true }).click();
   await dlg.waitFor({ state: 'detached' });
@@ -582,7 +582,7 @@ async function bkPick(page, which, label) {
 await test('내 예약 필터: 확정된 예약 상태·방문일·할 일 있는 예약만(AND), 건수 일치, 전체로 그 조건만 해제, 초기화 없음', async (page) => {
   await start(page, { path: '/bookings?tab=active' });
   await bkCount(page, 11);
-  eq((await bkStatus(page).innerText()).trim(), '상태', '기본 표시');
+  eq((await bkStatus(page).innerText()).trim(), '예약 상태', '기본 표시');
   eq((await bkVisit(page).innerText()).trim(), '방문일', '기본 표시');
   eq(await bkToggle(page).getAttribute('aria-pressed'), 'false', '확인 필요만 기본 꺼짐');
   const h = (await bkStatus(page).boundingBox()).height;
@@ -606,7 +606,7 @@ await test('내 예약 필터: 확정된 예약 상태·방문일·할 일 있�
   eq(await bkCards(page).locator('.card-todo').count(), 0, '금액 협의 중에는 할 일 문구 없음');
   await bkToggle(page).click();
   // 토글은 주소(조건)를 바꿔 다시 그려지므로 반영될 때까지 기다린 뒤 확인한다
-  await page.getByRole('button', { name: '할 일 있는 예약만', pressed: true }).waitFor({ timeout: 3000 }).catch(() => {});
+  await page.getByRole('button', { name: '확인 필요', pressed: true }).waitFor({ timeout: 3000 }).catch(() => {});
   eq(await bkToggle(page).getAttribute('aria-pressed'), 'true', '토글 켜짐');
   await waitText(page, '선택한 조건에 맞는 예약이 없어요.');
   await bkPick(page, 'status', '전체');
@@ -711,7 +711,7 @@ await test('내 예약 필터: 조회 오류는 빈 결과와 구분하고 다�
 
 // ───────── 보낸 요청 필터(캡슐형: 요청 상태 단일 선택 + 접수일) ─────────
 const statusBtn = (page) => page.getByRole('button', { name: /^요청 상태 필터/ });
-const periodBtn = (page) => page.getByRole('button', { name: /^접수일 필터/ });
+const periodBtn = (page) => page.getByRole('button', { name: /^요청일 필터/ });
 const cards = (page) => page.locator('main .request-list > li');
 const badges = (page) => page.locator('main .request-list > li .badge').allInnerTexts();
 /** 조회가 끝난 뒤의 건수 문구(조회 중에는 비어 있다) */
@@ -731,7 +731,7 @@ async function pickStatus(page, label) {
 }
 async function pickPeriod(page, label) {
   await periodBtn(page).click();
-  const dlg = page.getByRole('dialog', { name: '접수일' });
+  const dlg = page.getByRole('dialog', { name: '요청일' });
   await dlg.getByRole('radio', { name: label, exact: true }).check();
   await dlg.getByRole('button', { name: '적용', exact: true }).click();
   await dlg.waitFor({ state: 'detached' });
@@ -744,7 +744,7 @@ await test('요청 필터: 캡슐 버튼 [요청 상태][접수일] 순서·높�
   truthy(sb.x < pb.x && Math.abs(sb.y - pb.y) < 2, '요청 상태가 먼저, 같은 줄');
   truthy(sb.height >= 40 && sb.height <= 44 && pb.height >= 40 && pb.height <= 44, `높이 40~44px(${sb.height}, ${pb.height})`);
   eq((await statusBtn(page).innerText()).trim(), '요청 상태', '기본 표시');
-  eq((await periodBtn(page).innerText()).trim(), '접수일', '기본 표시');
+  eq((await periodBtn(page).innerText()).trim(), '요청일', '기본 표시');
   truthy(parseFloat(await statusBtn(page).evaluate((el) => getComputedStyle(el).borderTopLeftRadius)) >= 20, '캡슐형 모서리');
   eq(await page.locator('.capsule--on').count(), 0, '기본값은 강조 없음');
   eq(await countText(page), `${COUNT_LABEL} ${await cards(page).count()}건`, '건수 = 표시 묶음 수');
@@ -802,7 +802,7 @@ await test('요청 필터: 접수일 직접 선택(오류·경계) + 상태 AND 
   await start(page, { path: '/bookings?tab=requests' });
   await waitText(page, '예약금 결제');
   await periodBtn(page).click();
-  const dlg = page.getByRole('dialog', { name: '접수일' });
+  const dlg = page.getByRole('dialog', { name: '요청일' });
   await waitText(page, '방문일이 아니에요');
   await dlg.getByRole('radio', { name: '직접 선택', exact: true }).check();
   await dlg.getByRole('button', { name: '적용', exact: true }).click();
@@ -821,7 +821,7 @@ await test('요청 필터: 접수일 직접 선택(오류·경계) + 상태 AND 
   // 10-12 접수(한국 날짜, 시작·종료 포함): rq-2(20:00), rq-10(09:00)
   await page.locator('.filter-bar__count', { hasText: `${COUNT_LABEL} 2건` }).waitFor();
   const labels = await cards(page).allInnerTexts();
-  truthy(labels.length === 2 && labels.every((t) => t.includes('요청 접수일 2026.10.12')), '모두 10-12 접수');
+  truthy(labels.length === 2 && labels.every((t) => t.includes('요청일 2026.10.12')), '모두 10-12 접수');
   // 적용 전에 닫으면 기존 조건 유지(편집값 ≠ 적용값)
   await statusBtn(page).click();
   await page.getByRole('dialog', { name: '요청 상태' }).getByRole('radio', { name: /^예약금 결제/ }).check();
@@ -870,7 +870,7 @@ await test('요청 필터: 키보드로 열기·선택·적용, 포커스 이동
   await periodBtn(page).click();
   const box = await page.locator('.dialog').boundingBox();
   truthy(Math.abs(box.y + box.height - 700) < 2, `모바일 하단 시트(${JSON.stringify(box)})`);
-  await page.getByRole('dialog', { name: '접수일' }).getByRole('button', { name: '닫기' }).click();
+  await page.getByRole('dialog', { name: '요청일' }).getByRole('button', { name: '닫기' }).click();
 });
 
 await testCompare('요청 필터: 묶음 안 서로 다른 상태 — 선택 상태 요청만 표시, 상세 비교에는 전체 유지', async (page) => {
@@ -915,7 +915,7 @@ await test('요청 필터: 상세 진입 후 복귀·새로고침·뒤로가기�
   for (const bad of ['period=custom&from=2026-99-01&to=x&status=zzz', 'status=reviewing,needs_info', 'status=approved_pending_payment', 'status=booked']) {
     await page.goto(`${BASE}/requests?${bad}`); // 이전 내 요청 주소 → 보낸 요청 탭(쿼리 유지 후 검증)
     await page.waitForURL((u) => u.pathname === '/bookings' && u.search === '?tab=requests');
-    await periodBtn(page).filter({ hasText: '접수일' }).waitFor();
+    await periodBtn(page).filter({ hasText: '요청일' }).waitFor();
     await statusBtn(page).filter({ hasText: '요청 상태' }).waitFor();
   }
 });
@@ -1151,9 +1151,9 @@ for (const w of [360, 1280]) {
     await infoCard(page).waitFor();
     const t = (await infoCard(page).innerText()).replace(/\s+/g, ' ');
     for (const s of ['확인이 필요해요', '요청서를 보완해 주세요', '든든문고리의 요청', '모델명이 보이는 사진', '증상(헐거움·소음)', '요청서 보완하기']) truthy(t.includes(s), `카드 ‘${s}’: ${t}`);
-    // 위치: 본문 첫 요소(진행 단계 바로 아래), 업체 연락·보낸 요청 정보보다 위
+    // 위치: 본문 첫 요소(진행 단계 바로 아래), 보낸 요청 정보보다 위
     eq(await page.evaluate(() => document.querySelector('main .act-card')?.id), 'info-req', '상단 확인 영역');
-    truthy(await page.evaluate(() => { const c = document.getElementById('info-req').getBoundingClientRect(); const sec = [...document.querySelectorAll('main .section h2')].find((h) => h.textContent === '업체 연락'); return c.bottom <= sec.getBoundingClientRect().top; }), '일반 정보보다 위');
+    truthy(await page.evaluate(() => { const c = document.getElementById('info-req').getBoundingClientRect(); const sec = [...document.querySelectorAll('main .section h2')].find((h) => h.textContent === '보낸 요청'); return c.bottom <= sec.getBoundingClientRect().top; }), '일반 정보보다 위');
     expectActCard(await actCardStyle(infoCard(page)));
     const main = await page.locator('main').innerText();
     truthy(!main.includes('업체가 확인하고 싶은 내용이 있어요') && !main.includes('추가 정보 필요'), '이전 안내·배지 중복 없음');
@@ -1481,8 +1481,8 @@ await test('예약 목록·상세: 확정된 예약/완료·취소, 마감 후 �
   const pastBadges = await page.locator('main .booking-list .badge').evaluateAll((els) => els.map((e) => [e.textContent, getComputedStyle(e).backgroundColor]));
   truthy(pastBadges.every(([t, bg]) => (t === '예약 취소' && bg === 'rgb(238, 240, 243)') || (t === '이용 완료' && bg === 'rgb(232, 244, 236)')), `완료·취소 색: ${JSON.stringify(pastBadges)}`);
   await page.goto(`${BASE}/bookings/bk-k2`);
-  await openFold(page, '공동 예약 정보'); // 마감 후: 내 확정 출장비 + 마감 시 세대 기준 계산
-  await waitText(page, '내 확정 출장비'); await waitText(page, '12,500원'); await waitText(page, '÷ 4세대');
+  await openFold(page, '공동 예약 정보'); // 마감 후: 내 출장비 + 절약 + 마감 시 세대 기준
+  await waitText(page, '내 출장비'); await waitText(page, '12,500원'); await waitText(page, '공동 예약으로 출장비 37,500원 절약했어요.'); await waitText(page, '총 출장비 50,000원을 4세대가 나눠요.');
   await waitText(page, '다른 세대의 주소·작업·사진은 보이지 않아요');
   // 마감 전 공동 예약: ‘확정 출장비’가 아니라 현재 예상 출장비와 계산 기준
   const open = (await db(page)).bookings.map((b) => ({ b, g: null })).length && await page.evaluate(() => { const d = window.__sagoDev.db; const b = d.bookings.find((x) => x.status === 'confirmed' && x.lockedTripFee === undefined && !d.groups.find((g) => g.id === x.groupId).closed); return b ? b.id : null; });
@@ -1490,13 +1490,13 @@ await test('예약 목록·상세: 확정된 예약/완료·취소, 마감 후 �
     await page.goto(`${BASE}/bookings/${open}`);
     await openFold(page, '공동 예약 정보');
     const g = (await page.locator('#fold-group-panel').innerText()).replace(/\s+/g, ' ');
-    truthy(g.includes('현재 예상 출장비') && !g.includes('내 확정 출장비') && g.includes('접수 상태 접수 중') && g.includes('지금 확정된 세대 기준 예상'), `마감 전 예상 금액: ${g}`);
+    truthy(g.includes('예상 출장비') && !g.includes('내 출장비') && g.includes('접수 상태 접수 중') && g.includes('절약 예상'), `마감 전 예상 금액: ${g}`);
   } else {
     // 시드에 마감 전 예약이 없으면 한 예약의 그룹을 접수 중으로 되돌려 확인한다
     await patchDb(page, (d) => { const b = d.bookings.find((x) => x.id === 'bk-k2'); const g = d.groups.find((x) => x.id === b.groupId); g.closed = false; }, '/bookings/bk-k2');
     await openFold(page, '공동 예약 정보');
     const g = (await page.locator('#fold-group-panel').innerText()).replace(/\s+/g, ' ');
-    truthy(g.includes('현재 예상 출장비') && !g.includes('내 확정 출장비') && g.includes('접수 상태 접수 중'), `마감 전 예상 금액: ${g}`);
+    truthy(g.includes('예상 출장비') && !g.includes('내 출장비') && g.includes('접수 상태 접수 중') && g.includes('절약 예상'), `마감 전 예상 금액: ${g}`);
   }
   const html = await page.content();
   truthy(!/anchorKey|radius:|complex:/.test(html), '내부 기준 키 노출');
@@ -1525,7 +1525,7 @@ await test('예약 상세 구성: (확인 카드) → 예약 정보 / 방문 주
   truthy(h12.indexOf('예약 정보') < h12.indexOf('방문 주소') && h12.indexOf('방문 주소') < h12.indexOf('작업 내용') && h12.indexOf('작업 내용') < h12.indexOf('금액·정산') && !h12.includes('최종 금액을 확인해 주세요'), `정산 진행 중 순서 ${h12}`);
   // 결제 내역은 한 곳에서만: 금액·정산 카드가 있으면 예약 정보에는 결제 내역 펼치기가 없다
   eq(await foldBtn(page, '결제 내역').count(), 0, '금액·정산 카드가 있으면 예약 정보 결제 내역 없음');
-  eq(await costCard(page).locator('summary').filter({ hasText: '결제 내역' }).count(), 1, '금액·정산 카드의 결제 내역');
+  eq(await costCard(page).locator('summary').filter({ hasText: '결제 내역' }).count(), 0, '금액·정산 카드에도 별도 결제 내역 없음(금액 상세의 차감 행으로)');
   await page.goto(`${BASE}/bookings/bk-k4`);
   await page.getByRole('heading', { name: '예약 정보', exact: true }).waitFor();
   const heads = await page.locator('main h2').allInnerTexts();
@@ -1535,7 +1535,7 @@ await test('예약 상세 구성: (확인 카드) → 예약 정보 / 방문 주
   const cardsStyle = await page.evaluate(() => ['booking-info', 'work', 'visit-address'].map((id) => { const e = document.getElementById(id); const cs = getComputedStyle(e); return [cs.backgroundColor, cs.borderTopColor, parseFloat(cs.borderTopLeftRadius) >= 12, Math.round(e.getBoundingClientRect().width)].join(); }));
   truthy(new Set(cardsStyle).size === 1 && cardsStyle[0].startsWith('rgb(255, 255, 255),rgb(228, 230, 234),true'), `세 카드 같은 스타일·너비: ${cardsStyle}`);
   const info = await sectionText(page, '예약 정보');
-  for (const s of ['깔끔마감', '깔끔마감에 전화', '방문 일정 방문 일정 조율 중', '공동 예약 정보', '결제 내역']) truthy(info.includes(s), `예약 정보 ‘${s}’: ${info}`);
+  for (const s of ['깔끔마감', '깔끔마감에 전화', '방문 일정 방문 일정 조율 중', '공동 예약 정보', '결제한 예약금']) truthy(info.includes(s), `예약 정보 ‘${s}’: ${info}`);
   truthy(!info.includes('일정 변경 내역'), `일정 변경 내역 펼치기 없음: ${info}`);
   for (const gone of ['진행 상태', '일정 조율 중 일정', '작업 전', '응답 전', '욕실 실리콘 보수', '햇살로', '결제한 금액', '10월 14일']) truthy(!info.includes(gone), `예약 정보에 없음 ‘${gone}’: ${info}`);
   truthy(!info.includes('제안된 새 일정') && !info.includes('10월 19일 (월) 10:00'), '진행 중 제안 비교는 상단 카드에서만');
@@ -1551,19 +1551,16 @@ await test('예약 상세 구성: (확인 카드) → 예약 정보 / 방문 주
   await foldBtn(page, '공동 예약 정보').focus();
   await page.keyboard.press('Enter');
   eq(await foldBtn(page, '공동 예약 정보').getAttribute('aria-expanded'), 'true', 'Enter로 열림');
-  await page.keyboard.press('Tab');
-  eq(await page.evaluate(() => document.activeElement?.textContent), '결제 내역', 'Tab으로 다음 펼치기');
-  truthy(await page.evaluate(() => getComputedStyle(document.activeElement).outlineStyle !== 'none'), '포커스 표시');
-  await page.keyboard.press('Space');
-  eq((await page.locator('.fold__btn[aria-expanded="true"]').allInnerTexts()).join(), '공동 예약 정보,결제 내역', '여러 펼치기 동시에 열림');
+  eq(await page.locator('#fold-payments, #fold-payments-panel').count(), 0, '결제 내역 펼치기 없음');
   const grp = (await page.locator('#fold-group-panel').innerText()).replace(/\s+/g, ' ');
-  for (const s of ['참여 확정 세대 3세대', '접수 상태 마감됨', '접수 마감 10월 13일 (화) 18:00', '내 확정 출장비 16,666원', '그룹 총 출장비 50,000원', '÷ 3세대', '다른 세대의 주소·작업·사진은 보이지 않아요']) truthy(grp.includes(s), `공동 예약 정보 ‘${s}’: ${grp}`);
-  const pays = (await page.locator('#fold-payments-panel').innerText()).replace(/\s+/g, ' ');
-  truthy(pays.includes('예약금') && pays.includes('결제 완료') && pays.includes('50,000원') && pays.includes('10월 9일') && (pays.match(/50,000원/g) ?? []).length === 1, `결제 내역(예약금 한 번, 상태·날짜): ${pays}`);
+  for (const s of ['참여 확정 세대 3세대', '접수 상태 마감됨', '접수 마감 10월 13일 (화) 18:00', '내 출장비 16,666원', '공동 예약으로 출장비 33,334원 절약했어요.', '총 출장비 50,000원을 3세대가 나눠요.', '다른 세대의 주소·작업·사진은 보이지 않아요']) truthy(grp.includes(s), `공동 예약 정보 ‘${s}’: ${grp}`);
+  truthy(!grp.includes('그룹 총 출장비') && !grp.includes('확정 출장비'), `제거한 행 없음: ${grp}`);
+  const paid = (await page.locator('#paid-deposit').innerText()).replace(/\s+/g, ' ');
+  truthy(paid.includes('결제한 예약금 50,000원') && paid.includes('결제한 예약금은 최종 정산 시 차감돼요.'), `결제한 예약금: ${paid}`);
   // 정보가 다시 조회돼도 열어둔 영역은 닫히지 않는다
   await page.evaluate(() => window.__sagoDev.setSettings({}));
   await page.waitForTimeout(300);
-  eq((await page.locator('.fold__btn[aria-expanded="true"]').allInnerTexts()).join(), '공동 예약 정보,결제 내역', '갱신 후에도 열림 유지');
+  eq((await page.locator('.fold__btn[aria-expanded="true"]').allInnerTexts()).join(), '공동 예약 정보', '갱신 후에도 열림 유지');
   // 일정 변경 내역 펼치기는 없지만 기록·기존 날짜 데이터는 그대로
   eq(await page.locator('#fold-schedule, #fold-schedule-panel, #fold-origin, #fold-origin-panel').count(), 0, '제거한 펼치기 없음');
   eq((await db(page)).bookings.find((x) => x.id === 'bk-k4').visitDate, '2026-10-14', '기존 방문 날짜 데이터 보존');
@@ -1605,10 +1602,9 @@ await test('금액·정산 표시 기준: 방문 예정·작업 중·후속 작�
     // 숨긴 영역 여백 없음: 마지막 정보 카드(작업 내용) 섹션 다음은 (리뷰 또는) 하단 버튼
     const next = await page.evaluate(() => { const s = document.getElementById('work').closest('section'); const n = s.nextElementSibling; return { cls: n?.className ?? '', gap: Math.round(n.getBoundingClientRect().top - s.getBoundingClientRect().bottom) }; });
     truthy(next.cls.includes('detail-actions') && next.gap === 24, `${id} 작업 내용 다음 바로 하단 버튼(24px) ${JSON.stringify(next)}`);
-    // 예약 정보 > 결제 내역: 예약금 기록(처리 상태·날짜), ‘결제한 금액’ 요약 반복 없음
-    await openFold(page, '결제 내역');
-    const t = (await page.locator('#fold-payments-panel').innerText()).replace(/\s+/g, ' ');
-    truthy(t.includes('예약금') && t.includes('결제 완료') && !t.includes('결제한 예약금') && !(await page.locator('main').innerText()).includes('결제한 금액'), `${id} 결제 내역: ${t}`);
+    // 예약 정보: 결제한 예약금 한 줄 + 차감 안내(결제 내역 펼치기 없음)
+    const t = (await page.locator('#paid-deposit').innerText()).replace(/\s+/g, ' ');
+    truthy(t.includes('결제한 예약금') && t.includes('최종 정산 시 차감돼요') && (await page.locator('#fold-payments').count()) === 0, `${id} 결제한 예약금: ${t}`);
   }
   // 추가 작업 동의 금액은 상단 확인 카드·작업 카드에 유지
   await page.goto(`${BASE}/bookings/bk-k6`);
@@ -1629,14 +1625,15 @@ await test('금액·정산 표시 기준: 방문 예정·작업 중·후속 작�
 await test('금액·정산(추가 결제): 결제할 금액만 크게 → 확인 체크 전 비활성·‘금액이 달라요’는 가능 → 결제하기(연타 1회) → 결제 결과 → 정산 완료 표시', async (page) => {
   await start(page, { path: '/bookings/bk-k9' });
   await costCard(page).waitFor();
-  eq(await heroText(page), '결제할 금액 62,500원', '결제할 금액');
+  eq(await heroText(page), '추가로 결제할 금액 62,500원', '추가로 결제할 금액');
   truthy((await costText(page)).includes('업체가 제시한 최종 금액 기준이에요'), '확인 전 안내');
   // 금액·정산 카드 자체가 상단 확인 카드(공통 블루 머리 + 제목), 같은 안내를 다른 카드에 반복하지 않음
   eq((await page.locator('main').innerText()).split('최종 금액을 확인해 주세요').length - 1, 1, '제목 한 번(중복 카드 없음)');
   expectActCard(await actCardStyle(costCard(page)));
   await openDetail(page, '금액 상세');
   const t = await costText(page);
-  for (const [k, v] of [['수리비', '100,000원'], ['작업비', '80,000원'], ['부품·자재비', '20,000원'], ['내 확정 출장비', '12,500원'], ['총금액', '112,500원'], ['선결제 차감', '50,000원'], ['결제할 금액', '62,500원']]) truthy(hasRow(t, k, v), `상세 ‘${k} ${v}’: ${t}`);
+  for (const [k, v] of [['수리비', '100,000원'], ['작업비', '80,000원'], ['부품·자재비', '20,000원'], ['내 출장비', '12,500원'], ['최종 총금액', '112,500원'], ['결제한 예약금', '50,000원'], ['추가로 결제할 금액', '62,500원']]) truthy(hasRow(t, k, v), `상세 ‘${k} ${v}’: ${t}`);
+  truthy(t.includes('공동 예약으로 출장비 37,500원 절약') && !t.includes('그룹 총 출장비') && !t.includes('선결제 차감'), `절약 안내·옛 명칭 없음: ${t}`);
   const pay = payBtn(page, '62,500원 결제하기');
   truthy(await pay.isDisabled(), '확인 전 결제 비활성');
   truthy(await payBtn(page, '금액이 달라요').isEnabled(), '금액이 달라요는 체크 없이 가능');
@@ -1735,9 +1732,9 @@ await test('금액·정산 상태별: 협의 중(bk-k12)·정산 완료(결제·
   // 이전 환불이 있는 선결제 잔액: 50,000 − 20,000 = 30,000 → 112,500 − 30,000 = 82,500
   await patchDb(page, (d) => { d.refunds.push({ id: 'rf-prev', bookingId: 'bk-k9', amount: 20000, reason: '부분 환불(테스트)', purpose: 'cancel', status: 'completed', requestedAt: '2026-10-10T10:00:00+09:00' }); }, '/bookings/bk-k9');
   await page.locator('#settlement .cost__balance').waitFor();
-  eq(await heroText(page), '결제할 금액 82,500원', '남은 잔액으로만 차감');
+  eq(await heroText(page), '추가로 결제할 금액 82,500원', '남은 잔액으로만 차감');
   await openDetail(page, '금액 상세');
-  truthy((await costText(page)).includes('환불 20,000원 = 잔액 30,000원'), '잔액 계산 근거');
+  truthy(hasRow(await costText(page), '결제한 예약금', '30,000원') && (await costText(page)).includes('이미 공제·환불된 20,000원은 빼고'), '이미 환불된 금액은 다시 차감하지 않음');
   // 여러 작업의 실제 완료 상태(일괄 완료로 표시하지 않음)
   await patchDb(page, (d) => { d.statements.find((s) => s.bookingId === 'bk-k9').actualWork[1].done = false; }, '/bookings/bk-k9');
   await costCard(page).waitFor();
@@ -1779,7 +1776,8 @@ for (const w of [360, 320, 1280]) {
     await start(page, { path: '/bookings/bk-k9' });
     await costCard(page).waitFor();
     const box = costCard(page).locator('label.check.card').filter({ hasText: '실제 작업 내용과 최종 금액을 확인했어요.' });
-    const pay = payBtn(page, '62,500원 결제하기');
+    truthy(t.includes('공동 예약으로 출장비 37,500원 절약') && !t.includes('그룹 총 출장비') && !t.includes('선결제 차감'), `절약 안내·옛 명칭 없음: ${t}`);
+  const pay = payBtn(page, '62,500원 결제하기');
     const r = await box.evaluate((l) => {
       const cs = getComputedStyle(l); const lr = l.getBoundingClientRect();
       const cb = l.querySelector('input').getBoundingClientRect(); const sp = l.querySelector('span');
@@ -2137,8 +2135,8 @@ await test('확인 카드 D(자재): 사양·금액·납기·취소 조건 → �
   await page.goto(BASE + '/bookings/bk-k5');
   await page.getByRole('heading', { name: '예약 정보', exact: true }).waitFor();
   eq(await page.locator('section[id^="material-"]').count(), 0, '선결제 후 카드 없음');
-  await openFold(page, '결제 내역');
-  truthy((await page.locator('#fold-payments-panel').innerText()).includes('자재비 선결제') && (await page.locator('#fold-payments-panel').innerText()).includes('결제 완료'), '자재 선결제 기록은 결제 내역에');
+  const paidRows = (await page.locator('#paid-deposit').innerText()).replace(/\s+/g, ' ');
+  truthy(paidRows.includes('결제한 예약금 50,000원') && paidRows.includes(`결제한 자재비 ${m.price.toLocaleString('ko-KR')}원`) && paidRows.includes('선결제 금액은 최종 정산 시 차감돼요'), `자재 선결제는 예약금과 따로: ${paidRows}`);
   await openFold(page, '자재·추가 작업 상세');
   const mrec = (await page.locator('#fold-extra-panel').innerText()).replace(/\s+/g, ' ');
   truthy(mrec.includes(m.name) && mrec.includes(m.spec) && mrec.includes('선결제 결제 완료') && mrec.includes('업체 주문 주문 전') && mrec.includes('취소 조건'), `자재 기록: ${mrec}`);
@@ -4622,7 +4620,7 @@ await test('내 예약 통합: 탭별 필터·목록 위치가 독립적으로 �
   await openTab(page, '보낸 요청');
   await pickStatus(page, '요청 취소');
   await openTab(page, '확정된 예약');
-  eq((await bkStatus(page).innerText()).trim(), '상태', '확정된 예약 조건은 기본');
+  eq((await bkStatus(page).innerText()).trim(), '예약 상태', '확정된 예약 조건은 기본');
   await openTab(page, '보낸 요청');
   await statusBtn(page).filter({ hasText: '요청 취소' }).waitFor();
 });

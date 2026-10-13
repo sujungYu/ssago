@@ -9,34 +9,37 @@ import { addDaysYmd, customRangeError, formatYmdDots, isValidYmd } from './reque
 import { seoulYmd } from './time';
 import type { Booking, IsoDate, IsoDateTime } from './types';
 import { bookingTabOf, type BookingTab } from './reservationTabs';
-import { ACTIVE_GROUP_LABEL, activeGroupOf, bookingHasTodo, type BookingDisplayInput, type PendingAction } from './statusDisplay';
+import { ACTIVE_GROUP_LABEL, PAST_GROUP_LABEL, activeGroupOf, bookingHasTodo, type ActiveGroup, type BookingDisplayInput, type PastGroup, type PendingAction } from './statusDisplay';
 
 export type { BookingTab };
 /** 확정된 예약/완료·취소 구분 — 탭 분류 공통 규칙(src/domain/reservationTabs.ts)을 그대로 쓴다 */
 export const tabOf = bookingTabOf;
 
 // ───────── 상태 그룹 ─────────
-export type ActiveStatus = 'all' | 'scheduled' | 'in_progress' | 'final_confirm' | 'settlement_waiting';
-export type PastStatus = 'all' | 'completed' | 'cancelled';
+// 선택지 값·이름은 카드 대표 상태(src/domain/statusDisplay.ts)와 같다. 여러 내부 상태를 묶은 그룹은 같은 묶음으로 조회한다.
+export type ActiveStatus = 'all' | ActiveGroup;
+export type PastStatus = 'all' | PastGroup;
 
 export const ACTIVE_STATUS_OPTIONS: { value: ActiveStatus; label: string; hint?: string }[] = [
   { value: 'all', label: '전체' },
-  { value: 'scheduled', label: ACTIVE_GROUP_LABEL.scheduled, hint: '일정 조율 중·후속 방문 예정 포함' },
+  { value: 'scheduled', label: ACTIVE_GROUP_LABEL.scheduled, hint: '후속 방문 예정 포함' },
+  { value: 'rescheduling', label: ACTIVE_GROUP_LABEL.rescheduling, hint: '업체가 기존 일정에 방문할 수 없어 새 일정을 정하는 중' },
   { value: 'in_progress', label: ACTIVE_GROUP_LABEL.in_progress },
   { value: 'final_confirm', label: ACTIVE_GROUP_LABEL.final_confirm },
   { value: 'settlement_waiting', label: ACTIVE_GROUP_LABEL.settlement_waiting, hint: '금액 협의·결제 결과 확인 포함' },
 ];
 export const PAST_STATUS_OPTIONS: { value: PastStatus; label: string }[] = [
   { value: 'all', label: '전체' },
-  { value: 'completed', label: '이용 완료' },
-  { value: 'cancelled', label: '예약 취소' },
+  { value: 'completed', label: PAST_GROUP_LABEL.completed },
+  { value: 'cancelled', label: PAST_GROUP_LABEL.cancelled },
 ];
 
 /**
  * 확정된 예약 상태 그룹 = 카드 대표 상태와 같은 기준(src/domain/statusDisplay.ts activeGroupOf).
- * 후속 방문 일정 확정 → 방문 예정, 금액 이견·잔금 결제 결과 확인·작업 중단 후 정산 대기 → 정산 진행 중. 조건 재확인 예약도 작업 상태로 분류한다.
+ * 기존 일정 방문 불가·새 일정 미확정 → 일정 조율 중, 후속 방문 일정 확정 → 방문 예정, 금액 이견·잔금 결제 결과 확인·작업 중단 후 정산 대기 → 정산 진행 중.
+ * 조건 재확인 예약도 작업 상태로 분류한다.
  */
-export const activeStatusOf = (i: Omit<BookingDisplayInput, 'pendingActions' | 'schedule'>): Exclude<ActiveStatus, 'all'> | null => activeGroupOf(i);
+export const activeStatusOf = (i: Omit<BookingDisplayInput, 'pendingActions'>): Exclude<ActiveStatus, 'all'> | null => activeGroupOf(i);
 /** 완료·취소 상태 그룹: 취소가 우선, 그다음 작업 완료(중단 후 정산 완료 포함) */
 export function pastStatusOf(b: Pick<Booking, 'status' | 'workStatus'>): Exclude<PastStatus, 'all'> | null {
   if (b.status === 'cancelled') return 'cancelled';
@@ -105,7 +108,7 @@ export function toBookingQuery(f: BookingsFilterState, nowIso: IsoDateTime): Boo
   return q;
 }
 
-type Filterable = { booking: Pick<Booking, 'status' | 'workStatus' | 'visitDate' | 'followUp'>; pendingActions: PendingAction[]; statementStatus?: BookingDisplayInput['statementStatus']; balanceInFlight?: boolean };
+type Filterable = { booking: Pick<Booking, 'status' | 'workStatus' | 'visitDate' | 'followUp'>; pendingActions: PendingAction[]; schedule?: BookingDisplayInput['schedule']; statementStatus?: BookingDisplayInput['statementStatus']; balanceInFlight?: boolean };
 
 /**
  * 조건으로 거른다(원본·순서 유지). 방문일이 없거나 잘못된 예약은 추정하지 않고, 날짜 조건이 있을 때만 제외하며 그 수를 돌려준다.

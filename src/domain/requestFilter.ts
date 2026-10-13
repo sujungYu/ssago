@@ -1,14 +1,15 @@
 /**
  * 내 예약 > 보낸 요청 목록 필터(조회 조건). 화면과 분리된 순수 함수.
- * - 날짜 기준은 ‘요청 접수일’(RepairRequest.createdAt)의 Asia/Seoul 날짜. 방문 예정일이 아니다.
+ * - 날짜(‘요청일’) 기준은 요청한 날(RepairRequest.createdAt)의 Asia/Seoul 날짜. 방문 예정일이 아니다.
+ * - ‘확인 필요’: 고객이 직접 처리할 할 일(요청서 보완·예약금 결제)이 있는 요청만. 카드 행동 문구와 같은 기준(statusDisplay.requestItemActions).
  * - 기간은 시작일·종료일 모두 포함. ‘최근 N일’은 오늘을 포함한 N개의 날짜.
- * - 상태는 목록 대표 상태(src/domain/statusDisplay.ts)와 같은 이름의 단일 선택. 날짜와는 AND. 'all' = 전체.
+ * - 상태는 목록 대표 상태(src/domain/statusDisplay.ts)와 같은 이름의 단일 선택. 상태·날짜·확인 필요는 AND. 'all' = 전체.
  * - 보낸 요청 탭에는 예약으로 이어진 요청 묶음이 없으므로(src/domain/reservationTabs.ts) ‘예약 완료’ 선택지는 두지 않는다.
  * 필터는 조회 조건만 바꾸며 요청 데이터·상태를 바꾸지 않는다.
  */
 import { seoulYmd } from './time';
 import type { IsoDate, IsoDateTime, RepairRequest, RequestStatus } from './types';
-import { REQUEST_DISPLAY } from './statusDisplay';
+import { REQUEST_DISPLAY, requestItemActions } from './statusDisplay';
 
 // ───────── 화면 필터 값(URL에 저장하는 값) ─────────
 export type PeriodPreset = 'all' | '7d' | '30d' | '90d' | 'custom';
@@ -23,6 +24,8 @@ export interface RequestFilter {
   to?: IsoDate;
   /** 단일 선택. 'all' = 전체 */
   status: StatusGroup;
+  /** 확인 필요(고객이 처리할 할 일이 있는 요청만). 없으면 false */
+  actionOnly?: boolean;
 }
 
 export const DEFAULT_REQUEST_FILTER: RequestFilter = { period: 'all', status: 'all' };
@@ -104,6 +107,8 @@ export interface RequestListQuery {
   createdTo?: IsoDate;
   /** 비어 있거나 없으면 전체 상태 */
   statuses?: RequestStatus[];
+  /** 고객이 처리할 할 일이 있는 요청만 */
+  actionRequiredOnly?: boolean;
 }
 
 /** 화면 필터 → 조회 조건. 오늘은 목업 시계(now)의 한국 날짜. */
@@ -119,16 +124,18 @@ export function toListQuery(f: RequestFilter, nowIso: IsoDateTime): RequestListQ
     q.createdTo = f.to;
   }
   if (f.status !== 'all') q.statuses = [...STATUS_GROUP_STATUSES[f.status]];
+  if (f.actionOnly) q.actionRequiredOnly = true;
   return q;
 }
 
-type Filterable = { request: Pick<RepairRequest, 'status' | 'createdAt'> };
+type Filterable = { request: Pick<RepairRequest, 'status' | 'createdAt'>; depositAttempt?: 'failed' | 'processing' | 'unknown' };
 
 export function matchesQuery(item: Filterable, q: RequestListQuery): boolean {
   const day = seoulYmd(item.request.createdAt);
   if (q.createdFrom && day < q.createdFrom) return false;
   if (q.createdTo && day > q.createdTo) return false;
   if (q.statuses?.length && !q.statuses.includes(item.request.status)) return false;
+  if (q.actionRequiredOnly && requestItemActions(item).length === 0) return false;
   return true;
 }
 
@@ -157,7 +164,7 @@ export function periodSummary(f: RequestFilter): string {
   return PERIOD_OPTIONS.find((o) => o.value === f.period)?.label ?? '전체 기간';
 }
 
-/** 필터 버튼 표시: 기본값이면 null(버튼은 ‘요청 상태’·‘접수일’), 적용되면 선택값 */
+/** 필터 버튼 표시: 기본값이면 null(버튼은 ‘요청 상태’·‘요청일’), 적용되면 선택값 */
 export function statusSummary(f: RequestFilter): string | null {
   return f.status === 'all' ? null : STATUS_GROUP_OPTIONS.find((o) => o.value === f.status)!.label;
 }
@@ -166,12 +173,12 @@ export function periodButtonLabel(f: RequestFilter): string | null {
 }
 
 export function isDefaultFilter(f: RequestFilter): boolean {
-  return f.period === 'all' && f.status === 'all';
+  return f.period === 'all' && f.status === 'all' && !f.actionOnly;
 }
 
 // ───────── URL 쿼리 ─────────
 /** URL 쿼리에는 날짜·상태만 넣는다. 고객 정보는 넣지 않는다. */
-export const FILTER_PARAM_KEYS = ['period', 'from', 'to', 'status'] as const;
+export const FILTER_PARAM_KEYS = ['period', 'from', 'to', 'status', 'action'] as const;
 
 /** 유효하지 않은 값은 기본값으로 처리한다. */
 export function parseRequestFilter(p: URLSearchParams): RequestFilter {
@@ -186,7 +193,8 @@ export function parseRequestFilter(p: URLSearchParams): RequestFilter {
   }
   const rawStatus = p.get('status');
   const status: StatusGroup = isStatusGroup(rawStatus) ? rawStatus : rawStatus && LEGACY_STATUS[rawStatus] ? LEGACY_STATUS[rawStatus] : 'all'; // 이전 형식(쉼표 목록)·없앤 ‘예약 완료’(booked)·알 수 없는 값은 전체
-  return period === 'custom' ? { period, from, to, status } : { period, status };
+  const base: RequestFilter = period === 'custom' ? { period, from, to, status } : { period, status };
+  return p.get('action') === '1' ? { ...base, actionOnly: true } : base;
 }
 
 /** 필터 → 쿼리. 다른(필터와 무관한) 쿼리 값은 유지한다. 기본값은 쿼리에서 뺀다. */
@@ -196,6 +204,7 @@ export function writeRequestFilter(base: URLSearchParams, f: RequestFilter): URL
   if (f.period !== 'all') p.set('period', f.period);
   if (f.period === 'custom' && f.from && f.to) { p.set('from', f.from); p.set('to', f.to); }
   if (f.status !== 'all') p.set('status', f.status);
+  if (f.actionOnly) p.set('action', '1');
   return p;
 }
 

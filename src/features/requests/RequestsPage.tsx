@@ -3,7 +3,7 @@ import { useRepo } from '../../app/context';
 import { formatDate, formatRemaining, seoulYmd } from '../../domain/time';
 import { formatYmdDots } from '../../domain/requestFilter';
 import { Icon } from '../../components/Icon';
-import { requestDisplay } from '../../domain/statusDisplay';
+import { requestDisplay, requestItemActions } from '../../domain/statusDisplay';
 import { StatusBadges, TodoLine } from '../shared';
 import type { FilteredBundleListItem } from '../../data/repositories/types';
 import type { RequestStatus } from '../../domain/types';
@@ -12,12 +12,11 @@ import type { RequestStatus } from '../../domain/types';
 export function RequestBadge({ status }: { status: RequestStatus; recheck?: boolean }) {
   return <StatusBadges d={requestDisplay(status)} />;
 }
-const inFlight = (i: FilteredBundleListItem['items'][number]) => i.depositAttempt === 'processing' || i.depositAttempt === 'unknown';
 
 /** 예약으로 이어지지 않고 끝난 요청(업체 거절·철회·승인 만료 등) */
 const isEnded = (s: RequestStatus) => !['reviewing', 'needs_info', 'approved_pending_payment', 'booked'].includes(s);
 
-/** 묶음에 표시되는 요청들의 요청 접수일(한국 날짜). 여러 날이면 범위로 */
+/** 묶음에 표시되는 요청들의 요청일(한국 날짜). 여러 날이면 범위로 */
 function receivedLabel(b: FilteredBundleListItem): string {
   const days = [...new Set(b.items.map((i) => seoulYmd(i.request.createdAt)))].sort();
   const first = formatYmdDots(days[0]);
@@ -45,7 +44,7 @@ export function SentRequestList({ bundles, busy }: { bundles: FilteredBundleList
                 <p className="strong">{b.taskTitles.join(' · ')}</p>
                 <Icon name="chevron" size={18} />
               </div>
-              <p className="xs muted">요청 접수일 {receivedLabel(b)}</p>
+              <p className="xs muted">요청일 {receivedLabel(b)}</p>
               {!single && <p className="xs muted">{total}개 업체에 요청 · {ended ? '모든 업체 요청이 종료됐어요' : '비교해서 하나를 고를 수 있어요'}</p>}
               <ul className="stack--sm stack">
                 {b.items.map((i) => (
@@ -59,8 +58,8 @@ export function SentRequestList({ bundles, busy }: { bundles: FilteredBundleList
                   </li>
                 ))}
               </ul>
-              {/* 할 일(있을 때만): 예약금 결제·요청서 보완. 결제 결과 확인 중·업체 검토 중에는 없음 */}
-              <TodoLine actions={b.items.flatMap((i) => requestDisplay(i.request.status, { paymentInFlight: inFlight(i) }).actions)} />
+              {/* 할 일(있을 때만): 예약금 결제·요청서 보완. 결제 결과 확인 중·업체 검토 중에는 없음. ‘확인 필요’ 필터와 같은 기준 */}
+              <TodoLine actions={b.items.flatMap(requestItemActions)} />
               {b.hiddenItemCount > 0 && (
                 <p className="xs muted">조건에 맞지 않는 다른 업체 요청 {b.hiddenItemCount}건은 목록에서만 숨겼어요. 눌러서 모두 볼 수 있어요.</p>
               )}

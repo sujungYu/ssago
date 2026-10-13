@@ -7,11 +7,11 @@ import { useRepo } from '../../app/context';
 import { useAction, useAsync } from '../../app/hooks';
 import { formatDate, formatDateTime } from '../../domain/time';
 import { Icon } from '../../components/Icon';
-import { ActionCard, AsyncView, Banner, Button, Dialog, KV, LinkButton, PhoneButton, Section } from '../../components/ui';
+import { ActionCard, AsyncView, Banner, Button, Dialog, KV, LinkButton, Section } from '../../components/ui';
 import type { RequestDetail } from '../../data/repositories/types';
 import { progressOfRequest, unlessComplete } from '../../domain/progressStep';
 import { ProgressSteps } from '../../components/ProgressSteps';
-import { ContactText, VisitAddressText, slotsText } from '../shared';
+import { ContactText, VisitAddressText, slotsText, ProviderContactRow } from '../shared';
 import { isConvertedToBooking, listPath } from '../../domain/reservationTabs';
 
 function Body({ d }: { d: RequestDetail }) {
@@ -59,16 +59,11 @@ function Body({ d }: { d: RequestDetail }) {
         </div>
       )}
 
-      <Section title="업체 연락">
-        <div className="card row row--between row--wrap">
-          <span className="strong">{d.provider.name}</span>
-          <PhoneButton phone={d.provider.phone} name={d.provider.name} />
-        </div>
-        <p className="xs muted">연락은 전화로 해요. 앱 안 채팅은 제공하지 않아요.</p>
-      </Section>
-
+      {/* 보낸 요청: 업체명·전화(예약 상세와 같은 머리) → 구분선 → 작업 내용 → 요청 정보. 별도 ‘업체 연락’ 영역은 두지 않는다 */}
       <Section title="보낸 요청">
-        <div className="card stack">
+        <div className="card stack" id="sent-request">
+          <ProviderContactRow name={d.provider.name} phone={d.provider.phone} />
+          <hr className="hr" />
           {r.tasks.map((t) => (
             <div key={t.id} className="stack--sm stack">
               <p className="strong">{t.title}</p>

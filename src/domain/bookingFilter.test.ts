@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_BOOKINGS_FILTER, activeStatusOf, filterBookings, parseBookingsFilter, pastStatusOf, periodLabel, tabOf, toBookingQuery, weekRange,
-  writeBookingsFilter, ACTIVE_PERIOD_OPTIONS, type BookingsFilterState, type PendingAction,
+  writeBookingsFilter, ACTIVE_PERIOD_OPTIONS, ACTIVE_STATUS_OPTIONS, PAST_STATUS_OPTIONS, type ActiveStatus, type BookingsFilterState, type PendingAction,
 } from './bookingFilter';
+import { bookingDisplay } from './statusDisplay';
 import type { Booking } from './types';
 
 const NOW = '2026-10-13T19:00:00+09:00'; // 화요일
@@ -113,5 +114,24 @@ describe('URL·표시', () => {
     expect(periodLabel(f().active, ACTIVE_PERIOD_OPTIONS)).toBeNull();
     expect(periodLabel(f({ a: { period: 'this_week' } }).active, ACTIVE_PERIOD_OPTIONS)).toBe('이번 주');
     expect(periodLabel(f({ a: { period: 'custom', from: '2026-10-01', to: '2026-10-08' } }).active, ACTIVE_PERIOD_OPTIONS)).toBe('2026.10.01 ~ 2026.10.08');
+  });
+});
+
+describe('예약 상태 필터 = 카드 배지(공통 매핑)', () => {
+  it('선택지 이름은 카드 대표 상태 이름과 같고, 카드가 일정 조율 중이면 필터도 일정 조율 중으로만 거른다', () => {
+    const resched = { ...bk('resched', 'confirmed', 'scheduled', '2026-10-15', ['proposal']), schedule: { oldVisitUnavailable: true } };
+    const plain = bk('plain', 'confirmed', 'scheduled', '2026-10-16');
+    const all = [resched, plain];
+    const ids = (s: ActiveStatus) => filterBookings(all, toBookingQuery(f({ a: { status: s } }), NOW)).items.map((x) => x.id);
+    expect(ids('rescheduling')).toEqual(['resched']);
+    expect(ids('scheduled')).toEqual(['plain']);
+    for (const it of all) {
+      const disp = bookingDisplay({ ...it, schedule: (it as { schedule?: { oldVisitUnavailable: boolean } }).schedule });
+      expect(ACTIVE_STATUS_OPTIONS.find((o) => o.value === disp.group)?.label, it.id).toBe(disp.label);
+    }
+  });
+  it('완료·취소 선택지 이름도 카드 배지와 같다', () => {
+    expect(PAST_STATUS_OPTIONS.find((o) => o.value === 'completed')!.label).toBe(bookingDisplay({ booking: { status: 'confirmed', workStatus: 'completed' }, pendingActions: [] }).label);
+    expect(PAST_STATUS_OPTIONS.find((o) => o.value === 'cancelled')!.label).toBe(bookingDisplay({ booking: { status: 'cancelled', workStatus: 'scheduled' }, pendingActions: [] }).label);
   });
 });

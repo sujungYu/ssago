@@ -5,9 +5,22 @@ import { VISIT_ADDRESS_MISSING } from '../domain/address';
 import type { CustomerContact, VisitAddress } from '../domain/types';
 import { maskPhone } from '../domain/profile';
 import type { Tone } from '../domain/rules';
-import { Badge } from '../components/ui';
+import { Badge, PhoneButton } from '../components/ui';
 import { TONE_BADGE, actionSummary, bookingDisplay, type ActionKind, type BookingDisplay, type PendingAction, type StatusDisplay } from '../domain/statusDisplay';
 import type { BookingDetail } from '../data/repositories/types';
+
+/**
+ * 상세 카드 최상단의 업체명(왼쪽) + 전화 버튼(오른쪽, ‘업체명에 전화 · 번호’). 요청 상세 ‘보낸 요청’·예약 상세 ‘예약 정보’ 공통.
+ * 좁아서 한 줄에 들어가지 않으면 전화 버튼이 다음 줄로 내려간다. 업체명·번호는 화면에서 이 한 곳에만 둔다.
+ */
+export function ProviderContactRow({ name, phone }: { name: string; phone: string }) {
+  return (
+    <div className="row row--between row--wrap provider-contact">
+      <p className="strong provider-contact__name">{name}</p>
+      <PhoneButton phone={phone} name={name} />
+    </div>
+  );
+}
 
 /** 대표 상태 배지. 목록·상세 공통(src/domain/statusDisplay.ts) */
 export function StatusBadges({ d }: { d: Pick<StatusDisplay, 'label' | 'tone'> }) {

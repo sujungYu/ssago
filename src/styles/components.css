@@ -281,7 +281,7 @@ a.list-row:hover { background: #fafbfd; }
 
 /* ───────── 목록 필터 (내 요청) ───────── */
 .request-list[aria-busy] { opacity: .55; transition: opacity .15s; }
-/* 필터 막대: [요청 상태 ▾] [접수일 ▾]  요청 묶음 N건 — 공간이 부족하면 건수가 다음 줄(왼쪽)로 내려간다 */
+/* 필터 막대: [요청 상태 ▾] [요청일 ▾] [확인 필요]  보낸 요청 N건 — 공간이 부족하면 건수가 다음 줄(왼쪽)로 내려간다 */
 .filter-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--sp-2) var(--sp-3); }
 .filter-bar__buttons { display: flex; flex-wrap: wrap; gap: var(--sp-2); min-width: 0; }
 .filter-bar__count { margin: 0; color: var(--c-text-2); white-space: nowrap; }
@@ -689,3 +689,16 @@ a.list-row:hover { background: #fafbfd; }
 .lightbox__caption { flex: 1; min-width: 0; max-width: 520px; text-align: center; word-break: keep-all; overflow-wrap: anywhere; }
 .lightbox__count { font-weight: 500; opacity: .8; }
 .lightbox__note { margin-top: 2px; opacity: .8; }
+
+/* 예약 상세 공동 예약 정보: 내 출장비 + 절약 안내(연한 블루 영역 — 안내이며 버튼·환불 표시가 아니다) */
+.trip-share { display: flex; flex-direction: column; gap: 4px; padding: var(--sp-3) var(--sp-4); border-radius: var(--r-md); background: var(--c-info-bg); margin-top: var(--sp-3); }
+.trip-share__row { display: flex; justify-content: space-between; align-items: baseline; gap: var(--sp-3); font-weight: 600; }
+.trip-share__row .money { font-size: var(--fs-lg); }
+.trip-share__saving { font-size: var(--fs-sm); color: var(--c-primary); font-weight: 600; word-break: keep-all; }
+
+/* 상세 카드 최상단 업체명 + 전화 버튼(요청 상세·예약 상세 공통). 좁으면 버튼이 다음 줄로 */
+.provider-contact { gap: var(--sp-2); }
+.provider-contact__name { font-size: var(--fs-lg); min-width: 0; overflow-wrap: anywhere; }
+
+/* 최종 정산 금액 상세: 내 출장비 아래 공동 예약 절약 안내(작은 보조 문구, 환불 표시 아님) */
+.cost__saving { color: var(--c-primary); font-weight: 600; }

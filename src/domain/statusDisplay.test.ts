@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { actionSummary, bookingDisplay, bookingHasTodo, requestDisplay, type BookingDisplayInput } from './statusDisplay';
+import { actionSummary, bookingDisplay, bookingHasTodo, requestDisplay, requestItemActions, type BookingDisplayInput } from './statusDisplay';
 import type { Booking } from './types';
 
 const bd = (workStatus: Booking['workStatus'], extra: Partial<BookingDisplayInput> & { status?: Booking['status']; followUp?: Booking['followUp'] } = {}) =>
@@ -51,9 +51,20 @@ describe('예약 대표 상태·할 일', () => {
     expect(bookingHasTodo({ booking: { status: 'confirmed', workStatus: 'final_confirm_waiting' }, pendingActions: ['final_statement'] })).toBe(true);
     expect(bookingHasTodo({ booking: { status: 'confirmed', workStatus: 'stopped_settlement_waiting' }, pendingActions: [] })).toBe(false);
   });
-  it('기존 일정 방문 불가 · 새 일정 미확정: 일정 조율 중(그룹은 방문 예정), 응답할 제안이 있을 때만 할 일', () => {
-    expect(bd('scheduled', { schedule: { oldVisitUnavailable: true }, pendingActions: ['proposal'] })).toMatchObject({ label: '일정 조율 중', visitPending: true, group: 'scheduled', actions: ['schedule'] });
+  it('기존 일정 방문 불가 · 새 일정 미확정: 일정 조율 중(필터 그룹도 일정 조율 중), 응답할 제안이 있을 때만 할 일', () => {
+    expect(bd('scheduled', { schedule: { oldVisitUnavailable: true }, pendingActions: ['proposal'] })).toMatchObject({ label: '일정 조율 중', visitPending: true, group: 'rescheduling', actions: ['schedule'] });
     expect(bd('scheduled', { schedule: { oldVisitUnavailable: true } }).actions).toEqual([]); // 업체 재제안 대기
     expect(bd('scheduled', { schedule: { oldVisitUnavailable: false }, pendingActions: ['proposal'] })).toMatchObject({ label: '방문 예정', visitPending: false, actions: ['schedule'] });
+  });
+});
+
+describe('보낸 요청 할 일(확인 필요 기준)', () => {
+  it('요청서 보완·예약금 결제만 할 일이고, 결제 처리 중·결과 확인 중이면 기다리는 중이라 없다', () => {
+    expect(requestItemActions({ request: { status: 'needs_info' } })).toEqual(['supplement']);
+    expect(requestItemActions({ request: { status: 'approved_pending_payment' } })).toEqual(['deposit']);
+    expect(requestItemActions({ request: { status: 'approved_pending_payment' }, depositAttempt: 'failed' })).toEqual(['deposit']); // 실패 → 다시 결제
+    expect(requestItemActions({ request: { status: 'approved_pending_payment' }, depositAttempt: 'processing' })).toEqual([]);
+    expect(requestItemActions({ request: { status: 'approved_pending_payment' }, depositAttempt: 'unknown' })).toEqual([]);
+    for (const s of ['reviewing', 'rejected', 'withdrawn', 'approval_expired', 'booked'] as const) expect(requestItemActions({ request: { status: s } }), s).toEqual([]);
   });
 });

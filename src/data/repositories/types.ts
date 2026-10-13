@@ -134,7 +134,7 @@ export interface BookingListItem {
   providerName: string;
   /** 예약 상세의 “지금 확인할 내용”에 해당하는 한 줄 요약 */
   attention: string | null;
-  /** 고객이 해야 할 미처리 행동(실제 데이터 기준). ‘할 일 있는 예약만’ 필터·카드 할 일 문구에 쓴다 */
+  /** 고객이 해야 할 미처리 행동(실제 데이터 기준). ‘확인 필요’ 필터·카드 할 일 문구에 쓴다 */
   pendingActions: PendingAction[];
   groupClosed: boolean;
   /** 마감 전 예상 / 마감 후 확정 출장비 */

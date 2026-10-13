@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { showSettlementCard, summarizeBookingCost, type CostInput, type TripFeeBasis } from './bookingCost';
+import { appliedPrepaidLines, showSettlementCard, summarizeBookingCost, tripShareView, type CostInput, type TripFeeBasis } from './bookingCost';
 
 const trip = (p: Partial<TripFeeBasis> = {}): TripFeeBasis => ({ kind: 'confirmed', amount: 16666, households: 3, groupTotal: 50000, currentHouseholds: 3, ...p });
 const prepaid = (p: Partial<CostInput['prepaid']> = {}) => {
@@ -75,7 +75,7 @@ describe('최종 내역 이후·취소', () => {
     const c = summarizeBookingCost(input({ statement: { status: 'awaiting_customer', items } }));
     expect(c.stage).toBe('final_awaiting');
     expect(c.total).toEqual({ label: '업체가 등록한 최종 금액(확인 전)', amount: 112500 });
-    expect(c.balance).toEqual({ kind: 'pay', label: '결제할 금액', amount: 62500 });
+    expect(c.balance).toEqual({ kind: 'pay', label: '추가로 결제할 금액', amount: 62500 });
     // 금액 상세: 수리비(작업비 + 부품·자재비)와 내 확정 출장비로 나눈다(합 = 총금액, 중복 없음)
     expect([c.repair, c.trip.amount, c.repairLines.map((l) => l.label)]).toEqual([100000, 12500, ['작업비', '부품·자재비']]);
   });
@@ -109,5 +109,66 @@ describe('금액·정산 카드 표시 기준', () => {
     expect(showSettlementCard({ cancelled: false, hasStatement: true, moneyRecords: 0 })).toBe(true); // 최종 금액 등록(0원 포함)
     expect(showSettlementCard({ cancelled: true, hasStatement: false, moneyRecords: 2 })).toBe(true);
     expect(showSettlementCard({ cancelled: true, hasStatement: false, moneyRecords: 0 })).toBe(false);
+  });
+});
+
+describe('공동 예약 내 출장비·절약 안내(tripShareView)', () => {
+  const fmt = (w: number) => `${w.toLocaleString('ko-KR')}원`;
+  const tf = (p: Partial<TripFeeBasis>): TripFeeBasis => ({ kind: 'confirmed', amount: 16666, households: 3, groupTotal: 50000, currentHouseholds: 3, ...p });
+  it('마감 후: 확정 출장비·확정 세대 수, 절약 = 기본 출장비 − 내 출장비', () => {
+    expect(tripShareView(tf({}), fmt)).toEqual({
+      joint: true, label: '내 출장비', amount: 16666, saving: 33334,
+      savingText: '공동 예약으로 출장비 33,334원 절약했어요.', splitText: '총 출장비 50,000원을 3세대가 나눠요.',
+    });
+  });
+  it('마감 전: 예상 출장비·절약 예상, 지금 세대 수 기준', () => {
+    const v = tripShareView(tf({ kind: 'expected', amount: 12500, households: 4 }), fmt);
+    expect([v.label, v.saving, v.savingText]).toEqual(['예상 출장비', 37500, '공동 예약으로 출장비 약 37,500원 절약 예상']);
+    expect(v.splitText).toContain('지금 4세대가 나눠요');
+  });
+  it('일반 예약(분담 세대가 나 하나): 공동 예약 정보·절약 안내 없음', () => {
+    const v = tripShareView(tf({ kind: 'expected', amount: 50000, households: 1 }), fmt);
+    expect([v.joint, v.saving, v.savingText, v.splitText]).toEqual([false, null, null, null]);
+  });
+  it('절약 0원·금액 미상이면 절약 안내를 숨긴다', () => {
+    expect(tripShareView(tf({ amount: 50000 }), fmt).savingText).toBeNull();
+    expect(tripShareView(tf({ amount: null }), fmt).saving).toBeNull();
+  });
+  it('일정 변경으로 유지한 출장비: 내 출장비만(기준 총액을 몰라 절약·분담 문장 없음)', () => {
+    const v = tripShareView(tf({ kind: 'locked', households: null, groupTotal: null }), fmt);
+    expect([v.joint, v.label, v.saving, v.splitText]).toEqual([true, '내 출장비', null, null]);
+  });
+});
+
+describe('최종 정산 차감 행(appliedPrepaidLines) — 정산 잔액을 결제 종류별로 나눠 보여주기만', () => {
+  const c = (payments: { key: 'deposit' | 'material' | 'change'; amount: number }[], available: number) => {
+    const ps = payments.map((p) => ({ ...p, label: '' }));
+    return { payments: ps, paidIn: ps.reduce((a, p) => a + p.amount, 0), available };
+  };
+  it('공제·환불이 없으면 예약금 한 행', () => {
+    expect(appliedPrepaidLines(c([{ key: 'deposit', amount: 50000 }], 50000))).toEqual([{ key: 'deposit', label: '결제한 예약금', amount: 50000, excluded: 0 }]);
+  });
+  it('자재 선결제는 예약금과 따로, 합계 = 정산 잔액', () => {
+    const r = appliedPrepaidLines(c([{ key: 'deposit', amount: 50000 }, { key: 'material', amount: 80000 }], 130000));
+    expect(r.map((l) => [l.label, l.amount])).toEqual([['결제한 예약금', 50000], ['결제한 자재비', 80000]]);
+  });
+  it('이미 공제·환불된 금액은 예약금에서 먼저 빼고 다시 차감하지 않는다(합계 = available)', () => {
+    const r = appliedPrepaidLines(c([{ key: 'deposit', amount: 50000 }, { key: 'material', amount: 80000 }], 117500));
+    expect(r.map((l) => [l.label, l.amount, l.excluded])).toEqual([['결제한 예약금', 37500, 12500], ['결제한 자재비', 80000, 0]]);
+    expect(r.reduce((a, l) => a + l.amount, 0)).toBe(117500);
+    expect(appliedPrepaidLines(c([{ key: 'deposit', amount: 50000 }], 0))).toEqual([]); // 모두 쓰였으면 차감 행 없음
+  });
+});
+
+describe('최종 내역 단계 명칭', () => {
+  const tf: TripFeeBasis = { kind: 'confirmed', amount: 12500, households: 4, groupTotal: 50000, currentHouseholds: 4 };
+  const base = { agreedMaterials: [], agreedAdditional: [], tripFee: tf, cancelled: false,
+    prepaid: { depositPaid: 50000, materialPrepaid: 0, changePaid: 0, refunded: 0, deducted: 0, available: 50000 } };
+  const items = (labor: number) => [{ kind: 'labor' as const, label: '작업비', amount: labor }, { kind: 'trip_fee' as const, label: '확정 출장비', amount: 12500 }];
+  it('추가 결제·환불·0원: 금액은 기존 계산 그대로, 결과 이름만', () => {
+    const pay = summarizeBookingCost({ ...base, statement: { status: 'awaiting_customer', items: items(100000) } });
+    expect([pay.trip.label, pay.total?.amount, pay.balance]).toEqual(['내 출장비', 112500, { kind: 'pay', label: '추가로 결제할 금액', amount: 62500 }]);
+    expect(summarizeBookingCost({ ...base, statement: { status: 'awaiting_customer', items: items(20000) } }).balance).toEqual({ kind: 'refund', label: '환불 예정 금액', amount: 17500 });
+    expect(summarizeBookingCost({ ...base, statement: { status: 'awaiting_customer', items: items(37500) } }).balance).toEqual({ kind: 'zero', label: '추가 결제 없음', amount: 0 });
   });
 });

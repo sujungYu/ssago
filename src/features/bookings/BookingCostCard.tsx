@@ -4,13 +4,12 @@ import { useRepo } from '../../app/context';
 import { useAction, useAsync, useAttemptKey } from '../../app/hooks';
 import { formatDate } from '../../domain/time';
 import { formatWon } from '../../domain/money';
-import { tripFeeSavings } from '../../domain/pricing';
-import { showSettlementCard, summarizeBookingCost, type Amount, type CostSummary } from '../../domain/bookingCost';
+import { appliedPrepaidLines, showSettlementCard, summarizeBookingCost, tripShareView, type Amount, type CostSummary } from '../../domain/bookingCost';
 import { Icon } from '../../components/Icon';
 import { Banner, Button, Dialog, PhoneButton } from '../../components/ui';
 import type { BookingDetail, StatementView } from '../../data/repositories/types';
 import type { Refund } from '../../domain/types';
-import { PAYMENT_STATUS, REFUND_STATUS, TX_KIND_LABEL } from '../shared';
+import { PAYMENT_STATUS, REFUND_STATUS } from '../shared';
 
 /** 화면 데이터 → 금액 요약 입력. 동의·결제 완료한 자재와 동의한 추가 작업만 합산한다. */
 export function costOf(d: BookingDetail): CostSummary {
@@ -60,7 +59,8 @@ const cancelRefunds = (d: BookingDetail): Refund[] => d.ledger.flatMap((l) => (l
  * 예약 상세 ‘금액·정산’ 카드(spec 5.2·5.13). 최종 금액 확인·정산을 이 카드 안에서 한다(별도 최종 금액 확인 화면 없음).
  * - 기본 화면: 지금 처리할 차액 하나만 크게(최종 수리 총금액 − 정산에 사용 가능한 선결제 잔액). 양수 = 결제할 금액, 음수 = 환불 예정 금액(절댓값), 0 = 추가 결제 없음.
  *   최종 금액이 아직 없으면 예상 금액·확인 필요로 구분하고 0원으로 대신하지 않는다.
- * - [금액 상세]: 수리비(작업비 + 부품·자재비 …) · 내 출장비(계산 근거) · 총금액 · 선결제 차감 · 결과. [결제 내역]: 결제·공제·환불 기록과 처리 상태.
+ * - [금액 상세]: 수리비(작업비 + 부품·자재비 …) · 내 출장비(+ 공동 예약 절약) · 최종 총금액 · 결제한 예약금(·자재비 등, 이번 정산에 실제 차감되는 금액) · 결과.
+ *   별도 [결제 내역] 펼치기는 두지 않는다(결제·환불 기록은 결제 내역 화면에서 본다, spec 5.26).
  * - 확인 필요 상태에서만 확인 체크 + [결제하기 / 정산 완료하기 / 환불 진행하기] + [금액이 달라요]. 기존 정산·이견 함수(confirmSettlement·reportDispute)를 그대로 쓴다.
  */
 export function BookingCostCard({ d }: { d: BookingDetail }) {
@@ -104,7 +104,6 @@ export function BookingCostCard({ d }: { d: BookingDetail }) {
 
       <div className="cost__more">
         <AmountDetail d={d} c={c} />
-        <PaymentHistory d={d} available={c.available} />
       </div>
     </div>
   );
@@ -202,18 +201,15 @@ function ConfirmBox({ d, c, view }: { d: BookingDetail; c: CostSummary; view: St
   );
 }
 
-/** [금액 상세] 수리비 · 내 출장비 · 총금액 · 선결제 차감 · 결과(한 번씩만, 중첩 펼치기 없음) */
+/** [금액 상세] 수리비 · 내 출장비(+ 절약) · 최종 총금액 · 결제한 예약금 등 차감 · 결과(한 번씩만, 중첩 펼치기 없음) */
 function AmountDetail({ d, c }: { d: BookingDetail; c: CostSummary }) {
   const tf = d.tripFee;
-  const sv = tf.groupTotal !== null && tf.households ? tripFeeSavings(tf.groupTotal, tf.households) : null;
   const est = c.stage === 'estimate';
-  const usedSome = c.used.deducted > 0 || c.used.refunded > 0;
-  const prepaidHint = usedSome
-    ? `결제한 ${formatWon(c.paidIn)}${c.used.deducted ? ` − 공제·충당 ${formatWon(c.used.deducted)}` : ''}${c.used.refunded ? ` − 환불 ${formatWon(c.used.refunded)}` : ''} = 잔액 ${formatWon(c.available)} · 이미 쓴 금액은 다시 차감하지 않아요`
-    : c.payments.map((p) => `${p.label.replace('결제한 ', '')} ${formatWon(p.amount)}`).join(' · ') || undefined;
-  const tripHint = tf.groupTotal !== null && tf.households
-    ? `그룹 총 출장비 ${formatWon(tf.groupTotal)} ÷ ${tf.households}세대${tf.kind === 'confirmed' ? '(마감 시 확정)' : tf.kind === 'expected' ? '(현재 확정, 마감 때 확정)' : ''}${sv ? ` · 단독 방문보다 ${formatWon(sv.amount)}(${sv.percent}%) 적어요` : ''}`
-    : tf.kind === 'locked' ? '일정 변경 때 기존 확정 출장비를 그대로 유지하기로 했어요' : undefined;
+  // 절약 = 기본 출장비(그룹 총 출장비) − 이 행의 내 출장비. 일반 예약·유지값·0원 이하이면 숨긴다(예약 상세 공동 예약 정보와 같은 기준)
+  const share = tripShareView({ ...tf, amount: c.trip.amount }, formatWon);
+  const savingLine = share.saving === null ? null
+    : tf.kind === 'expected' ? `공동 예약으로 출장비 약 ${formatWon(share.saving)} 절약 예상` : `공동 예약으로 출장비 ${formatWon(share.saving)} 절약`;
+  const applied = appliedPrepaidLines(c);
   return (
     <details className="disclosure">
       <summary>금액 상세<Icon name="chevron" size={16} /></summary>
@@ -228,11 +224,13 @@ function AmountDetail({ d, c }: { d: BookingDetail; c: CostSummary }) {
           <dl className="cost__list">
             <Row k={est ? '예상 수리비' : '수리비'} v={won(c.repair)} hint={est ? '작업비 + 부품·자재비(동의한 자재·추가 작업 포함)' : '작업비 + 부품·자재비'} />
             {c.repairLines.map((l) => <Row key={l.key} k={l.label} v={won(l.amount, l.hint ?? '확인 필요')} sub />)}
-            <Row k={c.trip.label} v={won(c.trip.amount)} hint={tripHint} />
+            <Row k={est ? c.trip.label : '내 출장비'} v={won(c.trip.amount)}
+              hint={savingLine ? <span className="cost__saving"><span aria-hidden>↳ </span>{savingLine}</span> : tf.kind === 'locked' ? '일정 변경 때 기존 확정 출장비를 그대로 유지했어요' : undefined} />
           </dl>
           <dl className="cost__list">
-            <Row k={est ? '예상 총금액' : '총금액'} v={won(c.total?.amount ?? null, '아직 산정되지 않았어요')} strong />
-            <Row k="선결제 차감" v={minus(c.available)} hint={prepaidHint} />
+            <Row k={est ? '예상 총금액' : '최종 총금액'} v={won(c.total?.amount ?? null, '아직 산정되지 않았어요')} strong />
+            {/* 이번 정산에 실제로 차감되는 선결제(합계 = 정산 잔액). 이미 공제·환불된 금액은 빼고 보여준다 */}
+            {applied.map((l) => <Row key={l.key} k={l.label} v={minus(l.amount)} hint={l.excluded > 0 ? `${formatWon(l.amount + l.excluded)} 중 이미 공제·환불된 ${formatWon(l.excluded)}은 빼고 차감해요` : undefined} />)}
             <Row k={c.balance.label} v={c.balance.amount === null ? <span className="cost__missing">확인 필요</span> : <span className="money">{formatWon(c.balance.amount)}</span>} strong />
           </dl>
           {c.discountNote && est && <p className="small muted">업체 할인 조건({c.discountNote})은 금액이 정해지지 않아 예상 총금액에 넣지 않았어요.</p>}
@@ -241,38 +239,6 @@ function AmountDetail({ d, c }: { d: BookingDetail; c: CostSummary }) {
           )}
         </>
       )}
-    </details>
-  );
-}
-
-/** 결제·공제·환불 기록 목록(실제 처리 상태·날짜, 각 기록 상세로). 금액·정산 카드의 [결제 내역]과 예약 세부 정보(카드를 숨길 때)에서 함께 쓴다 */
-export function PaymentRecords({ d }: { d: BookingDetail }) {
-  return d.ledger.length === 0 ? <p className="small muted">아직 결제 내역이 없어요.</p> : (
-    <ul className="divided payment-records">
-      {d.ledger.map((l) => (
-        <li key={l.id}>
-          <Link to={`/ledger/${l.id}`} className="list-row" style={{ padding: 'var(--sp-3) 0' }}>
-            <div className="list-row__main">
-              <span className="list-row__title">{l.kind === 'payment' ? TX_KIND_LABEL[l.tx.kind] : l.kind === 'refund' ? '환불' : `공제 · ${l.deduction.label}`}</span>
-              <span className="small muted">{l.kind === 'payment' ? PAYMENT_STATUS[l.tx.status].label : l.kind === 'refund' ? REFUND_STATUS[l.refund.status].label : '선결제에서 충당'} · {formatDate(l.at.slice(0, 10))}</span>
-            </div>
-            <span className="money small strong">{l.kind === 'payment' ? formatWon(l.tx.amount) : <>{minus(l.kind === 'refund' ? l.refund.amount : l.deduction.amount)}</>}</span>
-          </Link>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-/** [결제 내역] 예약금·자재 선결제·추가 결제·공제·환불 기록과 실제 처리 상태·날짜(기록은 지우지 않는다) */
-function PaymentHistory({ d, available }: { d: BookingDetail; available: Won }) {
-  const refunds = d.ledger.some((l) => l.kind === 'refund');
-  return (
-    <details className="disclosure">
-      <summary>결제 내역<Icon name="chevron" size={16} /></summary>
-      <PaymentRecords d={d} />
-      <dl className="cost__list"><Row k="정산에 사용 가능한 잔액" v={<span className="money strong">{formatWon(available)}</span>} /></dl>
-      {refunds && <p className="small muted">환불은 ‘처리 요청’과 카드·계좌에 실제 반영되는 시점이 달라요.</p>}
     </details>
   );
 }

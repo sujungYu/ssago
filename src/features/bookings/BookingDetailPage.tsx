@@ -8,13 +8,13 @@ import { ProgressSteps } from '../../components/ProgressSteps';
 import { formatDate, formatDateTime } from '../../domain/time';
 import { formatWon } from '../../domain/money';
 import { Icon } from '../../components/Icon';
-import { AsyncView, Banner, EmptyState, Fold, KV, LinkButton, LoadingBlock, PhoneButton, Section } from '../../components/ui';
+import { AsyncView, Banner, EmptyState, Fold, KV, LinkButton, LoadingBlock, Section } from '../../components/ui';
 import { AdditionalActionCard, DelayActionCard, MaterialActionCard } from './BookingActionCards';
 import { ScheduleChangeCard } from './ScheduleChangeCard';
 import type { BookingDetail } from '../../data/repositories/types';
-import { ContactText, PAYMENT_STATUS, VisitAddressText, VisitText, bookingDisplayOfDetail } from '../shared';
-import { BookingCostCard, PaymentRecords, costOf, settlementVisible } from './BookingCostCard';
-import { TRIP_LABEL } from '../../domain/bookingCost';
+import { ContactText, PAYMENT_STATUS, ProviderContactRow, VisitAddressText, VisitText, bookingDisplayOfDetail } from '../shared';
+import { BookingCostCard, costOf, settlementVisible } from './BookingCostCard';
+import { tripShareView } from '../../domain/bookingCost';
 import { DURATION_NOTE } from '../../domain/visitTime';
 import { bookingTabOf, listPath } from '../../domain/reservationTabs';
 
@@ -51,6 +51,16 @@ function Body({ d }: { d: BookingDetail }) {
   // E. 최종 금액 확인(협의로 수정된 금액 재확인 포함)이 필요하면 기존 금액·정산 카드를 상단 확인 영역으로 올린다(중복 카드 없음)
   const costOnTop = showCost && c.stage === 'final_awaiting';
   const disp = bookingDisplayOfDetail(d);
+  // 결제한 예약금·별도 선결제(성공 거래 합계). 정산 계산·결제 기록은 그대로이고 여기서는 보여주기만 한다.
+  // 금액·정산 카드가 있으면(최종 금액 등록 후·기록이 있는 취소) 그 카드의 [금액 상세]에만 두고 여기서는 숨긴다 — 펼침 상태와 무관(spec 5.27)
+  const pre = d.prepaid;
+  const paidRows = cancelled || showCost ? [] : [
+    ...(pre.depositPaid > 0 ? [{ k: '결제한 예약금', v: <span className="money strong">{formatWon(pre.depositPaid)}</span> }] : []),
+    // 예약금에 합치지 않고 따로(맞춤 자재 선결제·일정 변경 추가 결제)
+    ...(pre.materialPrepaid > 0 ? [{ k: '결제한 자재비', v: <span className="money">{formatWon(pre.materialPrepaid)}</span> }] : []),
+    ...(pre.changePaid > 0 ? [{ k: '일정 변경 추가 결제', v: <span className="money">{formatWon(pre.changePaid)}</span> }] : []),
+  ];
+  const share = tripShareView(tf, formatWon);
 
   return (
     <>
@@ -67,10 +77,7 @@ function Body({ d }: { d: BookingDetail }) {
       {/* 예약 정보(spec 5.19): 업체·전화 · 확정 방문 일정. 상태 배지는 두지 않는다(진행 단계·상단 확인 카드가 안내) */}
       <Section title="예약 정보">
         <div className="card stack booking-info" id="booking-info">
-          <div className="row row--between row--wrap" style={{ gap: 'var(--sp-2)' }}>
-            <p className="strong" style={{ fontSize: 'var(--fs-lg)', minWidth: 0, overflowWrap: 'anywhere' }}>{d.provider.name}</p>
-            <PhoneButton phone={d.provider.phone} name={d.provider.name} />
-          </div>
+          <ProviderContactRow name={d.provider.name} phone={d.provider.phone} />
           <KV rows={[
             // 기존 방문 불가·새 일정 미확정이면 날짜 대신 ‘방문 일정 조율 중’. 일정 비교·사유·응답은 상단 확인 카드에서만(일정 변경 기록은 데이터로 보존, 화면 펼치기 없음)
             { k: '방문 일정', v: disp.visitPending ? '방문 일정 조율 중' : <VisitText date={b.visitDate} time={b.visitTime} strong /> },
@@ -80,33 +87,40 @@ function Body({ d }: { d: BookingDetail }) {
           ]} />
           {b.followUp && <p className="small muted">{b.followUp.note}</p>}
           {!disp.visitPending && !cancelled && <p className="xs muted">방문 시각은 업체의 도착 예정 시각이에요. {DURATION_NOTE}</p>}
+          {/* 결제한 예약금(별도 ‘결제 내역’ 펼치기 대신). 결제·환불 기록은 상단 금액·정산 카드와 결제 내역 화면에서 */}
+          {paidRows.length > 0 && (
+            <div className="stack--sm stack" id="paid-deposit">
+              <KV rows={paidRows} />
+              <p className="xs muted">{paidRows.length > 1 ? '결제한 예약금과 선결제 금액은 최종 정산 시 차감돼요.' : '결제한 예약금은 최종 정산 시 차감돼요.'}</p>
+            </div>
+          )}
 
           <div className="folds">
-            {!cancelled && (
+            {/* 공동 예약 정보: 다른 세대와 출장비를 나누는 예약만(일반 예약 — 분담 세대가 나 하나 — 에는 그리지 않는다) */}
+            {!cancelled && share.joint && (
               <Fold id="fold-group" title="공동 예약 정보">
                 <KV rows={[
                   { k: '참여 확정 세대', v: `${d.group.confirmedHouseholds}세대` },
                   { k: '접수 상태', v: d.groupEnded ? '종료됨' : d.groupClosed ? '마감됨' : '접수 중' },
                   { k: '접수 마감', v: <span className="nowrap">{formatDateTime(d.group.closeAt)}</span> },
-                  // 마감 전 = 현재 예상 출장비(현재 확정 세대 기준), 마감 후 = 내 확정 출장비, 일정 변경으로 유지 = 유지되는 확정 출장비
-                  { k: TRIP_LABEL[tf.kind], v: tf.amount === null ? <span className="cost__missing">확인 필요</span> : <span className="money">{formatWon(tf.amount)}</span> },
-                  ...(tf.groupTotal !== null ? [{ k: '그룹 총 출장비', v: <span className="money">{formatWon(tf.groupTotal)}</span> }] : []),
                 ]} />
-                {tf.groupTotal !== null && tf.households
-                  ? <p className="xs muted">출장비 = 그룹 총 출장비 {formatWon(tf.groupTotal)} ÷ {tf.households}세대{tf.kind === 'expected' ? ' (지금 확정된 세대 기준 예상이에요. 접수 마감 때 확정 세대 수로 확정돼요.)' : ' (접수 마감 때 확정됐어요.)'}</p>
-                  : tf.kind === 'locked' ? <p className="xs muted">일정 변경 때 기존 확정 출장비를 그대로 유지하기로 했어요.</p> : null}
-                {tf.kind === 'confirmed' && tf.households !== null && tf.households !== d.group.confirmedHouseholds && (
-                  <p className="xs muted">마감 시 확정 세대는 {tf.households}세대였어요. 마감 후 취소한 세대가 있어도 확정 출장비는 그대로예요.</p>
+                {/* 내 출장비 + 절약 안내(연한 블루 영역)·분담 문구. 출장비만으로 계산하며 돌려받는 금액이 아니다.
+                    금액·정산 카드가 있으면 그 카드의 [금액 상세]에만 두고 여기서는 그리지 않는다 — 펼침 상태와 무관(spec 5.28) */}
+                {!showCost && (
+                  <>
+                    <div className="trip-share" id="trip-share">
+                      <p className="trip-share__row"><span>{share.label}</span>{share.amount === null ? <span className="cost__missing">확인 필요</span> : <span className="money strong">{formatWon(share.amount)}</span>}</p>
+                      {share.savingText && <p className="trip-share__saving">{share.savingText}</p>}
+                    </div>
+                    {share.splitText ? <p className="xs muted">{share.splitText}</p>
+                      : tf.kind === 'locked' ? <p className="xs muted">일정 변경 때 기존 확정 출장비를 그대로 유지하기로 했어요.</p> : null}
+                    {tf.kind === 'confirmed' && tf.households !== null && tf.households !== d.group.confirmedHouseholds && (
+                      <p className="xs muted">마감 시 확정 세대는 {tf.households}세대였어요. 마감 후 취소한 세대가 있어도 확정 출장비는 그대로예요.</p>
+                    )}
+                  </>
                 )}
                 {d.groupEnded && <p className="small strong">이 공동 예약은 종료됐어요.</p>}
                 <p className="xs muted">같은 날 같은 업체를 함께 부르는 이웃 세대와 출장비를 나눠요. 다른 세대의 주소·작업·사진은 보이지 않아요.</p>
-              </Fold>
-            )}
-            {/* 결제 내역은 한 곳에서만: 금액·정산 카드가 있으면 그 카드의 [결제 내역], 없으면 여기 */}
-            {!showCost && d.ledger.length > 0 && (
-              <Fold id="fold-payments" title="결제 내역">
-                <PaymentRecords d={d} />
-                <p className="xs muted">작업이 끝나 업체가 최종 금액을 등록하면 정산 금액을 확인할 수 있어요. 낸 예약금·선결제는 최종 금액에서 차감돼요.</p>
               </Fold>
             )}
           </div>

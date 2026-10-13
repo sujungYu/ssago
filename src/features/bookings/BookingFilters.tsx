@@ -12,7 +12,7 @@ const VISIT_NOTE = (
 );
 
 /**
- * 예약 탭 필터 막대(탭별 독립). 확정된 예약: [상태 ▾] [방문일 ▾] [할 일 있는 예약만]  예약 N건 / 완료·취소: [상태 ▾] [방문일 ▾]  예약 N건.
+ * 예약 탭 필터 막대(탭별 독립). 확정된 예약: [예약 상태 ▾] [방문일 ▾] [확인 필요]  예약 N건 / 완료·취소: [상태 ▾] [방문일 ▾]  예약 N건(기존 구성).
  * 초기화 버튼 없음(‘전체’·‘전체 기간’으로 그 조건만 해제). 규칙·매핑은 src/domain/bookingFilter.ts.
  */
 export function BookingFilterBar({ filter, onApply, count }: { filter: BookingsFilterState; onApply: (f: BookingsFilterState) => void; count?: number }) {
@@ -23,14 +23,14 @@ export function BookingFilterBar({ filter, onApply, count }: { filter: BookingsF
   return (
     <div className="filter-bar">
       <div className="filter-bar__buttons" role="group" aria-label={active ? '확정된 예약 필터' : '완료·취소 필터'}>
-        <CapsuleButton label="상태" defaultValue="전체" value={active ? activeStatusLabel(a) : pastStatusLabel(p)} onClick={(el) => setOpen({ kind: 'status', anchor: el })} />
+        <CapsuleButton label={active ? '예약 상태' : '상태'} defaultValue="전체" value={active ? activeStatusLabel(a) : pastStatusLabel(p)} onClick={(el) => setOpen({ kind: 'status', anchor: el })} />
         <CapsuleButton label="방문일" defaultValue="전체 기간" value={periodLabel(active ? a : p, active ? ACTIVE_PERIOD_OPTIONS : PAST_PERIOD_OPTIONS)} onClick={(el) => setOpen({ kind: 'period', anchor: el })} />
-        {active && <ToggleCapsule label="할 일 있는 예약만" pressed={a.actionOnly} onToggle={() => onApply({ ...filter, active: { ...a, actionOnly: !a.actionOnly } })} />}
+        {active && <ToggleCapsule label="확인 필요" pressed={a.actionOnly} onToggle={() => onApply({ ...filter, active: { ...a, actionOnly: !a.actionOnly } })} />}
       </div>
       <p className="filter-bar__count small" aria-live="polite">{count === undefined ? ' ' : <>예약 <b>{count}</b>건</>}</p>
 
       {open?.kind === 'status' && active && (
-        <OptionPicker title="상태" name="booking-active-status" anchor={open.anchor} onClose={() => setOpen(null)} options={ACTIVE_STATUS_OPTIONS}
+        <OptionPicker title="예약 상태" name="booking-active-status" anchor={open.anchor} onClose={() => setOpen(null)} options={ACTIVE_STATUS_OPTIONS}
           value={a.status} onApply={(status) => done({ ...filter, active: { ...a, status } })} />
       )}
       {open?.kind === 'status' && !active && (
