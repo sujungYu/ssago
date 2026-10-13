@@ -394,7 +394,7 @@ export class MockRepository implements Repository {
       if (!d.approval) throw new RepoError('not_found');
       const g = r.groupId ? byId(this.db.groups, r.groupId) : undefined;
       return {
-        ...d, approval: d.approval, groupEnded: !!g?.ended,
+        ...d, approval: d.approval, groupEnded: !!g?.ended, confirmedTripFee: g?.closed ? g.finalPerHouseholdFee : null,
         inFlightPayment: this.inFlight((t) => t.requestId === r.id && t.kind === 'deposit'),
       };
     });

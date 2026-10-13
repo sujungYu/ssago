@@ -74,3 +74,23 @@ describe('비교 요청 상태 필터', () => {
     expect(writeBundleFilter(new URLSearchParams('status=ended'), 'all').toString()).toBe('');
   });
 });
+
+describe('참여 시 예상 출장비·세대 분담(spec 5.29)', () => {
+  const ap = { tasks: [{ title: '수전', note: '', estimate: 50000 }], partsEstimate: 20000, totalTripFee: 60000 } as unknown as Approval;
+  it('세대 = 결제 완료 확정 세대 + 본인 1, 예상 총금액에 같은 출장비', () => {
+    const e = approvalEstimate(ap, 2);
+    expect([e.householdsWithMe, e.myTripFee, e.total, e.joint, e.tripFeeConfirmed]).toEqual([3, 20000, 90000, true, false]);
+  });
+  it('본인이 이미 확정 세대에 있으면 중복으로 더하지 않는다', () => {
+    expect(approvalEstimate(ap, 3, { selfConfirmed: true }).householdsWithMe).toBe(3);
+  });
+  it('확정 세대가 없으면 일반 예약(분담 설명 없음), 출장비 전액', () => {
+    const e = approvalEstimate(ap, 0);
+    expect([e.joint, e.householdsWithMe, e.myTripFee]).toEqual([false, 1, 60000]);
+  });
+  it('출장비가 확정됐으면 확정 금액을 쓰고 총금액에도 같은 값', () => {
+    const e = approvalEstimate(ap, 3, { confirmedTripFee: 15000 });
+    expect([e.tripFeeConfirmed, e.myTripFee, e.total]).toEqual([true, 15000, 85000]);
+    expect(approvalEstimate(ap, 3, { confirmedTripFee: null }).tripFeeConfirmed).toBe(false);
+  });
+});

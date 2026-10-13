@@ -26,8 +26,9 @@ function Panel({ v, reload }: { v: ApprovalView; reload: () => void }) {
   const checked = consented === ap.version; // 조건(버전)이 바뀌면 동의가 초기화된다
   const now = repo.now();
   const depositAmount = rc ? rc.newDepositAmount : ap.depositAmount;
-  const est = approvalEstimate(ap, v.group?.confirmedHouseholds ?? 0);
-  const { totalTripFee, confirmedHouseholds: confirmedNow, myTripFee: expectedFee } = est;
+  // 본인은 결제 전이라 확정 세대에 없다(예약이 이어진 요청이면 포함된 것으로 보고 중복으로 더하지 않는다)
+  const est = approvalEstimate(ap, v.group?.confirmedHouseholds ?? 0, { selfConfirmed: !!v.request.bookingId, confirmedTripFee: v.confirmedTripFee });
+  const { totalTripFee, myTripFee: expectedFee } = est;
   const inflight = v.inFlightPayment;
 
   const pay = () => void action.run(async () => {
@@ -91,7 +92,9 @@ function Panel({ v, reload }: { v: ApprovalView; reload: () => void }) {
         </div>
       </dl>
       <p className="xs muted pay-note">
-        작업 견적·자재비·내 예상 출장비를 포함한 금액이에요.<br />자재비와 참여 세대 수에 따라 달라질 수 있어요.
+        {est.tripFeeConfirmed
+          ? <>작업 견적·자재비·내 출장비를 포함한 금액이에요.<br />자재비에 따라 달라질 수 있어요.</>
+          : <>작업 견적·자재비·참여 시 예상 출장비를 포함한 금액이에요.<br />자재비와 참여 세대 수에 따라 달라질 수 있어요.</>}
         {est.total === null && <><br />견적이 없는 작업({est.laborMissing.join(', ')})이 있어 아직 합산하지 않았어요.</>}
       </p>
 
@@ -119,15 +122,14 @@ function Panel({ v, reload }: { v: ApprovalView; reload: () => void }) {
           <dl className="cost__list">
             <CostRow k="작업 견적 합계" v={est.labor === null ? <span className="small">금액 확인 필요<span className="xs muted" style={{ display: 'block' }}>견적 없음: {est.laborMissing.join(', ')}</span></span> : <span className="money">{formatWon(est.labor)}</span>} />
             <CostRow k="부품·자재 예상" v={<span className="money">{formatWon(est.parts)}</span>} />
-            <CostRow k="내 예상 출장비" v={<span className="money">약 {formatWon(expectedFee)}</span>} />
+            {/* 예상 총금액에 들어간 값과 같은 출장비(est.myTripFee). 확정됐으면 ‘내 출장비’ 확정 금액 */}
+            <CostRow k={est.tripFeeConfirmed ? '내 출장비' : '참여 시 예상 출장비'} v={<span className="money">{est.tripFeeConfirmed ? '' : '약 '}{formatWon(expectedFee)}</span>} />
             <CostRow k="예상 총금액" v={est.total === null ? <span className="strong">금액 확인 필요</span> : <span className="money strong">약 {formatWon(est.total)}</span>} strong />
           </dl>
-          {/* 그룹 총 출장비와 내 부담금 구분 · 결제 대기 자리는 확정 세대로 세지 않는 기존 계산(expectedFeeForJoiner) */}
-          <p className="xs muted">
-            내 예상 출장비 = 그룹 총 출장비 {formatWon(totalTripFee)} ÷ {est.householdsWithMe}세대
-            {confirmedNow === 0 ? ' (지금은 확정된 세대가 없어 나 혼자 기준이에요. 같은 날 이웃이 함께하면 확정된 세대 수로 나눠요.)' : ` (결제를 마친 확정 ${confirmedNow}세대 + 나, 본인 예약 확정 시 ${est.householdsWithMe}세대 기준. 결제 대기 중인 자리는 세지 않아요.)`}
-            {' '}접수 마감 때 확정된 세대 수로 최종 확정돼요.
-          </p>
+          {/* 세대 분담 안내: 공동 예약(분담 2세대 이상)이고 출장비가 아직 확정 전일 때만. 세대 = 결제 완료 확정 세대 + 본인(결제 대기 자리 제외) */}
+          {est.joint && !est.tripFeeConfirmed && (
+            <p className="xs muted">내 예약이 확정되면 총 출장비 {formatWon(totalTripFee)}을 {est.householdsWithMe}세대가 나눠요. 최종 출장비는 접수 마감 때 확정된 세대 수로 정해져요.</p>
+          )}
           {ap.materialNote && <p className="xs muted">자재: {ap.materialNote}</p>}
           {ap.discountNote && <p className="xs muted">업체 추가 할인 조건: {ap.discountNote} — 조건 충족이 확인된 뒤 적용돼 예상 총금액에는 넣지 않았어요.</p>}
           <p className="xs muted">최종 금액은 작업이 끝난 뒤 실제 내역으로 확인해요.</p>

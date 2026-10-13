@@ -105,6 +105,8 @@ export interface BundleDetail {
 export interface ApprovalView extends RequestDetail {
   approval: Approval;
   groupEnded: boolean;
+  /** 접수 마감으로 확정된 세대별 출장비(마감 전·확정값 없음이면 null) */
+  confirmedTripFee: Won | null;
   inFlightPayment?: Transaction;
 }
 
