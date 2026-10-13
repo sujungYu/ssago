@@ -1,12 +1,12 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { returnState } from '../../app/backNav';
 import { loadProviderPick, saveProviderPick, type ProviderPick } from '../../app/context';
-import { ActionBar, Page } from '../../app/Page';
+import { Page } from '../../app/Page';
 import { useAppState, useRepo } from '../../app/context';
 import { useAction, useAsync } from '../../app/hooks';
-import { formatDateTime, formatRemaining } from '../../domain/time';
-import { formatSlot } from '../../domain/visitTime';
+import { formatDate, formatDateTime, formatRemaining } from '../../domain/time';
+import { selectableTimes } from '../../domain/visitTime';
 import { formatWon } from '../../domain/money';
 import { seatsLeft } from '../../domain/rules';
 import {
@@ -19,21 +19,25 @@ import { initialOf } from '../shared';
 import { JointCalendar } from './JointCalendar';
 
 /**
- * 선택한 날짜의 공동 예약 카드. 시간은 신청할 수 있는 고객 가능 시간(확정 방문 시각 아님)이다.
+ * 선택한 날짜의 공동 예약 카드. ‘신청 가능한 시각’은 그 그룹 시간대에서 요청서와 같은 기준(selectableTimes, 1시간 간격)으로 만든
+ * 요청 후보 시각을 안내만 한다(선택 버튼 아님, 확정 방문 시각 아님). 실제 다중 선택은 요청서에서 한다.
  * 내 예상 출장비는 기존 정책 그대로 ‘결제 완료된 확정 세대 + 본인’으로 나눈 값이며, 계산 근거는 ‘출장비 계산 상세’에 접어 둔다.
  */
 function JointGroupCard({ g, now, checked, onChange }: { g: PublicGroup; now: string; checked: boolean; onChange: () => void }) {
   const fee = jointFeeView(g);
+  const times = selectableTimes(g.slots);
+  const scope = g.scopeType === 'complex' ? '같은 단지' : '가까운 이웃';
+  // 시간 제목이 없으므로 라디오 이름에 날짜·참여 조건·신청 가능한 시각·마감을 담는다
+  const name = `${formatDate(g.date)} ${scope} 공동 예약 · 신청 가능한 시각 ${times.join(', ')} · 접수 마감 ${formatDateTime(g.closeAt)}`;
   return (
     <div className="joint-card">
       <label className="radio-card">
-        <input type="radio" name="joint-group" checked={checked} onChange={onChange} aria-describedby={`jg-${g.id}-fee`} />
+        <input type="radio" name="joint-group" checked={checked} onChange={onChange} aria-label={name} aria-describedby={`jg-${g.id}-fee`} />
         <div className="grow stack--sm stack">
-          <div className="row row--between row--wrap">
-            <span className="strong">신청 가능 시간 <span className="nowrap">{g.slots.map(formatSlot).join(' / ')}</span></span>
-            <Badge tone="info">{g.scopeType === 'complex' ? '같은 단지' : '가까운 이웃'}</Badge>
-          </div>
+          <div className="row row--wrap"><Badge tone="info">{scope}</Badge></div>
           <KV rows={[
+            // 신청 가능한 시각: 그룹 시간대에서 요청서와 같은 기준으로 만든 후보(안내용 값, 선택 버튼 아님). 길면 값 영역 안에서 시각 단위로 줄바꿈
+            { k: '신청 가능한 시각', v: <span className="kv__times">{times.map((t, i) => <Fragment key={t}>{i > 0 && ' · '}<span className="nowrap">{t}</span></Fragment>)}</span> },
             { k: '접수 마감', v: <><span className="nowrap">{formatDateTime(g.closeAt)}</span> <span className="muted nowrap">({formatRemaining(now, g.closeAt)})</span></> },
             { k: '확정 세대', v: `${fee.confirmed}세대` },
             { k: '남은 자리', v: `${seatsLeft(g)}자리` },
@@ -86,7 +90,10 @@ function JointSchedule({ p, addressId, now, onPick, picked, notice, restored, on
       <JointCalendar month={month} range={monthRange(today, counts.keys())} counts={counts} today={today} selected={date}
         onMonth={setMonth} onSelect={(d) => { setDate(d); onPick(null, d); }} />
       {date === null ? (
-        <p className="jcal__prompt">공동 예약 날짜를 선택해주세요.</p>
+        <>
+          {notice && <Banner tone="warn" title="선택한 일정을 신청할 수 없게 됐어요">{UNJOINABLE_TEXT[notice]} 다른 날짜를 고르거나 새 예약을 요청해 주세요.</Banner>}
+          <p className="jcal__prompt">공동 예약 날짜를 선택해주세요.</p>
+        </>
       ) : (
         <div className="stack" aria-live="polite">
           <h3>{formatDayTitle(date, today)}의 공동 예약</h3>
@@ -100,7 +107,7 @@ function JointSchedule({ p, addressId, now, onPick, picked, notice, restored, on
           ) : (
             <>
               <p className="xs muted">
-                시간은 신청할 수 있는 고객 가능 시간이에요. 정확한 방문 시각은 업체가 승인할 때 제안해요.
+                신청 가능한 시각은 요청할 수 있는 후보예요. 요청서에서 방문 가능한 시각을 여러 개 고르면 업체가 그중 방문 시간을 제안해요.
                 내 예상 출장비는 결제 대기 자리를 빼고, 본인 예약이 확정되면 함께 나눌 세대 수로 계산했어요. 최종 출장비는 마감 때 확정된 세대 수로 정해져요.
                 선택한 지역·건물 기준 후보이며, 신청할 때 정확한 방문 주소로 동일 단지·최초 예약지 반경 300m 조건을 다시 확인해요.
               </p>
@@ -121,7 +128,13 @@ function Body({ p, addressId, now }: { p: ProviderDetail; addressId: string | nu
   const nav = useNavigate();
   const loc = useLocation();
   // 이 기록 항목(location.key)에 저장해 둔 선택. 요청서에서 뒤로 돌아오면 같은 항목이라 날짜·그룹·달을 되살린다.
-  const [restored] = useState(() => loadProviderPick(loc.key, p.id));
+  // 저장해 둔 날짜가 지금 신청 가능한 날짜가 아니면(일정 변경·마감 등) 날짜·그룹·달을 되살리지 않고 정리한다.
+  // 그룹까지 골라 두었던 경우에만 신청할 수 없게 됐다고 알린다.
+  const [{ restored, staleGroup }] = useState(() => {
+    const r = loadProviderPick(loc.key, p.id);
+    if (!r?.date || joinableDateCounts(p.groups, now).has(r.date)) return { restored: r, staleGroup: null as string | null };
+    return { restored: null, staleGroup: r.groupId };
+  });
   // 공동 그룹 선택만 이 화면의 선택 상태로 둔다. 새 날짜 요청은 별도 버튼으로 바로 신규 요청 흐름에 들어가 두 선택이 동시에 켜지지 않는다.
   const [picked, setPicked] = useState<{ groupId: string; date: IsoDate } | null>(() => (restored?.groupId && restored.date ? { groupId: restored.groupId, date: restored.date } : null));
   const [view, setView] = useState<{ date: IsoDate | null; month: YearMonth } | null>(null);
@@ -143,6 +156,7 @@ function Body({ p, addressId, now }: { p: ProviderDetail; addressId: string | nu
     const latest = await repo.getProvider(p.id, addressId).catch(() => null);
     setNotice(unjoinableReason(latest?.groups.find((g) => g.id === groupId), repo.now()) ?? 'unavailable');
   };
+  useEffect(() => { if (staleGroup) void explain(staleGroup); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   // 요청서로 넘어가기 전에 최신 상태(마감·자리·주소 범위)를 다시 확인한다. 제출할 때도 저장소가 한 번 더 검증한다.
   const request = () => go.run(async () => {
     if (!picked || !addressId) return;
@@ -162,7 +176,8 @@ function Body({ p, addressId, now }: { p: ProviderDetail; addressId: string | nu
         </div>
       </div>
       <p>{p.intro}</p>
-      <div className="chips" aria-label="수행 작업">{p.scope.map((s) => <Badge key={s} tone="info">{s}</Badge>)}</div>
+      {/* 제공 작업: 요청서의 작업 선택 칩과 같은 업체 등록 작업(ID·이름·순서). 여기서는 안내용(선택·클릭 없음) */}
+      {p.services.length > 0 && <ul className="svc-tags" aria-label="제공 작업">{p.services.map((s) => <li key={s.id} className="svc-tag">{s.name}</li>)}</ul>}
 
       <Section title="공동 예약 일정">
         {addressId === null && <Banner tone="info" title="지역·건물 주소를 설정해 주세요">주소를 정하면 참여할 수 있는 공동 날짜를 보여드려요.</Banner>}
@@ -204,9 +219,8 @@ function Body({ p, addressId, now }: { p: ProviderDetail; addressId: string | nu
         </div>
       </Section>
 
-      <ActionBar note={picked ? '요청만으로는 예약이 확정되지 않아요. 업체 승인과 예약금 결제 후 확정돼요.' : '공동 예약 날짜와 일정을 선택해 주세요'}>
-        <Button variant="primary" block disabled={!picked} busy={go.busy} onClick={() => void request()}>선택한 일정으로 수리 요청하기</Button>
-      </ActionBar>
+      {/* 하단 고정 없이 마지막 본문 다음(간격 24px)에 둔다. 공동 예약 그룹을 고르면 켜진다 */}
+      <Button variant="primary" block disabled={!picked} busy={go.busy} onClick={() => void request()}>선택한 일정으로 수리 요청하기</Button>
     </>
   );
 }

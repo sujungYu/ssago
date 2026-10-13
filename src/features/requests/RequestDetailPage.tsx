@@ -49,7 +49,7 @@ function Body({ d, now }: { d: RequestDetail; now: string }) {
             ap.recheck
               ? { k: '업체가 제안한 방문 시각', v: <VisitText date={ap.recheck.newVisitDate} time={ap.recheck.newVisitTime} strong /> }
               : { k: '업체가 제안한 방문 시각', v: <VisitText date={ap.visitDate} time={ap.visitTime} strong /> },
-            { k: '고객 가능 시간', v: slotsText(r.slots) },
+            { k: '방문 가능한 시간', v: slotsText(r.slots) },
             { k: '결제 기한', v: <span className="nowrap">{formatDateTime(ap.paymentDeadline)}</span> },
             { k: '남은 시간', v: formatRemaining(now, ap.paymentDeadline) },
             { k: '예약금', v: <span className="money strong">{formatWon(ap.recheck?.newDepositAmount ?? ap.depositAmount)}</span> },
@@ -88,7 +88,7 @@ function Body({ d, now }: { d: RequestDetail; now: string }) {
           <KV rows={[
             { k: '요청 방식', v: d.group ? '공동 예약 날짜 참여' : '새 날짜 요청' },
             ...(d.group ? [{ k: '방문 날짜', v: formatDate(d.group.date) }] : r.newDateWish ? [{ k: '희망 날짜', v: formatDate(r.newDateWish) }] : []),
-            { k: '고객 가능 시간', v: slotsText(r.slots) },
+            { k: '방문 가능한 시간', v: slotsText(r.slots) },
             { k: '방문 주소', v: <VisitAddressText va={d.visitAddress} /> },
             // 제출 당시 이름·연락처(내 정보를 나중에 수정해도 바뀌지 않음). 이전 데이터라 없으면 표시하지 않는다
             ...(r.contact ? [{ k: '연락처', v: <ContactText c={r.contact} /> }] : []),

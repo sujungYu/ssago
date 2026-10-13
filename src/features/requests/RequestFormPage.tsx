@@ -5,11 +5,12 @@ import { focusFirstError } from '../../app/focusFirstError';
 import { describeError } from '../../domain/errors';
 import { FORM_PROGRESS } from '../../domain/progressStep';
 import { ProgressSteps } from '../../components/ProgressSteps';
-import { ActionBar, Page } from '../../app/Page';
+import { Page } from '../../app/Page';
 import { useAppState, useRepo } from '../../app/context';
 import { useAction, useAsync, useAttemptKey } from '../../app/hooks';
 import { addHours, formatDate, formatDateTime, seoulYmd } from '../../domain/time';
-import { formatSlot } from '../../domain/visitTime';
+import { NEW_DATE_WINDOWS, selectableTimes } from '../../domain/visitTime';
+import { orderSelected } from '../../domain/taskSelection';
 import { formatWon } from '../../domain/money';
 import { expectedFeeForJoiner } from '../../domain/pricing';
 import { Icon } from '../../components/Icon';
@@ -19,10 +20,9 @@ import { NAME_MAX, PHONE_HINT, formatPhone, nameError, phoneDigits, phoneError }
 import type { Address } from '../../domain/types';
 import { AddressSearch } from '../discovery/AddressSearch';
 
-interface TaskDraft { key: number; title: string; description: string; photoNames: string[] }
-const DEFAULT_SLOTS = ['09:00–12:00', '13:00–16:00', '16:00–19:00'];
-let seq = 1;
-const blank = (): TaskDraft => ({ key: seq++, title: '', description: '', photoNames: [] });
+/** 고른 작업별 작성 내용. 작업 ID로 관리해 선택을 바꿔도 다른 작업의 내용이 섞이지 않는다 */
+interface TaskDraft { description: string; photoNames: string[] }
+const EMPTY_DRAFT: TaskDraft = { description: '', photoNames: [] };
 
 /**
  * C-05 수리 요청서. 요청만으로는 예약이 확정되지 않는다.
@@ -30,9 +30,15 @@ const blank = (): TaskDraft => ({ key: seq++, title: '', description: '', photoN
  * 저장한 재사용 주소는 같은 건물일 때만 상세 주소를 자동 입력하고, ‘다음 신청에도 이 주소 사용’은 기본 미선택이다.
  * 이름·연락처는 내 정보(공통 고객 정보)를 기본값으로 한 번만 채운다. 고객이 고친 값은 내 정보가 바뀌어도 덮어쓰지 않고,
  * 여기서 고쳐도 내 정보는 바뀌지 않는다. 제출하면 이 요청에 제출 당시 값으로 저장된다.
+ * 작업은 업체 등록 작업을 칩으로 여러 개 고르고(직접 입력 없음), 고른 작업마다 설명·사진을 쓴다.
+ * 업체가 바뀌면(주소의 업체 ID가 바뀜) 작성 상태를 새로 시작해 이전 업체 작업이 그대로 제출되지 않는다.
  */
 export function RequestFormPage() {
   const { id = '' } = useParams();
+  return <RequestForm key={id} id={id} />;
+}
+
+function RequestForm({ id }: { id: string }) {
   const [sp] = useSearchParams();
   const groupId = sp.get('group');
   const isNew = sp.get('new') === '1';
@@ -50,8 +56,16 @@ export function RequestFormPage() {
   const action = useAction();
   const attempt = useAttemptKey('req');
 
-  const [tasks, setTasks] = useState<TaskDraft[]>([blank()]);
+  // 고른 업체 등록 작업 ID(처음엔 없음)와 작업별 작성 내용. 선택을 해제해도 작성 내용은 이 화면에 남겨 다시 고르면 복원하고,
+  // 제출에는 지금 고른 작업만 넣는다.
+  const [picked, setPicked] = useState<string[]>([]);
+  const [drafts, setDrafts] = useState<Record<string, TaskDraft>>({});
+  const [bundleUnmatched, setBundleUnmatched] = useState<string[]>([]);
+  const togglePick = (sid: string) => setPicked((cur) => (cur.includes(sid) ? cur.filter((x) => x !== sid) : [...cur, sid]));
+  const setDraft = (sid: string, patch: Partial<TaskDraft>) => setDrafts((d) => ({ ...d, [sid]: { ...(d[sid] ?? EMPTY_DRAFT), ...patch } }));
+  // 방문 가능한 시각(고객 희망 시각, 정확한 시각 여러 개). 선택했다고 그 시각에 배정·확정되지 않는다
   const [slots, setSlots] = useState<string[]>([]);
+  const [droppedTimes, setDroppedTimes] = useState<string[]>([]);
   const [newDate, setNewDate] = useState('');
   const [detail, setDetail] = useState('');
   const [autofilled, setAutofilled] = useState<string | null>(null); // 자동 입력한 저장 상세 주소
@@ -105,11 +119,32 @@ export function RequestFormPage() {
     filledFor.current = null;
   };
 
+  // 같은 작업을 다른 업체에도 요청: 앞선 요청의 작업 중 이 업체 등록 작업과 이름이 같은 것만 미리 고르고 설명·사진을 옮긴다.
+  // 이 업체가 등록하지 않은 작업은 고르지 않고 안내만 한다(다른 업체 작업이 그대로 제출되지 않음).
   useEffect(() => {
-    if (prefilled.current || !bundle.data) return;
+    if (prefilled.current || !bundle.data || !provider.data) return;
     prefilled.current = true;
-    setTasks(bundle.data.tasks.map((t) => ({ key: seq++, title: t.title, description: t.description, photoNames: [...t.photoNames] })));
-  }, [bundle.data]);
+    const byName = new Map(provider.data.services.map((s) => [s.name, s.id]));
+    const hit: string[] = []; const miss: string[] = []; const next: Record<string, TaskDraft> = {};
+    for (const t of bundle.data.tasks) {
+      const sid = byName.get(t.title.trim());
+      if (sid && !hit.includes(sid)) { hit.push(sid); next[sid] = { description: t.description, photoNames: [...t.photoNames] }; } else if (!sid) miss.push(t.title);
+    }
+    setPicked(hit); setDrafts(next); setBundleUnmatched(miss);
+  }, [bundle.data, provider.data]);
+
+  // 선택 가능한 방문 시각: 공동 예약은 그 그룹의 시간대, 새 날짜 요청은 공통 시간대(NEW_DATE_WINDOWS)에서 1시간 간격으로 만든다
+  // (생성 기준은 domain/visitTime.ts 한 곳 — 저장소 검증도 같은 기준). 그룹을 찾을 수 없으면 고를 시각이 없다.
+  const jointGroup = !isNew && groupId ? provider.data?.groups.find((g) => g.id === groupId) : undefined;
+  const timeOptions = !provider.data ? [] : selectableTimes(!isNew && groupId ? (jointGroup?.slots ?? []) : NEW_DATE_WINDOWS);
+  const timeKey = timeOptions.join(',');
+  // 일정(그룹 시간대·업체 정보)이 바뀌어 고른 시각이 더 이상 선택 가능하지 않으면 선택을 해제하고 알린다
+  useEffect(() => {
+    if (!provider.data) return;
+    const allowed = new Set(timeKey ? timeKey.split(',') : []);
+    const gone = slots.filter((t) => !allowed.has(t));
+    if (gone.length) { setSlots((cur) => cur.filter((t) => allowed.has(t))); setDroppedTimes(gone); }
+  }, [timeKey, provider.data]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 상단 뒤로가기: 업체 상세에서 왔으면 그 기록으로 한 번만 돌아가고(선택한 날짜·그룹 유지), 직접 진입이면 업체 상세로 교체한다.
   // 업체 정보를 찾을 수 없으면 업체 찾기로 보낸다. 경로는 앱 내부 경로만 쓴다.
@@ -131,23 +166,27 @@ export function RequestFormPage() {
           const groupMissing = joint && !group;
           const now = repo.now();
           const minDate = seoulYmd(addHours(now, 48));
-          const slotOptions = group?.slots ?? DEFAULT_SLOTS;
           const apartment = address.data?.kind === 'apartment';
 
-          const taskErr = (i: number, t: TaskDraft) => (!t.title.trim() ? `작업 ${i + 1}에 어떤 수리가 필요한지 입력해 주세요. 예: 주방 수전 교체` : null);
+          // 업체 등록 작업(표시 순서)과 지금 고른 작업. 목록에 없는 ID(이전 업체 작업 등)는 고른 것으로 보지 않는다
+          const services = p.services;
+          const noServices = services.length === 0;
+          const noTimes = !groupMissing && timeOptions.length === 0;
+          const chosen = orderSelected(services, picked);
           const err = {
-            tasks: tasks.some((t) => !t.title.trim()) ? '작업 내용을 입력해 주세요.' : null,
-            slots: slots.length === 0 ? '방문받을 수 있는 시간을 하나 이상 선택해 주세요.' : null,
+            tasks: !noServices && chosen.length === 0 ? '필요한 작업을 하나 이상 선택해 주세요.' : null,
+            slots: !noTimes && slots.length === 0 ? '방문 가능한 시각을 하나 이상 선택해 주세요.' : null,
             date: !joint && !newDate ? '희망 방문 날짜를 선택해 주세요.' : !joint && newDate < minDate ? `${formatDate(minDate)} 이후 날짜를 선택해 주세요.` : null,
             base: !address.data ? '방문할 건물 주소를 선택해 주세요.' : null,
             detail: address.data ? detailError(address.data.kind, detail) : null,
             name: nameError(contactName),
             phone: phoneError(contactPhone),
           };
-          const valid = !Object.values(err).some(Boolean) && !groupMissing;
-          // 화면 순서대로의 오류 대상(작업 → 건물 주소 → 상세 주소 → 이름 → 연락처 → 희망 날짜 → 가능 시간). 안내 문구는 오류가 아니다
+          // 등록 작업이 없는 업체는 고를 작업이 없으므로 제출하지 않는다(목록을 임의로 만들지 않음)
+          const valid = !Object.values(err).some(Boolean) && !groupMissing && !noServices && !noTimes;
+          // 화면 순서대로의 오류 대상(작업 선택 → 건물 주소 → 상세 주소 → 이름 → 연락처 → 희망 날짜 → 가능 시간). 안내 문구는 오류가 아니다
           errOrder.current = [
-            ...tasks.filter((t) => !t.title.trim()).map((t) => `task-${t.key}`),
+            ...(err.tasks ? ['tasks'] : []),
             ...(err.base ? ['base'] : []), ...(err.detail ? ['detail'] : []), ...(err.name ? ['name'] : []), ...(err.phone ? ['phone'] : []),
             ...(err.date ? ['date'] : []), ...(err.slots ? ['slots'] : []),
           ];
@@ -163,8 +202,10 @@ export function RequestFormPage() {
             setErrCount(0);
             void action.run(async () => {
               const r = await repo.createRequest({
-                providerId: p.id, groupId: joint ? groupId : null, newDateWish: joint ? undefined : newDate, slots,
-                tasks: tasks.map((t) => ({ title: t.title.trim(), description: t.description.trim(), photoNames: t.photoNames })),
+                providerId: p.id, groupId: joint ? groupId : null, newDateWish: joint ? undefined : newDate,
+                slots: timeOptions.filter((t) => slots.includes(t)), // 지금 선택 가능한 시각만, 시각 순서
+                // 지금 고른 작업만(해제한 작업의 작성 내용은 넣지 않음). 작업명은 저장소가 등록 작업에서 요청 당시 이름으로 채운다
+                tasks: chosen.map((s) => ({ serviceId: s.id, description: (drafts[s.id]?.description ?? '').trim(), photoNames: drafts[s.id]?.photoNames ?? [] })),
                 addressId: address.data!.id, addressDetail: detail.trim(), saveAddressForNext: saveForNext,
                 contact: { name: contactName.trim(), phone: phoneDigits(contactPhone) },
                 bundleId: bundleId ?? undefined, idempotencyKey: attempt.get(),
@@ -198,28 +239,53 @@ export function RequestFormPage() {
               {bundleId && <Banner tone="info" title="같은 작업을 다른 업체에도 요청하고 있어요">앞서 보낸 요청과 한 묶음으로 비교할 수 있어요. 한 업체를 예약하면 나머지 요청은 종료돼요.</Banner>}
 
               <Section title="작업 내용">
-                {tasks.map((t, i) => (
-                  <div key={t.key} className="card stack">
-                    <div className="row row--between">
-                      <h3>작업 {i + 1}</h3>
-                      {tasks.length > 1 && <Button variant="ghost" sm onClick={() => setTasks(tasks.filter((x) => x.key !== t.key))}>삭제</Button>}
-                    </div>
-                    <Field label="어떤 작업인가요?" error={touched ? taskErr(i, t) : null} liveError={false}>
-                      {(fp) => <input {...fp} data-err-target={`task-${t.key}`} className="input" value={t.title} maxLength={40} placeholder="예: 주방 수전 교체" onChange={(e) => setTasks(tasks.map((x) => x.key === t.key ? { ...x, title: e.target.value } : x))} />}
-                    </Field>
-                    <Field label="자세한 설명" hint="증상, 크기, 모델명을 알려주시면 정확한 승인에 도움이 돼요.">
-                      {(fp) => <textarea {...fp} className="textarea" value={t.description} maxLength={500} onChange={(e) => setTasks(tasks.map((x) => x.key === t.key ? { ...x, description: e.target.value } : x))} />}
-                    </Field>
-                    <Field label="사진 (선택)" hint="모의 화면이라 파일은 올라가지 않고 파일 이름만 기록돼요. 얼굴·연락처가 보이지 않게 찍어 주세요.">
-                      {(fp) => (
-                        <input {...fp} type="file" accept="image/*" multiple className="input"
-                          onChange={(e) => setTasks(tasks.map((x) => x.key === t.key ? { ...x, photoNames: Array.from(e.target.files ?? []).slice(0, 5).map((f) => f.name) } : x))} />
+                {/* 업체 등록 작업 다중 선택(체크박스 칩). 방문 주소와 같은 흰 카드 안에 안내·칩을 두고(바깥 제목은 ‘작업 내용’ 하나 — 묶음 이름은 화면 낭독용으로만),
+                    고른 작업마다 이 카드 아래에 설명·사진 카드가 업체 작업 목록 순서로 나타난다(카드 안에 카드를 겹치지 않음) */}
+                <fieldset className="card svc-pick task-pick" data-err-region aria-describedby="req-svc-hint">
+                  <legend className="sr-only">어떤 작업이 필요한가요?</legend>
+                  {noServices ? (
+                    <Banner tone="warn" title="이 업체에 등록된 작업이 없어요">지금은 이 업체에 요청을 보낼 수 없어요. 업체 찾기에서 다른 업체를 골라 주세요.</Banner>
+                  ) : (
+                    <>
+                      <p className="small muted" id="req-svc-hint">업체가 제공하는 작업 중 여러 개 선택할 수 있어요.</p>
+                      <div className="svc-chips">
+                        {services.map((s, si) => {
+                          const on = picked.includes(s.id);
+                          return (
+                            <label key={s.id} className="svc-chip" title={s.name}>
+                              <input type="checkbox" className="svc-chip__input" checked={on} onChange={() => togglePick(s.id)}
+                                data-err-target={si === 0 ? 'tasks' : undefined} aria-invalid={si === 0 && touched && !!err.tasks ? true : undefined}
+                                aria-describedby={si === 0 && touched && err.tasks ? 'req-tasks-err' : undefined} />
+                              <span className="svc-chip__pill">{on && <Icon name="check" size={12} />}<span className="svc-chip__text">{s.name}</span></span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                      {touched && err.tasks && <p className="field__error" id="req-tasks-err">{err.tasks}</p>}
+                      {bundleUnmatched.length > 0 && (
+                        <p className="xs muted">앞서 요청한 작업 중 {bundleUnmatched.join(', ')}은(는) 이 업체 작업 목록에 없어 선택하지 않았어요. 필요한 작업을 골라 주세요.</p>
                       )}
-                    </Field>
-                    {t.photoNames.length > 0 && <div className="chips">{t.photoNames.map((n) => <span key={n} className="photo-chip"><Icon name="camera" size={14} />{n}</span>)}</div>}
-                  </div>
-                ))}
-                {tasks.length < 5 && <Button variant="secondary" onClick={() => setTasks([...tasks, blank()])}><Icon name="plus" size={18} />작업 추가하기</Button>}
+                    </>
+                  )}
+                </fieldset>
+                {chosen.map((s) => {
+                  const d = drafts[s.id] ?? EMPTY_DRAFT;
+                  return (
+                    <div key={s.id} className="card stack" data-task={s.id}>
+                      <h3>{s.name}</h3>
+                      <Field label="자세한 설명" hint="증상, 크기, 모델명을 알려주시면 정확한 승인에 도움이 돼요. 같은 작업이 여러 곳에 필요하면 위치와 증상을 함께 적어 주세요(예: 주방·욕실 수전 각각).">
+                        {(fp) => <textarea {...fp} className="textarea" value={d.description} maxLength={500} onChange={(e) => setDraft(s.id, { description: e.target.value })} />}
+                      </Field>
+                      <Field label="사진 (선택)" hint="모의 화면이라 파일은 올라가지 않고 파일 이름만 기록돼요. 얼굴·연락처가 보이지 않게 찍어 주세요.">
+                        {(fp) => (
+                          <input {...fp} type="file" accept="image/*" multiple className="input"
+                            onChange={(e) => setDraft(s.id, { photoNames: Array.from(e.target.files ?? []).slice(0, 5).map((f) => f.name) })} />
+                        )}
+                      </Field>
+                      {d.photoNames.length > 0 && <div className="chips">{d.photoNames.map((n) => <span key={n} className="photo-chip"><Icon name="camera" size={14} />{n}</span>)}</div>}
+                    </div>
+                  );
+                })}
               </Section>
 
               <Section title="방문 주소">
@@ -280,23 +346,37 @@ export function RequestFormPage() {
                 </div>
               </Section>
 
-              <Section title="고객 가능 시간">
-                {!joint && (
-                  <Field label="희망 방문 날짜" error={touched ? err.date : null} liveError={false} hint="새 날짜로 요청하면 업체가 승인하면서 접수 마감을 정해요.">
-                    {(fp) => <input {...fp} data-err-target="date" type="date" className="input" min={minDate} value={newDate} onChange={(e) => setNewDate(e.target.value)} />}
-                  </Field>
-                )}
-                <p className="small muted">방문받을 수 있는 시간 범위를 골라 주세요. 업체가 이 범위 안에서 방문(도착) 시각을 제안하고, 예약금을 결제하면 그 시각으로 예약이 확정돼요.</p>
-                <div data-err-region className="stack--sm stack">
-                <div role="group" aria-label="고객 가능 시간 (여러 개 선택 가능)" className="chips" aria-describedby={touched && err.slots ? 'req-slots-err' : undefined}>
-                  {slotOptions.map((s, si) => (
-                    <button key={s} type="button" className="chip" aria-pressed={slots.includes(s)} data-err-target={si === 0 ? 'slots' : undefined}
-                      aria-describedby={si === 0 && touched && err.slots ? 'req-slots-err' : undefined} onClick={() => setSlots(slots.includes(s) ? slots.filter((x) => x !== s) : [...slots, s])}>
-                      {slots.includes(s) && <Icon name="check" size={16} />}{formatSlot(s)}
-                    </button>
-                  ))}
-                </div>
-                {touched && err.slots && <p className="field__error" id="req-slots-err">{err.slots}</p>}
+              {/* 방문 가능한 시간: 제목은 카드 바깥, 날짜(새 날짜 요청)·안내·시각 칩·오류는 연락받을 정보·방문 주소와 같은 흰 카드 안 */}
+              <Section title="방문 가능한 시간">
+                <div className="card stack">
+                  {!joint && (
+                    <Field label="희망 방문 날짜" error={touched ? err.date : null} liveError={false} hint="새 날짜로 요청하면 업체가 승인하면서 접수 마감을 정해요.">
+                      {(fp) => <input {...fp} data-err-target="date" type="date" className="input" min={minDate} value={newDate} onChange={(e) => setNewDate(e.target.value)} />}
+                    </Field>
+                  )}
+                  <fieldset className="svc-pick time-pick" data-err-region aria-describedby="req-time-hint">
+                    <legend className="sr-only">방문 가능한 시각 (여러 개 선택 가능)</legend>
+                    <p className="small muted time-pick__hint" id="req-time-hint">방문 가능한 시간을 여러 개 선택하면, 업체가 그중 방문 시간을 제안해요.</p>
+                    {timeOptions.length === 0 ? (
+                      <Banner tone="warn" title="지금 선택할 수 있는 방문 시각이 없어요">다른 날짜나 일정을 골라 주세요.</Banner>
+                    ) : (
+                      <div className="svc-chips">
+                        {timeOptions.map((t, ti) => {
+                          const on = slots.includes(t);
+                          return (
+                            <label key={t} className="svc-chip">
+                              <input type="checkbox" className="svc-chip__input" checked={on} onChange={() => setSlots(on ? slots.filter((x) => x !== t) : [...slots, t])}
+                                data-err-target={ti === 0 ? 'slots' : undefined} aria-invalid={ti === 0 && touched && !!err.slots ? true : undefined}
+                                aria-describedby={ti === 0 && touched && err.slots ? 'req-slots-err' : undefined} />
+                              <span className="svc-chip__pill">{on && <Icon name="check" size={12} />}<span className="svc-chip__text">{t}</span></span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    )}
+                    {touched && err.slots && <p className="field__error" id="req-slots-err">{err.slots}</p>}
+                    {droppedTimes.length > 0 && <p className="xs muted" role="status">선택할 수 없게 된 시각({droppedTimes.join(', ')})은 선택을 해제했어요. 다시 골라 주세요.</p>}
+                  </fieldset>
                 </div>
               </Section>
 
@@ -306,9 +386,8 @@ export function RequestFormPage() {
                   <Button variant="secondary" block busy={action.busy} onClick={submit}>다시 보내기</Button>
                 </div>
               )}
-              <ActionBar note="업체 승인 후 예약금을 결제하면 예약이 확정돼요.">
-                <Button variant="primary" block type="submit" busy={action.busy} disabled={groupMissing}>요청 보내기</Button>
-              </ActionBar>
+              {/* 하단 고정 없이 마지막 입력 영역 다음(폼 간격 24px)에 둔다. 아래 여백은 본문 아래 여백(32px) */}
+              <Button variant="primary" block type="submit" busy={action.busy} disabled={groupMissing || noServices || noTimes}>요청 보내기</Button>
             </form>
           );
         }}

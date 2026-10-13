@@ -1,7 +1,7 @@
 /** 목업 저장소의 내부 상태. 화면은 이 파일을 직접 import하지 않는다. */
 import type {
   Address, AdditionalWork, SavedVisitAddress, Approval, Booking, Category, ChangeProposal, CustomerProfile, DelayNotice, Deduction,
-  FinalStatement, GroupRecord, MaterialOffer, MockNotice, ProviderReview, Refund, RepairRequest, Review, Transaction,
+  FinalStatement, GroupRecord, MaterialOffer, MockNotice, ProviderReview, ProviderService, Refund, RepairRequest, Review, Transaction,
 } from '../../domain/types';
 
 export interface AddressRecord extends Address {
@@ -22,6 +22,8 @@ export interface ProviderRecord {
   phone: string;
   afterServiceTerms: string[];
   reviews: ProviderReview[];
+  /** 업체 등록 작업(표시 순서). 시드는 providerServices.ts에서 채운다. 이전 목업 상태에는 없을 수 있다 */
+  services?: ProviderService[];
 }
 
 export type PayOutcome = 'success' | 'fail' | 'processing' | 'unknown';
@@ -41,6 +43,8 @@ export interface MockSettings {
 
 export interface MockDb {
   version: number;
+  /** 공동 예약 데모 일정 버전(scheduleMigration.ts). 없으면 1(이전 저장 상태) */
+  scheduleVersion?: number;
   now: string;
   seq: number;
   /** 이 목업 상태를 쓰는 로그인 계정(Supabase user id). 계정이 바뀌거나 로그아웃하면 새 데모 상태로 초기화한다. */

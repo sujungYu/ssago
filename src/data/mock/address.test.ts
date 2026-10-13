@@ -9,7 +9,7 @@ const repo = () => new MockRepository({ latencyMs: 0 });
 const code = async (p: Promise<unknown>) => { try { await p; return 'ok'; } catch (e) { return e instanceof RepoError ? e.code : 'other'; } };
 let n = 0;
 const req = (p: Partial<NewRequestInput> = {}): NewRequestInput => ({
-  providerId: 'p1', groupId: null, newDateWish: '2026-10-22', slots: ['09:00–12:00'], tasks: [{ title: '수전 교체', description: '', photoNames: [] }],
+  providerId: 'p1', groupId: null, newDateWish: '2026-10-22', slots: ['09:00', '10:00'], tasks: [{ serviceId: 'sv-p1-faucet', description: '', photoNames: [] }],
   addressId: 'ad-apt', addressDetail: '301동 1204호', saveAddressForNext: false, contact: { name: '김온다', phone: '010-1234-5678' }, idempotencyKey: `addr-${++n}`, ...p,
 });
 

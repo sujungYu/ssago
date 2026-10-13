@@ -36,11 +36,11 @@ describe('결제 전 제안 시각 → 결제 후 확정 시각', () => {
     expect(ap.request.bookingId).toBeUndefined();
     const res = await r.simulateDepositPayment({ requestId: 'rq-4', approvalVersion: ap.approval.version, idempotencyKey: 'pay-vt' });
     const b = (await r.getBooking(res.bookingId!)).booking;
-    expect(b.visitDate).toBe('2026-10-16');
+    expect(b.visitDate).toBe('2026-10-20');
     expect(b.visitTime).toBe('14:00');
     expect(b.customerSlots).toEqual(['13:00–16:00']);
     // 예약 알림·목록에도 같은 방문 시각
-    expect(r.__db().notices[0].title).toBe('예약이 확정됐어요 · 방문 예정 10월 16일 (금) 14:00');
+    expect(r.__db().notices[0].title).toBe('예약이 확정됐어요 · 방문 예정 10월 20일 (화) 14:00');
     const item = (await r.listBookings()).find((x) => x.booking.id === b.id)!;
     expect(item.booking.visitTime).toBe('14:00');
   });
@@ -101,12 +101,12 @@ describe('업체 일정 변경 제안', () => {
     const r = repo(); const ctl = new DevController(r);
     expect(ctl.proposeProviderChange('bk-k1', '', '15:00').ok).toBe(true);
     const p = r.__db().proposals.at(-1)!;
-    expect(p.oldVisit).toEqual({ date: '2026-10-17', time: '14:00' });
+    expect(p.oldVisit).toEqual({ date: '2026-10-19', time: '14:00' });
     expect((await r.getBooking('bk-k1')).booking.visitTime).toBe('14:00');
     await r.respondToProposal(p.id, 'accept', 'acc-2');
     const b = (await r.getBooking('bk-k1')).booking;
-    expect([b.visitDate, b.visitTime]).toEqual(['2026-10-17', '15:00']);
-    expect(r.__db().notices[0].title).toBe('일정 변경이 확정됐어요 · 방문 예정 10월 17일 (토) 15:00');
+    expect([b.visitDate, b.visitTime]).toEqual(['2026-10-19', '15:00']);
+    expect(r.__db().notices[0].title).toBe('일정 변경이 확정됐어요 · 방문 예정 10월 19일 (월) 15:00');
   });
 });
 

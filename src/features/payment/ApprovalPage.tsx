@@ -73,12 +73,12 @@ function Panel({ v, reload }: { v: ApprovalView; reload: () => void }) {
           <KV rows={rc ? [
             { k: '이전 일정', v: <span>{formatDate(ap.visitDate)} <span className="muted">(종료됨)</span></span> },
             { k: '업체가 제안한 새 방문 시각', v: <VisitText date={rc.newVisitDate} time={rc.newVisitTime} strong /> },
-            { k: '고객 가능 시간', v: slotsText(v.request.slots) },
+            { k: '방문 가능한 시간', v: slotsText(v.request.slots) },
             { k: '새 접수 마감', v: <span className="nowrap">{formatDateTime(rc.newCloseAt)}</span> },
             { k: '결제 기한', v: <span className="nowrap">{formatDateTime(ap.paymentDeadline)}</span> },
           ] : [
             { k: '업체가 제안한 방문 시각', v: <VisitText date={ap.visitDate} time={ap.visitTime} strong /> },
-            { k: '고객 가능 시간', v: slotsText(v.request.slots) },
+            { k: '방문 가능한 시간', v: slotsText(v.request.slots) },
             { k: '접수 마감', v: <span className="nowrap">{formatDateTime(ap.groupCloseAt)}</span> },
             { k: '결제 기한', v: <span><span className="nowrap">{formatDateTime(ap.paymentDeadline)}</span><br /><span className="muted xs">{formatRemaining(now, ap.paymentDeadline)}</span></span> },
           ]} />

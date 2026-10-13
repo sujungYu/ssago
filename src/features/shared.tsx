@@ -41,7 +41,7 @@ export const REFUND_STATUS: Record<RefundStatus, { label: string; tone: Tone; hi
 
 export const TX_KIND_LABEL = { deposit: '예약금', material_prepay: '자재비 선결제', change_shortfall: '일정 변경 부족분', balance: '최종 잔금' } as const;
 
-/** 고객 가능 시간 표시(13:00~16:00). 방문 시각으로 쓰지 않는다. */
+/** 방문 가능한 시간 표시: 새 요청은 고른 정확한 시각(09:00, 14:00), 이전 요청은 범위(13:00~16:00). 확정 방문 시각으로 쓰지 않는다. */
 export const slotsText = (slots: TimeSlot[]) => formatSlots(slots);
 
 /**

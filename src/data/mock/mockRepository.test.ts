@@ -37,7 +37,7 @@ describe('탐색·개인정보', () => {
 });
 
 describe('요청', () => {
-  const input = (key: string) => ({ providerId: 'p1', groupId: 'g1', slots: ['09:00–12:00'], tasks: [{ title: '수전 교체', description: '', photoNames: [] }], addressId: 'ad-apt', addressDetail: '301동 1204호', saveAddressForNext: false, contact: { name: '김온다', phone: '01012345678' }, idempotencyKey: key });
+  const input = (key: string) => ({ providerId: 'p1', groupId: 'g1', slots: ['09:00'], tasks: [{ serviceId: 'sv-p1-faucet', description: '', photoNames: [] }], addressId: 'ad-apt', addressDetail: '301동 1204호', saveAddressForNext: false, contact: { name: '김온다', phone: '01012345678' }, idempotencyKey: key });
   it('같은 키로 두 번 제출해도 요청은 하나', async () => {
     const r = repo(); const before = (await r.listRequests()).flatMap((b) => b.items).length;
     const a = await r.createRequest(input('k1')); const b = await r.createRequest(input('k1'));
@@ -49,6 +49,31 @@ describe('요청', () => {
   });
   it('작업 항목이 없으면 거부', async () => {
     expect(await code(repo().createRequest({ ...input('k3'), tasks: [] }))).toBe('invalid');
+  });
+  it('업체 등록 작업: 상세에 표시 순서대로 제공, 다른 업체 작업·중복은 거부', async () => {
+    const r = repo();
+    expect((await r.getProvider('p1', 'ad-apt')).services.map((s) => s.name)).toEqual(['수전 교체', '샤워기 교체', '배수 트랩 교체', '배수구 막힘 수리', '세면대 부속 교체', '실리콘 재시공']);
+    expect((await r.getProvider('p3', 'ad-apt')).services[0]).toEqual({ id: 'sv-p3-light', name: '조명 교체' });
+    expect(await code(r.createRequest({ ...input('k4'), tasks: [{ serviceId: 'sv-p3-light', description: '', photoNames: [] }] }))).toBe('invalid');
+    const one = { serviceId: 'sv-p1-faucet', description: '', photoNames: [] };
+    expect(await code(r.createRequest({ ...input('k5'), tasks: [one, one] }))).toBe('invalid');
+  });
+  it('고른 작업 ID와 요청 당시 작업명을 저장(업체 목록 순서), 이후 업체가 이름을 바꿔도 과거 요청 제목은 그대로', async () => {
+    const r = repo();
+    const c = await r.createRequest({ ...input('k6'), tasks: [
+      { serviceId: 'sv-p1-silicone', description: '욕실 벽', photoNames: [] },
+      { serviceId: 'sv-p1-faucet', description: '주방·욕실 각각', photoNames: ['a.jpg'] },
+    ] });
+    expect(c.tasks.map((t) => [t.serviceId, t.title, t.description, t.photoNames])).toEqual([
+      ['sv-p1-faucet', '수전 교체', '주방·욕실 각각', ['a.jpg']], ['sv-p1-silicone', '실리콘 재시공', '욕실 벽', []],
+    ]);
+    r.__db().providers.find((p) => p.id === 'p1')!.services![0].name = '수전 교체(이름 변경)';
+    expect((await r.getRequest(c.id)).request.tasks[0].title).toBe('수전 교체');
+    expect((await r.getProvider('p1', 'ad-apt')).services[0].name).toBe('수전 교체(이름 변경)');
+  });
+  it('이전 직접 입력 요청(작업 ID 없음)도 그대로 조회', async () => {
+    const d = await repo().getRequest('rq-3');
+    expect(d.request.tasks.map((t) => [t.serviceId, t.title])).toEqual([[undefined, '욕실 세면대 수전 교체'], [undefined, '배수 트랩 교체']]);
   });
 });
 
@@ -171,13 +196,13 @@ describe('계정별 목업 상태', () => {
   it('다른 계정으로 바뀌면 이전 계정이 만든 요청이 남지 않고, 같은 계정이면 유지된다', async () => {
     const r = repo();
     r.__switchOwner('user-a');
-    const created = await r.createRequest({ providerId: 'p1', groupId: 'g1', slots: ['09:00–12:00'], tasks: [{ title: 'A의 요청', description: '', photoNames: [] }], addressId: 'ad-apt', addressDetail: '1동 1호', saveAddressForNext: true, contact: { name: '김온다', phone: '01012345678' }, idempotencyKey: 'own-1' });
+    const created = await r.createRequest({ providerId: 'p1', groupId: 'g1', slots: ['09:00'], tasks: [{ serviceId: 'sv-p1-shower', description: 'A의 요청', photoNames: [] }], addressId: 'ad-apt', addressDetail: '1동 1호', saveAddressForNext: true, contact: { name: '김온다', phone: '01012345678' }, idempotencyKey: 'own-1' });
     r.__switchOwner('user-a');
-    expect((await r.getRequest(created.id)).request.tasks[0].title).toBe('A의 요청');
+    expect((await r.getRequest(created.id)).request.tasks[0].description).toBe('A의 요청');
     r.__switchOwner(null); // 로그아웃
     expect(await code(r.getRequest(created.id))).toBe('not_found');
     r.__switchOwner('user-b');
-    const titles = (await r.listRequests()).flatMap((b) => b.taskTitles);
+    const titles = (await r.listRequests()).flatMap((b) => b.items.flatMap((i) => i.request.tasks.map((t) => t.description)));
     expect(titles).not.toContain('A의 요청');
     expect(r.__db().ownerAccountId).toBe('user-b');
   });

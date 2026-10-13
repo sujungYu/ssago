@@ -73,6 +73,8 @@ export interface ProviderDetail extends ProviderSummary {
   afterServiceTerms: string[]; // 업체가 직접 제시하는 사후 조건(플랫폼 공통 보증 아님)
   reviews: ProviderReview[];
   groups: PublicGroup[]; // 현재 주소로 참여 가능한 열린 그룹만
+  /** 업체 등록 작업(표시 순서). 비어 있으면 요청서에서 작업을 고를 수 없다 */
+  services: ProviderService[];
 }
 
 /** 공개 가능한 집계 정보만 담는다. 타 고객 주소·기준 좌표·작업 내용·정확한 거리는 포함하지 않는다. */
@@ -100,8 +102,17 @@ export type RequestStatus =
   | 'closed_other_booking'
   | 'booked';
 
+/** 업체가 등록한 작업(요청서의 작업 선택 칩). 등록했다고 작업 가능 여부·가격이 확정되지 않는다(업체 검토·견적은 그대로). */
+export interface ProviderService {
+  id: string;
+  name: string;
+}
+
 export interface TaskItem {
   id: string;
+  /** 고른 업체 등록 작업 ID. 없으면 작업명을 직접 입력하던 이전 방식으로 만든 요청 */
+  serviceId?: string;
+  /** 작업명. 등록 작업을 고른 요청은 요청 당시 작업명을 그대로 보관한다(업체가 나중에 이름을 바꿔도 이 요청의 제목은 그대로) */
   title: string;
   description: string;
   photoNames: string[]; // 목업: 파일명만 보관

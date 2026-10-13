@@ -7,7 +7,9 @@ const WEEK = ['일', '월', '화', '수', '목', '금', '토'];
 
 /**
  * 공동 예약 일정 월 캘린더(외부 라이브러리 없음). 신청 가능한 공동 예약이 있는 날짜만 누를 수 있다.
- * 상태는 색만으로 구분하지 않는다: 가능 = 굵은 블루 숫자 + 점, 선택 = 채운 블루 칸 + 체크, 오늘 = ‘오늘’ 글자 + 테두리.
+ * 머리: 왼쪽 ‘2026년 10월’ + 아래 안내, 오른쪽 이전·다음 달 버튼. 날짜 칸은 같은 크기(누르는 영역 44px 이상)이고 숫자는 원 가운데:
+ * 선택 = 블루 원·흰 숫자, 신청 가능 = 연한 블루 원·블루 숫자, 불가 = 옅은 회색 숫자(누를 수 없음), 오늘 = 얇은 원 테두리 + 작은 ‘오늘’.
+ * 오늘이 신청 가능·선택이어도 원 채움(상태)과 바깥 테두리(오늘)가 겹치지 않게 함께 보인다. 상태는 각 날짜의 접근성 이름으로도 전달한다(범례 없음).
  * 키보드: Tab으로 들어와 방향키(←→ 하루, ↑↓ 한 주)·Home·End로 신청 가능한 날짜 사이를 이동하고 Enter·Space로 고른다.
  */
 export function JointCalendar({ month, range, counts, today, selected, onMonth, onSelect }: {
@@ -43,9 +45,14 @@ export function JointCalendar({ month, range, counts, today, selected, onMonth, 
   return (
     <div className="jcal">
       <div className="jcal__head">
-        <button type="button" className="icon-btn" aria-label="이전 달" disabled={!canPrev} onClick={() => onMonth(addMonths(month, -1))}><Icon name="back" /></button>
-        <h3 className="jcal__title" aria-live="polite">{month.year}년 {month.month}월</h3>
-        <button type="button" className="icon-btn jcal__next" aria-label="다음 달" disabled={!canNext} onClick={() => onMonth(addMonths(month, 1))}><Icon name="back" /></button>
+        <div className="jcal__heading">
+          <h3 className="jcal__title" aria-live="polite">{month.year}년 {month.month}월</h3>
+          <p className="jcal__hint">신청 가능한 날짜를 선택해 주세요.</p>
+        </div>
+        <div className="jcal__nav">
+          <button type="button" className="jcal__navbtn" aria-label="이전 달" disabled={!canPrev} onClick={() => onMonth(addMonths(month, -1))}><Icon name="back" size={18} /></button>
+          <button type="button" className="jcal__navbtn jcal__next" aria-label="다음 달" disabled={!canNext} onClick={() => onMonth(addMonths(month, 1))}><Icon name="back" size={18} /></button>
+        </div>
       </div>
       <table className="jcal__grid" ref={gridRef} aria-label={`${month.year}년 ${month.month}월 공동 예약 일정`}>
         <thead><tr>{WEEK.map((w) => <th key={w} scope="col" abbr={`${w}요일`}>{w}</th>)}</tr></thead>
@@ -64,7 +71,7 @@ export function JointCalendar({ month, range, counts, today, selected, onMonth, 
                       aria-label={dayLabel(d, today, count, on)} tabIndex={d === tabStop ? 0 : -1}
                       onClick={() => onSelect(d)} onKeyDown={(e) => onKey(e, d)}>
                       <span className="jcal__num" aria-hidden>{Number(d.slice(8))}</span>
-                      <span className="jcal__mark" aria-hidden>{on ? <Icon name="check" size={12} /> : count > 0 ? <span className="jcal__dot" /> : isToday ? '오늘' : null}</span>
+                      <span className="jcal__mark" aria-hidden>{isToday ? '오늘' : null}</span>
                     </button>
                   </td>
                 );
@@ -73,11 +80,6 @@ export function JointCalendar({ month, range, counts, today, selected, onMonth, 
           ))}
         </tbody>
       </table>
-      <p className="jcal__legend xs muted" aria-hidden>
-        <span><span className="jcal__dot" /> 신청 가능</span>
-        <span><span className="jcal__legend-on"><Icon name="check" size={10} /></span> 선택한 날짜</span>
-        <span><span className="jcal__legend-today">오늘</span></span>
-      </p>
     </div>
   );
 }

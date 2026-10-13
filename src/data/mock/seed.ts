@@ -8,6 +8,8 @@ import type {
   StatementItem, TaskItem, Transaction, TxKind, Won, VisitAddress,
 } from '../../domain/types';
 import { DEFAULT_SETTINGS, type AddressRecord, type MockDb, type ProviderRecord } from './db';
+import { PROVIDER_SERVICES } from './providerServices';
+import { DEMO_SCHEDULE_VERSION } from './scheduleMigration';
 
 export const MOCK_NOW = '2026-10-13T19:00:00+09:00';
 const k = (md: string, hm = '00:00') => `2026-${md}T${hm}:00+09:00`;
@@ -116,20 +118,40 @@ function group(p: Partial<GroupRecord> & Pick<GroupRecord, 'id' | 'providerId' |
 }
 
 const groups: GroupRecord[] = [
-  // 열린 그룹(참여 대상)
-  group({ id: 'g1', providerId: 'p1', date: ymd('10-16'), closeAt: k('10-15', '18:00'), totalTripFee: 50000, capacity: 6, confirmedHouseholds: 3, pendingSeats: 1, anchorKey: 'complex:haessal3' }),
-  group({ id: 'g2', providerId: 'p1', date: ymd('10-20'), closeAt: k('10-19', '18:00'), totalTripFee: 50000, capacity: 5, anchorKey: 'radius:dalbit-a' }),
-  group({ id: 'g3', providerId: 'p1', date: ymd('10-17'), closeAt: k('10-16', '18:00'), totalTripFee: 50000, capacity: 4, confirmedHouseholds: 3, pendingSeats: 1, anchorKey: 'complex:haessal3' }),
-  group({ id: 'g4', providerId: 'p2', date: ymd('10-16'), closeAt: k('10-15', '18:00'), totalTripFee: 60000, capacity: 5, confirmedHouseholds: 2, pendingSeats: 1, slots: ['13:00–16:00'], anchorKey: 'complex:haessal3' }),
-  group({ id: 'g5', providerId: 'p3', date: ymd('10-17'), closeAt: k('10-16', '18:00'), totalTripFee: 40000, capacity: 4, confirmedHouseholds: 3, slots: ['13:00–16:00'], anchorKey: 'complex:haessal3' }),
+  // 열린 그룹(참여 대상) — 공동 예약 데모 일정. 모든 업체가 2026-10-19(월)~10-25(일) 중 서로 다른 날짜 3개에 날짜당 하나씩(고정 값, 새로고침해도 같음).
+  // 접수 마감은 방문 전날 18:00(가장 늦은 마감, latestCloseAt) 이전. 같은 날 여러 그룹 구조는 그대로 지원하지만 데모에서는 한 주소에서 날짜당 하나만 보이게 둔다.
+  // 다른 지역 데모 기록용 그룹(g6 = 달빛길 단독주택 반경, g7 = 푸른숲 2단지)은 같은 날짜에 햇살마을 그룹(g4c·g5b)을 함께 둔다 — 업체 날짜는 3개 그대로, 기본 데모 주소(햇살마을)에서는 모든 업체가 3개 날짜·날짜당 하나로 보인다.
+  // p1 한빛설비 19·21·23 / p2 새봄수리 20·22·24 / p3 밝은전기 19·22·25 / p4 든든문고리 21·22·24 / p5 깔끔마감 19·20·23
+  // p6 손맵시 20·23·24 / p7 맑은창방충망 20·23·25 / p8 반듯설치 21·24·25
+  group({ id: 'g1', providerId: 'p1', date: ymd('10-19'), closeAt: k('10-18', '18:00'), totalTripFee: 50000, capacity: 6, confirmedHouseholds: 3, pendingSeats: 1, anchorKey: 'complex:haessal3' }),
+  group({ id: 'g1b', providerId: 'p1', date: ymd('10-21'), closeAt: k('10-20', '12:00'), totalTripFee: 45000, capacity: 4, confirmedHouseholds: 1, slots: ['13:00–16:00'], anchorKey: 'complex:haessal3' }),
+  group({ id: 'g1n', providerId: 'p1', date: ymd('10-23'), closeAt: k('10-22', '18:00'), totalTripFee: 50000, capacity: 5, confirmedHouseholds: 2, anchorKey: 'complex:haessal3' }),
+  group({ id: 'g4', providerId: 'p2', date: ymd('10-20'), closeAt: k('10-19', '18:00'), totalTripFee: 60000, capacity: 5, confirmedHouseholds: 2, pendingSeats: 1, slots: ['13:00–16:00'], anchorKey: 'complex:haessal3' }),
+  group({ id: 'g2a', providerId: 'p2', date: ymd('10-22'), closeAt: k('10-21', '18:00'), totalTripFee: 60000, capacity: 4, confirmedHouseholds: 1, anchorKey: 'complex:haessal3' }),
+  group({ id: 'g2b', providerId: 'p2', date: ymd('10-24'), closeAt: k('10-23', '18:00'), totalTripFee: 55000, capacity: 5, confirmedHouseholds: 3, slots: ['09:00–12:00'], anchorKey: 'complex:haessal3' }),
+  group({ id: 'g5', providerId: 'p3', date: ymd('10-19'), closeAt: k('10-18', '18:00'), totalTripFee: 40000, capacity: 4, confirmedHouseholds: 3, slots: ['13:00–16:00'], anchorKey: 'complex:haessal3' }),
+  group({ id: 'g3a', providerId: 'p3', date: ymd('10-22'), closeAt: k('10-21', '18:00'), totalTripFee: 40000, capacity: 5, confirmedHouseholds: 2, anchorKey: 'complex:haessal3' }),
+  group({ id: 'g3b', providerId: 'p3', date: ymd('10-25'), closeAt: k('10-24', '18:00'), totalTripFee: 40000, capacity: 4, confirmedHouseholds: 1, slots: ['09:00–12:00'], anchorKey: 'complex:haessal3' }),
+  group({ id: 'g4a', providerId: 'p4', date: ymd('10-21'), closeAt: k('10-20', '18:00'), totalTripFee: 45000, capacity: 5, confirmedHouseholds: 2, anchorKey: 'complex:haessal3' }),
   group({ id: 'g6', providerId: 'p4', date: ymd('10-22'), closeAt: k('10-21', '18:00'), totalTripFee: 45000, capacity: 5, confirmedHouseholds: 1, anchorKey: 'radius:dalbit-a' }),
-  group({ id: 'g7', providerId: 'p5', date: ymd('10-16'), closeAt: k('10-15', '18:00'), totalTripFee: 30000, capacity: 4, confirmedHouseholds: 1, anchorKey: 'complex:pureun2' }),
+  group({ id: 'g4c', providerId: 'p4', date: ymd('10-22'), closeAt: k('10-21', '18:00'), totalTripFee: 45000, capacity: 4, confirmedHouseholds: 2, slots: ['09:00–12:00'], anchorKey: 'complex:haessal3' }),
+  group({ id: 'g4b', providerId: 'p4', date: ymd('10-24'), closeAt: k('10-23', '18:00'), totalTripFee: 45000, capacity: 4, confirmedHouseholds: 1, slots: ['13:00–16:00'], anchorKey: 'complex:haessal3' }),
+  group({ id: 'gn-p5', providerId: 'p5', date: ymd('10-19'), closeAt: k('10-18', '18:00'), totalTripFee: 50000, capacity: 5, confirmedHouseholds: 2, slots: ['09:00–12:00'], anchorKey: 'complex:haessal3' }),
+  group({ id: 'g7', providerId: 'p5', date: ymd('10-20'), closeAt: k('10-19', '18:00'), totalTripFee: 30000, capacity: 4, confirmedHouseholds: 1, anchorKey: 'complex:pureun2' }),
+  group({ id: 'g5b', providerId: 'p5', date: ymd('10-20'), closeAt: k('10-19', '18:00'), totalTripFee: 50000, capacity: 5, confirmedHouseholds: 1, anchorKey: 'complex:haessal3' }),
+  group({ id: 'g5a', providerId: 'p5', date: ymd('10-23'), closeAt: k('10-22', '18:00'), totalTripFee: 50000, capacity: 4, confirmedHouseholds: 1, anchorKey: 'complex:haessal3' }),
+  group({ id: 'g6a', providerId: 'p6', date: ymd('10-20'), closeAt: k('10-19', '18:00'), totalTripFee: 50000, capacity: 4, confirmedHouseholds: 1, anchorKey: 'complex:haessal3' }),
+  group({ id: 'g6b', providerId: 'p6', date: ymd('10-23'), closeAt: k('10-22', '18:00'), totalTripFee: 50000, capacity: 5, confirmedHouseholds: 2, slots: ['13:00–16:00'], anchorKey: 'complex:haessal3' }),
+  group({ id: 'g6c', providerId: 'p6', date: ymd('10-24'), closeAt: k('10-23', '18:00'), totalTripFee: 50000, capacity: 4, anchorKey: 'complex:haessal3' }),
+  group({ id: 'g7a', providerId: 'p7', date: ymd('10-20'), closeAt: k('10-19', '18:00'), totalTripFee: 35000, capacity: 5, confirmedHouseholds: 2, anchorKey: 'complex:haessal3' }),
+  group({ id: 'g7b', providerId: 'p7', date: ymd('10-23'), closeAt: k('10-22', '18:00'), totalTripFee: 35000, capacity: 4, confirmedHouseholds: 1, slots: ['13:00–16:00'], anchorKey: 'complex:haessal3' }),
+  group({ id: 'g7c', providerId: 'p7', date: ymd('10-25'), closeAt: k('10-24', '18:00'), totalTripFee: 35000, capacity: 4, anchorKey: 'complex:haessal3' }),
+  group({ id: 'g8a', providerId: 'p8', date: ymd('10-21'), closeAt: k('10-20', '18:00'), totalTripFee: 40000, capacity: 4, confirmedHouseholds: 1, anchorKey: 'complex:haessal3' }),
+  group({ id: 'g8b', providerId: 'p8', date: ymd('10-24'), closeAt: k('10-23', '18:00'), totalTripFee: 40000, capacity: 5, confirmedHouseholds: 2, slots: ['09:00–12:00'], anchorKey: 'complex:haessal3' }),
+  group({ id: 'g8c', providerId: 'p8', date: ymd('10-25'), closeAt: k('10-24', '18:00'), totalTripFee: 40000, capacity: 4, anchorKey: 'complex:haessal3' }),
+  // 시나리오 그룹(캘린더에 보이지 않음): g8 = 업체 사정으로 종료된 그룹(rq-10 조건 재확인), g9 = 그 대신 만든 새 그룹(pending-new — 주소 범위 판단 전)
   group({ id: 'g8', providerId: 'p6', date: ymd('10-16'), closeAt: k('10-15', '18:00'), totalTripFee: 50000, capacity: 4, anchorKey: 'complex:haessal3', ended: true }),
   group({ id: 'g9', providerId: 'p6', date: ymd('10-19'), closeAt: k('10-18', '18:00'), totalTripFee: 60000, capacity: 4, anchorKey: 'pending-new', slots: ['09:00–12:00'] }),
-  group({ id: 'gn-p5', providerId: 'p5', date: ymd('10-19'), closeAt: k('10-18', '18:00'), totalTripFee: 50000, capacity: 5, confirmedHouseholds: 2, slots: ['09:00–12:00'], anchorKey: 'complex:haessal3' }),
-  // 업체 상세 캘린더: 같은 날(10/16) 시간·출장비·마감이 다른 두 번째 그룹, 다음 달 일정
-  group({ id: 'g1b', providerId: 'p1', date: ymd('10-16'), closeAt: k('10-15', '12:00'), totalTripFee: 45000, capacity: 4, confirmedHouseholds: 1, slots: ['13:00–16:00'], anchorKey: 'complex:haessal3' }),
-  group({ id: 'g1n', providerId: 'p1', date: ymd('11-03'), closeAt: k('11-02', '18:00'), totalTripFee: 50000, capacity: 5, confirmedHouseholds: 2, anchorKey: 'complex:haessal3' }),
   // 마감된 그룹(확정 출장비 고정)
   group({ id: 'gc-p1', providerId: 'p1', date: ymd('10-14'), closeAt: k('10-13', '18:00'), totalTripFee: 50000, confirmedHouseholds: 4, closed: true, finalPerHouseholdFee: 12500, slots: ['09:00–12:00'], anchorKey: 'complex:haessal3' }),
   group({ id: 'gc-p4', providerId: 'p4', date: ymd('10-13'), closeAt: k('10-12', '18:00'), totalTripFee: 45000, confirmedHouseholds: 3, closed: true, finalPerHouseholdFee: 15000, slots: ['13:00–16:00'], anchorKey: 'complex:haessal3' }),
@@ -198,13 +220,13 @@ requests.push(
 );
 
 approvals.push(
-  approval({ requestId: 'rq-3', groupId: 'g1', approvedAt: k('10-13', '15:00'), groupCloseAt: k('10-15', '18:00'), visitDate: ymd('10-16'), visitTime: '10:00', totalTripFee: 50000,
+  approval({ requestId: 'rq-3', groupId: 'g1', approvedAt: k('10-13', '15:00'), groupCloseAt: k('10-18', '18:00'), visitDate: ymd('10-19'), visitTime: '10:00', totalTripFee: 50000,
     tasks: [{ title: '욕실 세면대 수전 교체', note: '수전 본체와 급수 호스 교체', estimate: 50000 }, { title: '배수 트랩 교체', note: '트랩과 연결 부품 교체', estimate: 30000 }],
     materialNote: '일반 기성 부품은 최종 정산 때 합산해요. 맞춤 자재가 필요하면 별도 안내 후 동의를 받아요.' }),
-  approval({ requestId: 'rq-4', groupId: 'g4', approvedAt: k('10-13', '17:00'), groupCloseAt: k('10-15', '18:00'), visitDate: ymd('10-16'), visitTime: '14:00', totalTripFee: 60000, partsEstimate: 25000,
+  approval({ requestId: 'rq-4', groupId: 'g4', approvedAt: k('10-13', '17:00'), groupCloseAt: k('10-19', '18:00'), visitDate: ymd('10-20'), visitTime: '14:00', totalTripFee: 60000, partsEstimate: 25000,
     tasks: [{ title: '욕실 세면대 수전 교체', note: '수전 본체 교체', estimate: 40000 }, { title: '배수 트랩 교체', note: '트랩 교체', estimate: 30000 }],
     discountNote: '두 작업을 함께 맡기면 작업비 5,000원 할인 (다른 할인과 중복 적용 불가)' }),
-  approval({ requestId: 'rq-7', groupId: 'g7', approvedAt: k('10-11', '09:00'), groupCloseAt: k('10-12', '18:00'), visitDate: ymd('10-13'), visitTime: '10:00', totalTripFee: 30000, partsEstimate: 5000,
+  approval({ requestId: 'rq-7', groupId: 'g7', approvedAt: k('10-11', '09:00'), groupCloseAt: k('10-19', '18:00'), visitDate: ymd('10-20'), visitTime: '10:00', totalTripFee: 30000, partsEstimate: 5000,
     tasks: [{ title: '욕실 실리콘 보수', note: '기존 실리콘 제거 후 재시공', estimate: 40000 }] }),
   approval({ requestId: 'rq-10', groupId: 'g8', approvedAt: k('10-13', '13:00'), groupCloseAt: k('10-15', '18:00'), visitDate: ymd('10-16'), visitTime: '10:30', totalTripFee: 50000, partsEstimate: 15000,
     tasks: [{ title: '거실 선반 설치', note: '벽걸이 선반 2개 설치', estimate: 45000 }],
@@ -260,7 +282,7 @@ function addStatement(bookingId: string, status: FinalStatement['status'], items
 }
 
 // 진행 중
-addBooking({ id: 'bk-k1', req: 'rq-k1', provider: 'p3', group: 'g5', visit: ymd('10-17'), window: '13:00–16:00', time: '14:00', tasks: [tk('거실 조명 교체', '거실 등 두 개')], deposit: 40000, labor: 45000, parts: 15000 });
+addBooking({ id: 'bk-k1', req: 'rq-k1', provider: 'p3', group: 'g5', visit: ymd('10-19'), window: '13:00–16:00', time: '14:00', tasks: [tk('거실 조명 교체', '거실 등 두 개')], deposit: 40000, labor: 45000, parts: 15000 });
 addBooking({ id: 'bk-k2', req: 'rq-k2', provider: 'p1', group: 'gc-p1', visit: ymd('10-14'), window: '09:00–12:00', time: '10:00', tasks: T_FAUCET(), deposit: 50000, labor: 50000, parts: 20000 });
 addBooking({ id: 'bk-k3', req: 'rq-k3', provider: 'p4', group: 'gc-p4', visit: ymd('10-13'), window: '13:00–16:00', time: '14:00', tasks: [tk('현관문 손잡이 교체', '손잡이가 헐겁습니다.')], deposit: 45000, labor: 35000, parts: 12000 });
 addBooking({ id: 'bk-k4', req: 'rq-k4', provider: 'p5', group: 'gc-p5', visit: ymd('10-14'), window: '13:00–16:00', time: '14:00', tasks: [tk('욕실 실리콘 보수', '곰팡이 제거 후 재시공')], deposit: 50000, labor: 40000, parts: 5000 });
@@ -276,7 +298,7 @@ addBooking({ id: 'bk-k12', req: 'rq-k12', provider: 'p2', group: 'gp-p2', visit:
 addBooking({ id: 'bk-k13', req: 'rq-k13', provider: 'p3', group: 'gp-p3', visit: ymd('10-09'), window: '09:00–12:00', time: '10:00', tasks: [tk('거실 조명 교체', '')], work: 'completed', deposit: 40000, created: k('10-04', '10:00') });
 addBooking({ id: 'bk-k14', req: 'rq-k14', provider: 'p1', group: 'gp-p1', visit: ymd('10-09'), window: '09:00–12:00', time: '10:00', tasks: [tk('욕실 수전 교체', '')], work: 'completed', deposit: 50000, created: k('10-04', '10:00') });
 // 취소
-addBooking({ id: 'bk-k15', req: 'rq-k15', provider: 'p5', group: 'g7', visit: ymd('10-16'), window: '09:00–12:00', time: '10:00', tasks: [tk('욕실 실리콘 보수', '')], status: 'cancelled', cancelledAt: k('10-12', '11:00'), cancelCause: 'customer', deposit: 30000, address: 'ad-apt2' });
+addBooking({ id: 'bk-k15', req: 'rq-k15', provider: 'p5', group: 'g7', visit: ymd('10-20'), window: '09:00–12:00', time: '10:00', tasks: [tk('욕실 실리콘 보수', '')], status: 'cancelled', cancelledAt: k('10-12', '11:00'), cancelCause: 'customer', deposit: 30000, address: 'ad-apt2' });
 addBooking({ id: 'bk-k16', req: 'rq-k16', provider: 'p5', group: 'gc-p5', visit: ymd('10-14'), window: '13:00–16:00', time: '14:00', tasks: [tk('줄눈 보수', '')], status: 'cancelled', cancelledAt: k('10-13', '18:30'), cancelCause: 'customer', deposit: 50000 });
 addBooking({ id: 'bk-k17', req: 'rq-k17', provider: 'p4', group: 'gc-p4', visit: ymd('10-13'), window: '13:00–16:00', time: '14:00', tasks: [tk('방충망 교체', '')], status: 'cancelled', cancelledAt: k('10-12', '19:00'), cancelCause: 'provider', deposit: 45000 });
 addBooking({ id: 'bk-k18', req: 'rq-k18', provider: 'p6', group: 'gc-p6', visit: ymd('10-14'), window: '09:00–12:00', time: '10:00', tasks: [tk('맞춤 선반 도어 교체', '')], status: 'cancelled', cancelledAt: k('10-13', '18:45'), cancelCause: 'customer', deposit: 50000 });
@@ -318,11 +340,13 @@ addStatement('bk-k14', 'settled', [{ kind: 'labor', label: '작업비', amount: 
 addRefund('bk-k14', 7500, '최종 금액 정산 · 선결제 초과분', 'completed', '10-10');
 
 const db: MockDb = {
-  version: 1, now: MOCK_NOW, seq: 100, ownerAccountId: null,
+  version: 1, scheduleVersion: DEMO_SCHEDULE_VERSION, now: MOCK_NOW, seq: 100, ownerAccountId: null,
   customer: { id: 'cu1', ...DEFAULT_CUSTOMER, phoneMasked: '010-****-0000' },
   // 사용자별 주소: 처음에는 탐색 주소·재사용 주소 모두 없음(첫 방문·첫 신청)
   exploreAddressId: null, savedVisitAddress: null,
-  addressBook, categories: CATEGORIES, providers, groups, requests, approvals, bookings, transactions, refunds, deductions,
+  addressBook, categories: CATEGORIES,
+  // 업체 등록 작업은 providerServices.ts에서 따로 관리하고 시드에서 업체에 붙인다
+  providers: providers.map((p) => ({ ...p, services: PROVIDER_SERVICES[p.id] ?? [] })), groups, requests, approvals, bookings, transactions, refunds, deductions,
   proposals: [
     {
       id: 'pr-k4', bookingId: 'bk-k4', origin: 'provider', status: 'proposed', free: 'provider',

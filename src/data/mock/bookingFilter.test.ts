@@ -54,7 +54,7 @@ describe('내 예약 조회(queryBookings)', () => {
     const r = repo();
     const ctx = await r.getCancelContext('bk-k1');
     await r.cancelBooking({ bookingId: 'bk-k1', expectedRefund: ctx.preview.refundTotal, idempotencyKey: 'cx-f' });
-    const res = await r.queryBookings({ tab: 'past', statusGroup: 'cancelled', visitFrom: '2026-10-17', visitTo: '2026-10-17' });
+    const res = await r.queryBookings({ tab: 'past', statusGroup: 'cancelled', visitFrom: '2026-10-19', visitTo: '2026-10-19' });
     expect(ids(res)).toEqual(['bk-k1']);
   });
   it('방문일 누락은 추정하지 않고 날짜 조건에서 제외(수를 알림), 전체 기간에는 유지', async () => {

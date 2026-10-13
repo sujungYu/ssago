@@ -6,6 +6,7 @@ import { expectedFeeForJoiner } from './pricing';
 import { MockRepository } from '../data/mock/mockRepository';
 import { DevController } from '../dev/devController';
 import { RepoError } from './errors';
+import { latestCloseAt } from './time';
 import type { PublicGroup } from './types';
 
 const NOW = '2026-10-13T19:00:00+09:00';
@@ -81,23 +82,48 @@ describe('카드 출장비(기존 정책과 같은 값)', () => {
 
 describe('날짜별 공동 예약 조회(목업)', () => {
   const repo = () => new MockRepository({ latencyMs: 0 });
-  it('그 날짜의 신청 가능한 그룹만(같은 날 여러 그룹, 자리 없는 그룹 제외)', async () => {
+  it('그 날짜의 신청 가능한 그룹만(데모: 한빛설비 19일 g1 · 21일 g1b · 23일 g1n, 날짜당 하나)', async () => {
     const r = repo();
-    expect((await r.listJointGroups('p1', 'ad-apt', '2026-10-16')).map((x) => x.id)).toEqual(['g1', 'g1b']);
-    expect(await r.listJointGroups('p1', 'ad-apt', '2026-10-17')).toEqual([]); // g3: 남은 자리 0
-    expect(await r.listJointGroups('p1', 'ad-far', '2026-10-16')).toEqual([]); // 주소 범위 밖
-    expect(await r.listJointGroups('p1', null, '2026-10-16')).toEqual([]);
+    for (const [d, id] of [['2026-10-19', 'g1'], ['2026-10-21', 'g1b'], ['2026-10-23', 'g1n']]) {
+      expect((await r.listJointGroups('p1', 'ad-apt', d)).map((x) => x.id)).toEqual([id]);
+    }
+    for (const d of ['2026-10-16', '2026-10-17', '2026-10-20', '2026-10-22']) expect(await r.listJointGroups('p1', 'ad-apt', d)).toEqual([]);
+    expect(await r.listJointGroups('p1', 'ad-far', '2026-10-19')).toEqual([]); // 주소 범위 밖
+    expect(await r.listJointGroups('p1', null, '2026-10-19')).toEqual([]);
+  });
+  it('데모 공동 예약: 모든 업체가 10/19~25 중 서로 다른 날짜 3개에 날짜당 하나, 마감은 방문 전날 18:00 이전, 기간 밖 열린 일정 없음', () => {
+    const r = repo();
+    const open = r.__db().groups.filter((g) => !g.closed && !g.ended && g.anchorKey !== 'pending-new');
+    const combos = new Set<string>();
+    for (const pid of ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8']) {
+      const gs = open.filter((g) => g.providerId === pid);
+      const dates = [...new Set(gs.map((g) => g.date))].sort();
+      expect(dates.length, pid).toBe(3); // 서로 다른 날짜 3개
+      const perArea = gs.map((g) => `${g.date}|${g.anchorKey}`);
+      expect(new Set(perArea).size, pid).toBe(perArea.length); // 같은 날짜·같은 단지(범위) 그룹은 하나
+      combos.add(dates.join(','));
+      for (const g of gs) {
+        expect(g.date >= '2026-10-19' && g.date <= '2026-10-25', g.id).toBe(true);
+        expect(new Date(g.closeAt) <= new Date(latestCloseAt(g.date)), g.id).toBe(true);
+      }
+    }
+    expect(combos.size).toBe(8); // 업체별 날짜 조합이 모두 다름
   });
   it('주소 판단이 불가하면 단정하지 않고 오류', async () => {
     const r = repo();
     new DevController(r).setSettings({ addressServiceDown: true });
     await expect(r.listJointGroups('p1', 'ad-apt', '2026-10-16')).rejects.toBeInstanceOf(RepoError);
   });
+  it('같은 날 여러 그룹도 그대로 모두 보여준다(합치거나 하나로 줄이지 않음)', async () => {
+    const r = repo();
+    const g = r.__db().groups.find((x) => x.id === 'g1b')!; g.date = '2026-10-19'; g.closeAt = '2026-10-18T12:00:00+09:00';
+    expect((await r.listJointGroups('p1', 'ad-apt', '2026-10-19')).map((x) => x.id)).toEqual(['g1', 'g1b']);
+  });
   it('마감 처리되거나 시간이 지나면 빠진다', async () => {
     const r = repo(); const dev = new DevController(r);
     dev.closeGroup('g1b');
-    expect((await r.listJointGroups('p1', 'ad-apt', '2026-10-16')).map((x) => x.id)).toEqual(['g1']);
-    dev.setNow('2026-10-15T18:00:00+09:00');
-    expect(await r.listJointGroups('p1', 'ad-apt', '2026-10-16')).toEqual([]);
+    expect(await r.listJointGroups('p1', 'ad-apt', '2026-10-21')).toEqual([]);
+    dev.setNow('2026-10-18T18:00:00+09:00');
+    expect(await r.listJointGroups('p1', 'ad-apt', '2026-10-19')).toEqual([]);
   });
 });

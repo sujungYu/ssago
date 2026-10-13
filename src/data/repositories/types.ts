@@ -6,6 +6,7 @@
  * 모든 상태 변경 메서드는 idempotencyKey를 받는다. 목업은 같은 키의 재호출에 기존 결과를 돌려주고,
  * 실제 구현은 서버에서 멱등성·권한·조건 버전·기한을 검증해야 한다. (에러 정책서 3, 5)
  */
+import type { SelectedTaskInput } from '../../domain/taskSelection';
 import type { RequestListQuery } from '../../domain/requestFilter';
 export type { RequestListQuery } from '../../domain/requestFilter';
 import type { TripFeeBasis } from '../../domain/bookingCost';
@@ -33,7 +34,8 @@ export interface NewRequestInput {
   groupId: string | null;
   newDateWish?: IsoDate;
   slots: TimeSlot[];
-  tasks: Omit<TaskItem, 'id'>[];
+  /** 고른 업체 등록 작업(ID)과 작업별 설명·사진. 작업명은 저장소가 업체 등록 작업에서 요청 당시 이름으로 채운다 */
+  tasks: SelectedTaskInput[];
   /** 방문 건물(기본 주소) — 정확한 주소 기준으로 공동 예약 참여 자격을 다시 확인한다 */
   addressId: string;
   /** 상세 주소(동·호수·층 등, 형식 자유, 단독주택은 비울 수 있음) */

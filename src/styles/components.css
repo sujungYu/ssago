@@ -11,6 +11,7 @@
 .app-header__brand { display: inline-flex; align-items: center; min-height: 44px; padding: 0 var(--sp-2); border-radius: var(--r-sm); color: var(--c-primary); text-decoration: none; flex: none; }
 .icon-btn { width: 44px; height: 44px; border: 0; background: transparent; border-radius: var(--r-sm); display: grid; place-items: center; color: var(--c-text); text-decoration: none; }
 .icon-btn:hover { background: var(--c-neutral-bg); }
+.icon-btn:disabled { color: var(--c-disabled-text); background: transparent; cursor: not-allowed; opacity: .5; }
 .top-nav { display: none; gap: var(--sp-1); margin-left: auto; }
 .top-nav a { display: inline-flex; align-items: center; padding: 10px 14px; border-radius: var(--r-pill); text-decoration: none; color: var(--c-text-2); font-weight: 600; white-space: nowrap; }
 .top-nav__home { gap: 7px; } /* 홈 아이콘(19px)과 ‘업체 찾기’ 사이. 아이콘은 currentColor라 기본·활성 색을 그대로 따른다 */
@@ -358,35 +359,45 @@ a.list-row:hover { background: #fafbfd; }
 .capsule--on .capsule__check { border-color: var(--c-primary); background: var(--c-primary); color: #fff; }
 
 /* ───────── 업체 상세: 공동 예약 캘린더 ───────── */
-/* 가능 = 굵은 블루 숫자 + 점, 선택 = 채운 블루 칸 + 체크, 오늘 = ‘오늘’ 글자 + 테두리, 불가 = 흐린 숫자(누를 수 없음) */
-.jcal { background: var(--c-surface); border: 1px solid var(--c-line); border-radius: var(--r-lg); padding: var(--sp-3); }
-.jcal__head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); margin-bottom: var(--sp-2); }
-.jcal__title { font-size: var(--fs-md); font-weight: 700; }
+/* 흰 둥근 카드. 머리 = 왼쪽 월 제목·안내 / 오른쪽 이전·다음 달(은은한 회색 둥근 버튼). 날짜 = 같은 크기 칸(44px 이상) 가운데 34px 원:
+   선택 = 블루 원·흰 숫자, 가능 = 연한 블루 원·블루 숫자, 불가 = 옅은 회색 숫자, 오늘 = 원 바깥 얇은 테두리 + 작은 ‘오늘’(상태 채움과 겹치지 않음). 범례 없음 */
+.jcal { background: var(--c-surface); border: 1px solid var(--c-line); border-radius: var(--r-lg); padding: var(--sp-4) var(--sp-3) var(--sp-3); min-width: 0; }
+.jcal__head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--sp-3); margin: 0 var(--sp-1) var(--sp-3); }
+.jcal__heading { min-width: 0; }
+.jcal__title { font-size: var(--fs-lg); font-weight: 700; line-height: 1.3; }
+.jcal__hint { font-size: var(--fs-sm); color: var(--c-text-2); margin-top: 2px; word-break: keep-all; }
+.jcal__nav { display: flex; gap: 6px; flex: none; }
+.jcal__navbtn {
+  width: 44px; height: 44px; border: 0; padding: 0; display: grid; place-items: center; cursor: pointer; color: var(--c-text);
+  background: var(--c-neutral-bg); border-radius: var(--r-md); transition: background-color .15s;
+}
+.jcal__navbtn:hover:not(:disabled) { background: var(--c-line); }
+.jcal__navbtn:disabled { color: var(--c-disabled-text); cursor: not-allowed; opacity: .5; }
+.jcal__navbtn:focus-visible { outline: 3px solid var(--c-focus); outline-offset: 2px; }
 .jcal__next svg { transform: rotate(180deg); }
-.icon-btn:disabled { color: var(--c-disabled-text); background: transparent; cursor: not-allowed; opacity: .5; }
-.jcal__grid { width: 100%; border-collapse: separate; border-spacing: 2px; table-layout: fixed; }
-.jcal__grid th { font-size: var(--fs-xs); font-weight: 600; color: var(--c-text-2); padding: 4px 0; }
-.jcal__grid td { padding: 0; text-align: center; }
+.jcal__grid { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.jcal__grid th { font-size: var(--fs-xs); font-weight: 600; color: var(--c-text-2); padding: 0 0 var(--sp-1); }
+.jcal__grid td { padding: 1px 0; text-align: center; }
 .jcal__day {
-  width: 100%; min-height: 48px; max-width: 56px; margin: 0 auto; border: 1px solid transparent; border-radius: var(--r-md); background: transparent;
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; padding: 4px 0; color: var(--c-disabled-text); line-height: 1.1;
+  position: relative; width: 100%; min-width: 44px; height: 50px; margin: 0 auto; padding: 3px 0 0; border: 0; border-radius: var(--r-md); background: transparent;
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 1px; color: var(--c-line-strong); line-height: 1;
 }
 .jcal__day:disabled { cursor: default; }
-.jcal__num { font-size: var(--fs-sm); }
-.jcal__mark { height: 12px; display: grid; place-items: center; font-size: 10px; font-weight: 700; }
-.jcal__dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--c-primary); }
-.jcal__day--open { color: var(--c-primary); background: var(--c-info-bg); cursor: pointer; }
-.jcal__day--open .jcal__num { font-weight: 800; }
-.jcal__day--open:hover { border-color: var(--c-primary); }
-.jcal__day--today { border-color: var(--c-line-strong); color: var(--c-text); }
-.jcal__day--today.jcal__day--open { color: var(--c-primary); border-color: var(--c-primary); }
-.jcal__day--on, .jcal__day--on:hover { background: var(--c-primary); border-color: var(--c-primary-press); color: #fff; }
-.jcal__day--on .jcal__dot { background: #fff; }
-.jcal__day:focus-visible { outline: 3px solid var(--c-focus); outline-offset: 1px; }
-.jcal__legend { display: flex; flex-wrap: wrap; gap: var(--sp-3); margin-top: var(--sp-2); }
-.jcal__legend > span { display: inline-flex; align-items: center; gap: 4px; }
-.jcal__legend-on { display: inline-grid; place-items: center; width: 14px; height: 14px; border-radius: 4px; background: var(--c-primary); color: #fff; }
-.jcal__legend-today { font-size: 10px; font-weight: 700; padding: 0 4px; border: 1px solid var(--c-line-strong); border-radius: 4px; }
+.jcal__num { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; font-size: var(--fs-sm); font-weight: 500; transition: background-color .15s; }
+.jcal__mark { height: 10px; font-size: 9px; font-weight: 700; line-height: 10px; color: var(--c-text-2); }
+.jcal__day--open { color: var(--c-primary); cursor: pointer; }
+.jcal__day--open .jcal__num { background: var(--c-info-bg); font-weight: 700; }
+.jcal__day--open:hover .jcal__num { box-shadow: inset 0 0 0 1px var(--c-primary); }
+.jcal__day--on .jcal__num, .jcal__day--on:hover .jcal__num { background: var(--c-primary); color: #fff; box-shadow: none; }
+/* 오늘: 원 바깥 얇은 테두리(가능·선택의 채움과 별개 층) */
+.jcal__day--today { color: var(--c-text); }
+.jcal__day--today .jcal__num { box-shadow: 0 0 0 1px var(--c-text-2); }
+.jcal__day--today.jcal__day--open { color: var(--c-primary); }
+.jcal__day--today.jcal__day--open .jcal__num { box-shadow: 0 0 0 1px var(--c-primary); }
+.jcal__day--today.jcal__day--on .jcal__num { box-shadow: 0 0 0 2px var(--c-surface), 0 0 0 3px var(--c-primary); }
+.jcal__day:focus-visible { outline: 3px solid var(--c-focus); outline-offset: -1px; }
+@media (max-width: 400px) { .jcal { padding-left: var(--sp-2); padding-right: var(--sp-2); } }
+@media (prefers-reduced-motion: reduce) { .jcal__num, .jcal__navbtn { transition: none; } }
 .jcal__prompt { text-align: center; color: var(--c-text-2); padding: var(--sp-3) 0; }
 .joint-card { display: flex; flex-direction: column; border-radius: var(--r-md); }
 .joint-card .radio-card { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
@@ -440,3 +451,45 @@ a.list-row:hover { background: #fafbfd; }
 .sent__names { display: block; font-weight: 400; font-size: var(--fs-sm); color: var(--c-text-2); }
 .sent__foot { text-align: center; }
 .sent__foot a { color: var(--c-primary); font-weight: 600; }
+/*
+ * 요청서 작업 선택 칩(업체 등록 작업, 다중 선택). 작고 촘촘한 타원형: 보이는 높이 28px · 13px 글자 · 칩 사이 6px.
+ * 선택 = 연한 블루 바탕 + 블루 테두리·글씨 + 12px 체크(색만으로 구분하지 않음). 글자 굵기는 바꾸지 않는다.
+ * 체크 자리(12px + 간격 4px = 16px)를 늘 확보해 선택 전후 칩 너비가 같다: 선택 전 좌우 18px(10 + 8) / 선택 후 좌우 10px + 체크.
+ * 누르는 영역(label)은 보이는 칩보다 위아래로 3px씩 크고 줄 간격은 0이라, 보이는 세로 간격 6px 안에서 서로 겹치지 않는다.
+ * 실제 체크박스는 투명하게 칩 전체를 덮어 키보드(Tab·Space)·화면 낭독기 선택 상태를 그대로 쓴다.
+ */
+/* 작업 선택 카드: 테두리·바탕·모서리·안쪽 여백은 .card(방문 주소 카드와 같음). fieldset 기본 여백만 정리 */
+.svc-pick { margin: 0; min-width: 0; display: flex; flex-direction: column; gap: var(--sp-3); }
+.svc-chips { display: flex; flex-wrap: wrap; column-gap: 6px; row-gap: 0; margin: -3px 0; min-width: 0; }
+.svc-chip { position: relative; display: inline-flex; align-items: center; max-width: 100%; min-width: 0; padding: 3px 0; cursor: pointer; }
+.svc-chip__input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.svc-chip__pill {
+  display: inline-flex; align-items: center; gap: 4px; box-sizing: border-box; height: 28px; max-width: 100%; min-width: 0; padding: 0 18px;
+  border: 1px solid var(--c-line-strong); border-radius: var(--r-pill); background: var(--c-surface); color: var(--c-text);
+  font-size: var(--fs-sm); font-weight: 500; line-height: 1; white-space: nowrap; transition: background-color .15s, border-color .15s, color .15s;
+}
+.svc-chip__pill svg { flex: none; width: 12px; height: 12px; }
+.svc-chip__text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.svc-chip:hover .svc-chip__pill { border-color: var(--c-text-2); }
+.svc-chip__input:checked + .svc-chip__pill { padding: 0 10px; background: var(--c-info-bg); border-color: var(--c-primary); color: var(--c-primary); }
+.svc-chip__input:focus-visible + .svc-chip__pill { outline: 2px solid var(--c-focus); outline-offset: 2px; }
+/* 터치 화면: 보이는 칩 크기는 그대로, 누르는 영역과 간격만 조금 넓힌다(위아래 5px, 칩 사이 8px — 서로 겹치지 않음) */
+@media (pointer: coarse) {
+  .svc-chips { column-gap: var(--sp-2); margin: -5px 0; }
+  .svc-chip { padding: 5px 0; }
+}
+@media (prefers-reduced-motion: reduce) { .svc-chip__pill { transition: none; } }
+/* 방문 가능한 시각 선택: 카드(.card) 안의 묶음이라 fieldset 테두리·여백 없이 작업 칩과 같은 작은 칩을 쓴다 */
+.time-pick { border: 0; padding: 0; gap: var(--sp-2); }
+.time-pick__hint { word-break: keep-all; overflow-wrap: anywhere; }
+/* 업체 상세 ‘제공 작업’: 요청서 작업 칩과 같은 크기·기본 모양(28px·13px·흰 바탕·회색 테두리·타원)의 안내용 칩. 선택·클릭·hover 효과 없음 */
+.svc-tags { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; min-width: 0; }
+.svc-tag {
+  display: inline-flex; align-items: center; box-sizing: border-box; height: 28px; max-width: 100%; padding: 0 10px;
+  border: 1px solid var(--c-line-strong); border-radius: var(--r-pill); background: var(--c-surface); color: var(--c-text);
+  font-size: var(--fs-sm); font-weight: 500; line-height: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+/* 공동 예약 카드의 신청 가능한 시각(정보 행 값, 안내용): 다른 값과 같은 크기·굵기 600, 길면 값 영역 안에서 시각 단위로만 줄바꿈(항목명은 첫 줄에 맞춤) */
+.kv__times { word-break: keep-all; }
+.joint-card .radio-card .kv__k { flex: none; white-space: nowrap; }
+.joint-card .radio-card .kv__v { flex: 1; min-width: 0; max-width: none; }

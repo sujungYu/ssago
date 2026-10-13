@@ -81,7 +81,7 @@ function Body({ d }: { d: BookingDetail }) {
             ...d.proposals.filter((p) => p.status === 'proposed' && p.newVisit.time).map((p) => (
               { key: p.id, k: '변경 제안 · 확인 대기', v: <span><VisitText date={p.newVisit.date} time={p.newVisit.time} /><br /><span className="xs muted">수락하기 전까지 위 방문 일정이 유지돼요</span></span> }
             )),
-            ...(b.customerSlots.length ? [{ k: '요청 시 고객 가능 시간', v: <span className="muted">{slotsText(b.customerSlots)}</span> }] : []),
+            ...(b.customerSlots.length ? [{ k: '요청 시 방문 가능한 시간', v: <span className="muted">{slotsText(b.customerSlots)}</span> }] : []),
             { k: '진행 상태', v: bookingBadge(b) },
             ...(b.followUp ? [{ k: '후속 방문', v: <span>{formatDate(b.followUp.date)}<br />{b.followUp.window}</span> }] : []),
           ]} />

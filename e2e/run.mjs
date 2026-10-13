@@ -112,7 +112,7 @@ await test('탐색: 주소 설정 → 카테고리 → 업체 목록(공동 예�
   await page.getByRole('link', { name: /한빛설비/ }).first().click();
   await waitText(page, '공동 예약 일정');
   await waitText(page, '공동 예약 날짜를 선택해주세요.');
-  await page.getByRole('button', { name: /2026년 10월 16일 금요일, 신청 가능/ }).click();
+  await page.getByRole('button', { name: /2026년 10월 19일 월요일, 신청 가능/ }).click();
   await waitText(page, '약 12,500원');
   await waitText(page, '본인 예약 확정 시 4세대 기준');
   await waitText(page, '결제 대기 자리를 빼고');
@@ -151,34 +151,33 @@ await test('로딩 상태 표시', async (page) => {
 
 await test('요청: 공동 날짜로 복수 작업 요청서 제출', async (page) => {
   await start(page, { path: '/providers/p1' });
-  await page.getByRole('button', { name: /2026년 10월 16일 금요일, 신청 가능/ }).click();
+  await page.getByRole('button', { name: /2026년 10월 19일 월요일, 신청 가능/ }).click();
   await page.locator('input[name="joint-group"]').first().check();
   await page.getByRole('button', { name: '선택한 일정으로 수리 요청하기' }).click();
   await waitText(page, '수리 요청서');
-  await waitText(page, '고객 가능 시간');
+  await waitText(page, '방문 가능한 시간');
   await page.getByRole('button', { name: '요청 보내기' }).click();
-  await waitText(page, '작업 1에 어떤 수리가 필요한지 입력해 주세요'); // 검증 메시지(고치는 방법 안내)
-  await page.getByLabel('어떤 작업인가요?').fill('주방 수전 교체');
-  await page.getByRole('button', { name: '작업 추가하기' }).click();
-  await page.getByLabel('어떤 작업인가요?').nth(1).fill('배수 트랩 교체');
+  await waitText(page, '필요한 작업을 하나 이상 선택해 주세요.'); // 검증 메시지(작업 선택 영역)
+  await pickTask(page, '배수 트랩 교체', '욕실 배수 냄새'); // 고른 순서와 무관하게 업체 작업 목록 순서로 저장
+  await pickTask(page, '수전 교체', '주방·욕실 수전 각각 교체');
   await page.getByLabel('상세 주소', { exact: true }).fill('301동 1204호');
-  await page.getByRole('button', { name: '09:00~12:00' }).click();
+  await timeChip(page, '09:00').check();
   await page.getByRole('button', { name: '요청 보내기' }).dblclick(); // 연타해도 한 번만
   await openSentDetail(page);
   await waitText(page, '업체 검토 중');
   const d = await db(page);
-  const mine = d.requests.filter((r) => r.tasks.length === 2 && r.tasks[0].title === '주방 수전 교체');
+  const mine = d.requests.filter((r) => r.tasks.length === 2 && r.tasks[0].description === '주방·욕실 수전 각각 교체');
   eq(mine.length, 1, '연타 후 생성된 요청 수');
   eq(mine[0].status, 'reviewing', '요청 상태');
   eq(mine[0].bookingId, undefined, '요청만으로 예약이 생기지 않음');
-  eq(JSON.stringify(mine[0].slots), '["09:00–12:00"]', '고객 가능 시간 범위 저장');
+  eq(JSON.stringify(mine[0].slots), '["09:00"]', '고른 정확한 시각 저장(범위 아님)');
 });
 
 await test('요청: 새 날짜 요청은 희망 날짜가 필요하다', async (page) => {
   await start(page, { path: '/providers/p1/request?new=1' });
-  await page.getByLabel('어떤 작업인가요?').fill('욕실 수전 교체');
+  await pickTask(page, '수전 교체');
   await page.getByLabel('상세 주소', { exact: true }).fill('301동 1204호');
-  await page.getByRole('button', { name: '09:00~12:00' }).click();
+  await timeChip(page, '09:00').check();
   await page.getByRole('button', { name: '요청 보내기' }).click();
   await waitText(page, '희망 방문 날짜를 선택해 주세요');
   await page.getByLabel('희망 방문 날짜').fill('2026-10-21');
@@ -385,10 +384,22 @@ async function openSentDetail(page) {
   await page.getByRole('link', { name: '요청 내용 확인하기' }).click();
   await page.waitForURL((u) => /^\/requests\/(bundle\/)?[^/]+$/.test(u.pathname));
 }
-async function fillNewDateRequest(page, title) {
-  await page.getByLabel('어떤 작업인가요?').fill(title);
+/** 요청서 작업 선택 칩(업체 등록 작업, 체크박스) */
+function taskChip(page, name) { return page.getByRole('group', { name: '어떤 작업이 필요한가요?' }).getByRole('checkbox', { name, exact: true }); }
+/** 작업 카드(고른 작업별 설명·사진) */
+function taskCard(page, name) { return page.locator('[data-task]').filter({ has: page.getByRole('heading', { name, exact: true }) }); }
+/** 요청서 방문 가능한 시각 칩(정확한 시각, 체크박스) */
+function timeChip(page, t) { return page.getByRole('group', { name: '방문 가능한 시각 (여러 개 선택 가능)' }).getByRole('checkbox', { name: t, exact: true }); }
+/** 작업을 고르고 그 작업의 자세한 설명을 쓴다 */
+async function pickTask(page, name, description) {
+  await taskChip(page, name).check();
+  if (description !== undefined) await taskCard(page, name).getByLabel('자세한 설명').fill(description);
+}
+/** 새 날짜 요청 기본 입력: ‘수전 교체’(한빛설비·새봄수리 모두 등록)를 고르고 설명에 구분용 문구를 쓴다 */
+async function fillNewDateRequest(page, note, task = '수전 교체') {
+  await pickTask(page, task, note);
   await page.getByLabel('희망 방문 날짜').fill('2026-10-21');
-  await page.getByRole('button', { name: '09:00~12:00' }).click();
+  await timeChip(page, '09:00').check();
 }
 
 await test('주소: 내 정보에 주소 메뉴 없음 · 최초 지역·건물 설정 → 재접속 시 복원(동·호수 미표시, URL에 주소 없음)', async (page) => {
@@ -437,7 +448,7 @@ await test('주소: 첫 신청 저장 선택 → 같은 건물 다음 신청 자
   truthy(!(await page.locator('main').innerText()).includes('주소도 저장했어요'), '미선택인데 저장 안내');
   d = await db(page);
   eq(d.savedVisitAddress.detail, '301동 1204호', '미선택 시 기존 저장 주소 유지');
-  eq(d.requests.find((r) => r.tasks[0].title === '두 번째 신청').visitAddress.detail, '301동 1205호', '이번 요청에는 입력한 주소');
+  eq(d.requests.find((r) => r.tasks[0].description === '두 번째 신청').visitAddress.detail, '301동 1205호', '이번 요청에는 입력한 주소');
   await openSentDetail(page);
   await waitText(page, '301동 1205호'); // 요청 상세의 방문 주소
 });
@@ -462,8 +473,8 @@ await test('주소: 다른 건물 선택 시 이전 동·호수 비움 · 같은
 await test('주소: 제출 실패 시 저장했다고 표시하지 않음 · 탐색·재사용 주소를 바꿔도 기존 요청·예약 주소 유지', async (page) => {
   // 다음 저장 1회 실패(네트워크 오류) 상태에서 제출
   await start(page, { path: '/providers/p1/request?group=g1', patch: (d) => { d.settings.failNextWrite = true; } });
-  await page.getByLabel('어떤 작업인가요?').fill('실패할 신청');
-  await page.getByRole('button', { name: '09:00~12:00' }).click();
+  await pickTask(page, '수전 교체', '실패할 신청');
+  await timeChip(page, '09:00').check();
   await detailInput(page).fill('301동 1204호');
   await saveBox(page).check();
   await page.getByRole('button', { name: '요청 보내기' }).click();
@@ -472,7 +483,7 @@ await test('주소: 제출 실패 시 저장했다고 표시하지 않음 · 탐
   truthy(!(await page.locator('main').innerText()).includes('주소도 저장했어요'), '실패인데 저장 안내');
   let d0 = await db(page);
   eq(d0.savedVisitAddress, null, '실패 시 재사용 주소 저장 안 함');
-  eq(d0.requests.some((r) => r.tasks[0].title === '실패할 신청'), false, '실패 시 요청 없음');
+  eq(d0.requests.some((r) => r.tasks[0].description === '실패할 신청'), false, '실패 시 요청 없음');
   // 다시 보내면 성공하고 그때 저장
   await page.getByRole('button', { name: '요청 보내기' }).click();
   await waitText(page, '다음 신청에 쓸 주소도 저장했어요');
@@ -498,8 +509,9 @@ await test('주소: 모바일 키보드(낮은 화면)에서 상세 주소 입�
   await detailInput(page).press('End');
   await page.waitForTimeout(200);
   const input = await detailInput(page).boundingBox();
-  const bar = await page.locator('.action-bar').boundingBox();
-  truthy(input && bar && input.y + input.height <= bar.y && input.y >= 0, `입력란 ${JSON.stringify(input)} / 하단 버튼 ${JSON.stringify(bar)}`);
+  // 제출 버튼은 하단에 고정되지 않으므로 입력란을 가리는 고정 요소가 없다
+  const pinned = await page.evaluate(() => [...document.querySelectorAll('body *')].some((e) => ['fixed', 'sticky'].includes(getComputedStyle(e).position) && e.textContent.includes('요청 보내기')));
+  truthy(input && !pinned && input.y >= 0 && input.y + input.height <= 420, `입력란 ${JSON.stringify(input)} / 고정 요소 ${pinned}`);
   await page.getByRole('button', { name: '요청 보내기' }).waitFor();
 });
 
@@ -557,7 +569,7 @@ await test('내 예약 필터: 확정된 예약 상태·방문일·확인 필요
   await bkToggle(page).click();
   await bkPick(page, 'visit', '이번 주'); // 10-12(월)~10-18(일)
   await bkVisit(page).filter({ hasText: '이번 주' }).waitFor();
-  await bkCount(page, 5);
+  await bkCount(page, 4); // 밝은전기(bk-k1)는 데모 공동 예약 일정 이동으로 다음 주(10-19)
   await bkPick(page, 'visit', '오늘');
   await bkCount(page, 1);
   await bkPick(page, 'status', '전체'); // 상태만 해제 → 오늘 방문(확정된 예약) 전체
@@ -632,12 +644,13 @@ await test('내 예약 필터: 방문일 직접 선택 오류 · 결과 없음�
 
 await test('내 예약 필터: 일정 변경 합의 전에는 기존 방문일, 수락 후 바뀐 방문일 기준', async (page) => {
   await start(page, { path: '/bookings?a_visit=custom&a_from=2026-10-19&a_to=2026-10-19' });
-  await waitText(page, '선택한 조건에 맞는 예약이 없어요.'); // bk-k4는 제안(10-19) 확인 대기 → 기존 10-14 기준
+  await bkCount(page, 1); // 10-19 방문은 밝은전기(bk-k1)뿐 — bk-k4는 제안(10-19) 확인 대기라 기존 10-14 기준
+  truthy(!(await page.locator('main').innerText()).includes('깔끔마감'), '수락 전 깔끔마감 없음');
   await page.goto(`${BASE}/proposals/pr-k4`);
   await page.getByRole('button', { name: '변경 수락하기' }).click();
   await waitText(page, '수락됨');
   await page.goto(`${BASE}/bookings?a_visit=custom&a_from=2026-10-19&a_to=2026-10-19`);
-  await bkCount(page, 1);
+  await bkCount(page, 2);
   await waitText(page, '깔끔마감');
 });
 
@@ -1190,32 +1203,32 @@ await test('방문 시각: 요청(가능 시간) → 승인(제안 시각) → �
   await start(page, { path: '/requests/rq-4' });
   await waitText(page, '업체가 제안한 방문 시각');
   let main = await page.locator('main').innerText();
-  truthy(main.includes('10월 16일 (금) 14:00'), '결제 전 제안 시각');
+  truthy(main.includes('10월 20일 (화) 14:00'), '결제 전 제안 시각');
   truthy(main.includes('13:00~16:00'), '고객 가능 시간 표시');
   truthy(main.includes('승인만으로는 예약이 확정되지 않아요'), '승인 ≠ 예약 확정');
   await page.goto(`${BASE}/requests/rq-4/approval`);
   await waitText(page, '작업 소요 시간은 수리 내용에 따라 달라집니다.');
-  truthy((await page.locator('main').innerText()).includes('10월 16일 (금) 14:00'), '승인 확인 화면 제안 시각');
+  truthy((await page.locator('main').innerText()).includes('10월 20일 (화) 14:00'), '승인 확인 화면 제안 시각');
   await page.getByRole('checkbox').check();
   await page.getByRole('button', { name: /모의 결제하기/ }).click();
   await waitText(page, '예약이 확정됐어요');
   const d = await db(page);
   const bk = d.bookings.find((b) => b.requestId === 'rq-4');
   eq(bk.visitTime, '14:00', '결제 후 확정 시각');
-  truthy(d.notices[0].title.includes('방문 예정 10월 16일 (금) 14:00'), `알림: ${d.notices[0].title}`);
+  truthy(d.notices[0].title.includes('방문 예정 10월 20일 (화) 14:00'), `알림: ${d.notices[0].title}`);
   await page.goto(`${BASE}/bookings/${bk.id}`);
   await waitText(page, '방문 예정');
   main = await page.locator('main').innerText();
-  truthy(main.includes('10월 16일 (금) 14:00'), '예약 상세 방문 시각');
+  truthy(main.includes('10월 20일 (화) 14:00'), '예약 상세 방문 시각');
   await page.goto(`${BASE}/bookings?tab=active`);
-  await page.getByText('방문 예정 · 10월 16일 (금) 14:00').first().waitFor();
+  await page.getByText('방문 예정 · 10월 20일 (화) 14:00').first().waitFor();
   truthy(!(await page.locator('main').innerText()).includes('13:00~16:00'), '목록에 가능 시간 범위를 방문 시각으로 표시하지 않음');
 });
 
 await test('방문 시각: 데이터에 없으면 추정하지 않고 ‘방문 시각 확인 필요’', async (page) => {
   await start(page, { path: '/bookings/bk-k1', patch: (d) => { delete d.bookings.find((b) => b.id === 'bk-k1').visitTime; } });
   await waitText(page, '방문 시각 확인 필요');
-  truthy(!(await page.locator('main').innerText()).includes('10월 17일 (토) 13:00'), '범위 시작값으로 추정하지 않음');
+  truthy(!(await page.locator('main').innerText()).includes('10월 19일 (월) 13:00'), '범위 시작값으로 추정하지 않음');
   await page.goto(`${BASE}/bookings?tab=active`);
   await waitText(page, '방문 시각 확인 필요');
 });
@@ -1404,37 +1417,41 @@ await test('공동 예약 캘린더: 신청 가능한 날짜만 활성화(마감
   eq(await page.locator('.jcal__title').innerText(), '2026년 10월', '처음 보여주는 달');
   await waitText(page, '공동 예약 날짜를 선택해주세요.');
   const enabled = await page.locator('.jcal button[data-day]:not([disabled])').evaluateAll((els) => els.map((e) => e.dataset.day));
-  eq(JSON.stringify(enabled), JSON.stringify(['2026-10-16']), '활성 날짜(10/17 g3은 남은 자리 0, 10/20 g2는 주소 범위 밖)');
-  truthy(await dayBtn(page, '10-17').isDisabled(), '자리 없는 날짜 비활성');
+  eq(JSON.stringify(enabled), JSON.stringify(['2026-10-19', '2026-10-21', '2026-10-23']), '활성 날짜(데모: 19·21·23일, 날짜당 하나)');
+  truthy(await dayBtn(page, '10-20').isDisabled(), '일정 없는 날짜 비활성');
   truthy(await dayBtn(page, '10-12').isDisabled(), '지난 날짜 비활성');
   eq(await page.locator('input[name="joint-group"]').count(), 0, '날짜 선택 전 카드 없음');
   truthy(await reqBtn(page).isDisabled(), '요청 버튼 비활성');
   // 접근성 이름·오늘 표시(색 외 ‘오늘’ 글자)
   eq(await dayBtn(page, '10-13').getAttribute('aria-label'), '2026년 10월 13일 화요일, 오늘, 신청 가능한 공동 예약 없음', '오늘 이름');
   truthy((await dayBtn(page, '10-13').innerText()).includes('오늘'), '오늘 글자');
-  eq(await dayBtn(page, '10-16').getAttribute('aria-label'), '2026년 10월 16일 금요일, 신청 가능한 공동 예약 2개', '가능 날짜 이름');
-  eq(await dayBtn(page, '10-16').locator('.jcal__dot').count(), 1, '가능 날짜 점');
+  eq(await dayBtn(page, '10-19').getAttribute('aria-label'), '2026년 10월 19일 월요일, 신청 가능한 공동 예약 1개', '가능 날짜 이름');
+  eq(await dayBtn(page, '10-21').getAttribute('aria-label'), '2026년 10월 21일 수요일, 신청 가능한 공동 예약 1개', '21일도 신청 가능(데모 두 번째 그룹)');
+  eq(await dayBtn(page, '10-19').locator('.jcal__num').evaluate((e) => getComputedStyle(e).backgroundColor), 'rgb(237, 243, 252)', '가능 날짜 연한 블루 원');
   // 비활성 날짜는 눌러도 아무 일 없음
-  await dayBtn(page, '10-17').click({ force: true });
+  await dayBtn(page, '10-18').click({ force: true });
   await waitText(page, '공동 예약 날짜를 선택해주세요.');
   await page.screenshot({ path: join(ROOT, 'e2e/screens/390_provider_calendar.png'), fullPage: true });
 });
 
-await test('공동 예약 캘린더: 날짜 선택 → 그 날짜 카드만, 같은 날 여러 그룹 비교·단일 선택, 날짜만으로는 요청 불가', async (page) => {
-  await start(page, { path: '/providers/p1' });
-  await dayBtn(page, '10-16').click();
-  await waitText(page, '10월 16일(금)의 공동 예약');
-  eq(await dayBtn(page, '10-16').getAttribute('aria-pressed'), 'true', '선택 표시');
+/** 같은 날 여러 그룹 구조 확인용: 데모에서 21일에 둔 g1b를 g1과 같은 19일(마감 18일 12:00)로 옮긴다(구조는 그대로 지원) */
+const sameDayG1b = (db) => { const g = db.groups.find((x) => x.id === 'g1b'); g.date = '2026-10-19'; g.closeAt = '2026-10-18T12:00:00+09:00'; };
+
+await test('공동 예약 캘린더: 날짜 선택 → 그 날짜 카드만, 같은 날 여러 그룹(구조 유지) 비교·단일 선택, 날짜만으로는 요청 불가', async (page) => {
+  await start(page, { path: '/providers/p1', patch: sameDayG1b });
+  await dayBtn(page, '10-19').click();
+  await waitText(page, '10월 19일(월)의 공동 예약');
+  eq(await dayBtn(page, '10-19').getAttribute('aria-pressed'), 'true', '선택 표시');
   const cards = page.locator('.joint-card');
   await page.locator('.joint-card').first().waitFor(); 
   eq(await cards.count(), 2, '같은 날 두 그룹');
   eq(await page.locator('input[name="joint-group"]:checked').count(), 0, '그룹 자동 선택 없음');
   truthy(await reqBtn(page).isDisabled(), '날짜만 선택하면 비활성');
   const t1 = await cards.nth(0).innerText(); const t2 = await cards.nth(1).innerText();
-  truthy(t1.includes('09:00~12:00') && t1.includes('약 12,500원') && t1.includes('본인 예약 확정 시 4세대 기준') && t1.includes('남은 자리') && t1.includes('2자리') && t1.includes('3세대'), `g1 카드: ${t1}`);
-  truthy(t2.includes('13:00~16:00') && t2.includes('약 22,500원') && t2.includes('본인 예약 확정 시 2세대 기준') && t2.includes('10월 15일 (목) 12:00'), `g1b 카드: ${t2}`);
+  truthy(t1.includes('09:00 · 10:00 · 11:00 · 13:00 · 14:00 · 15:00') && t1.includes('약 12,500원') && t1.includes('본인 예약 확정 시 4세대 기준') && t1.includes('남은 자리') && t1.includes('2자리') && t1.includes('3세대'), `g1 카드: ${t1}`);
+  truthy(t2.includes('13:00 · 14:00 · 15:00') && t2.includes('약 22,500원') && t2.includes('본인 예약 확정 시 2세대 기준') && t2.includes('10월 18일 (일) 12:00'), `g1b 카드: ${t2}`);
   truthy(!t1.includes('그룹 총 출장비') || !(await cards.nth(0).locator('details').evaluate((d) => d.open)), '계산 상세는 접혀 있음');
-  eq(await page.getByText('정확한 방문 시각은 업체가 승인할 때 제안해요').count(), 1, '공통 안내는 한 번만');
+  eq(await page.getByText('신청 가능한 시각은 요청할 수 있는 후보예요').count(), 1, '공통 안내는 한 번만');
   // 계산 상세: 숫자와 기준 일치
   await cards.nth(0).getByText('출장비 계산 상세').click();
   const d1 = await cards.nth(0).locator('details').innerText();
@@ -1452,16 +1469,82 @@ await test('공동 예약 캘린더: 날짜 선택 → 그 날짜 카드만, 같
   await waitText(page, '수리 요청서');
 });
 
+
+for (const w of [390, 1280]) {
+  await test(`업체 상세 ${w}px: 데모 공동 예약 19·21·23일(날짜당 하나), 신청 가능한 시각 안내(요청서와 같은 시각), 날짜 변경 시 선택 해제, 요청서로 그룹 조건 연결, 제공 작업 = 요청서 작업(안내용 칩), 하단 안내·흰 띠·고정 없음`, async (page) => {
+    await page.setViewportSize({ width: w, height: 800 });
+    await start(page, { path: '/providers/p1' });
+    await page.locator('.jcal').waitFor();
+    // 제공 작업: 업체 등록 작업(요청서와 같은 데이터·순서), 안내용(선택·버튼 없음)
+    const tags = await page.locator('.svc-tags .svc-tag').allInnerTexts();
+    eq(tags.join('/'), '수전 교체/샤워기 교체/배수 트랩 교체/배수구 막힘 수리/세면대 부속 교체/실리콘 재시공', '제공 작업 = 업체 등록 작업');
+    const tagInfo = await page.evaluate(() => {
+      const list = document.querySelector('.svc-tags'); const t = list.querySelector('.svc-tag'); const c = getComputedStyle(t); const r = t.getBoundingClientRect();
+      return { interactive: list.querySelectorAll('button, input, a, [role="button"], [tabindex]').length, svg: list.querySelectorAll('svg').length, cursor: c.cursor, h: Math.round(r.height), fs: parseFloat(c.fontSize), border: c.borderTopColor, bg: c.backgroundColor, overflow: document.documentElement.scrollWidth > innerWidth };
+    });
+    truthy(tagInfo.interactive === 0 && tagInfo.svg === 0 && tagInfo.cursor !== 'pointer' && tagInfo.h === 28 && tagInfo.fs === 13 && tagInfo.border === 'rgb(201, 206, 214)' && tagInfo.bg === 'rgb(255, 255, 255)' && !tagInfo.overflow, `안내용 작은 칩(요청서 칩과 같은 크기·모양) ${JSON.stringify(tagInfo)}`);
+    // 하단 안내·흰 띠·고정 없음, 본문 다음 일반 흐름(24px), 카드 너비
+    eq(await page.getByText('요청만으로는 예약이 확정되지 않아요').count(), 0, '하단 안내 문구 없음');
+    eq(await page.locator('.action-bar').count(), 0, '흰 배경 바 없음');
+    const b = await page.evaluate(() => {
+      const btn = [...document.querySelectorAll('button')].find((x) => x.textContent.trim() === '선택한 일정으로 수리 요청하기');
+      const chain = []; for (let e = btn; e && e !== document.body; e = e.parentElement) chain.push(getComputedStyle(e).position);
+      const br = btn.getBoundingClientRect(); const prev = btn.previousElementSibling.getBoundingClientRect(); const main = document.querySelector('main');
+      const card = [...document.querySelectorAll('section .card')].at(-1).getBoundingClientRect(); const pc = getComputedStyle(btn.parentElement);
+      return { pinned: chain.some((p) => p === 'fixed' || p === 'sticky'), gap: Math.round(br.top - prev.bottom), below: Math.round(main.getBoundingClientRect().bottom - br.bottom), pad: parseFloat(getComputedStyle(main).paddingBottom),
+        sameWidth: Math.round(br.width) === Math.round(card.width) && Math.round(br.left) === Math.round(card.left), parentBg: pc.backgroundColor, parentBorder: pc.borderTopWidth, bg: getComputedStyle(btn).backgroundColor };
+    });
+    truthy(!b.pinned && b.gap === 24 && b.below === b.pad && b.sameWidth && b.parentBg === 'rgba(0, 0, 0, 0)' && b.parentBorder === '0px', `버튼 배치 ${JSON.stringify(b)}`);
+    truthy(await reqBtn(page).isDisabled(), '일정 선택 전 비활성');
+    // 16일: 첫 번째 그룹(g1)만
+    await dayBtn(page, '10-19').click();
+    await waitText(page, '10월 19일(월)의 공동 예약');
+    await page.locator('.joint-card').first().waitFor();
+    eq(await page.locator('.joint-card').count(), 1, '16일 카드 1개');
+    let c = await page.locator('.joint-card').first().innerText();
+    truthy(c.includes('신청 가능한 시각') && c.includes('09:00 · 10:00 · 11:00 · 13:00 · 14:00 · 15:00') && c.includes('10월 18일 (일) 18:00') && !c.includes('~'), `g1 카드: ${c}`);
+    eq(await page.locator('.kv__times button, .kv__times input').count(), 0, '시각 목록은 안내용(버튼 아님)');
+    await page.locator('.joint-card input').first().check();
+    truthy(await reqBtn(page).isEnabled(), '그룹 선택 후 활성');
+    // 17일: 두 번째 그룹(g1b)만, 이전 날짜 선택 해제
+    await dayBtn(page, '10-21').click();
+    await waitText(page, '10월 21일(수)의 공동 예약');
+    await page.locator('.joint-card').first().waitFor();
+    eq(await page.locator('input[name="joint-group"]:checked').count(), 0, '날짜 변경 시 이전 그룹 선택 해제');
+    truthy(await reqBtn(page).isDisabled(), '날짜 변경 후 비활성');
+    eq(await page.locator('.joint-card').count(), 1, '17일 카드 1개');
+    c = await page.locator('.joint-card').first().innerText();
+    truthy(c.includes('13:00 · 14:00 · 15:00') && !c.includes('09:00') && c.includes('10월 20일 (화) 12:00') && c.includes('약 22,500원') && c.includes('1세대'), `g1b 카드: ${c}`);
+    const cardTimes = (await page.locator('.kv__times').first().innerText()).split('·').map((x) => x.trim());
+    await page.locator('.joint-card input').first().check();
+    await reqBtn(page).click();
+    // 요청서: 선택한 그룹 ID·날짜·마감·출장비, 그 그룹 시각만
+    await page.waitForURL((u) => u.pathname === '/providers/p1/request' && u.searchParams.get('group') === 'g1b');
+    await waitText(page, '수리 요청서');
+    const kv = await page.locator('form .card').first().innerText();
+    truthy(kv.includes('공동 예약 날짜 참여') && kv.includes('10월 21일 (수)') && kv.includes('10월 20일 (화) 12:00') && kv.includes('약 22,500원'), `요청서 그룹 조건: ${kv}`);
+    await page.locator('.time-pick .svc-chip').first().waitFor();
+    const formTimes = (await page.locator('.time-pick .svc-chip').allInnerTexts()).map((x) => x.trim());
+    eq(formTimes.join(' '), cardTimes.join(' '), '공동 예약 카드와 요청서 시각 일치(다른 그룹 시각 없음)');
+    eq((await page.locator('.task-pick .svc-chip').allInnerTexts()).map((x) => x.trim()).join('/'), tags.join('/'), '요청서 작업 = 업체 상세 제공 작업');
+    // 다른 날짜 요청 기능 유지
+    await page.goto(`${BASE}/providers/p1`);
+    await page.getByRole('link', { name: '다른 날짜로 새 예약 요청' }).click();
+    await page.waitForURL((u) => u.searchParams.get('new') === '1');
+    if (w === 390) await page.goto(`${BASE}/providers/p1`);
+    if (w === 390) { await dayBtn(page, '10-21').click(); await page.locator('.joint-card').first().waitFor(); await page.screenshot({ path: join(ROOT, 'e2e/screens/390_provider_detail_split.png'), fullPage: true }); }
+  }, { width: w });
+}
 await test('공동 예약 캘린더: 월 이동(다음 달 일정)·날짜 변경 시 이전 그룹 선택 해제·선택 날짜 제목 유지', async (page) => {
-  await start(page, { path: '/providers/p1' });
-  await dayBtn(page, '10-16').click();
+  await start(page, { path: '/providers/p1', patch: (db) => { const g = db.groups.find((x) => x.id === 'g1n'); g.date = '2026-11-03'; g.closeAt = '2026-11-02T18:00:00+09:00'; } /* 다음 달 일정 확인용 */ });
+  await dayBtn(page, '10-19').click();
   await page.locator('.joint-card input').first().check();
   truthy(await reqBtn(page).isEnabled(), '선택');
   truthy(await page.getByRole('button', { name: '이전 달' }).isDisabled(), '이번 달 이전으로는 이동 불가');
   await page.getByRole('button', { name: '다음 달' }).click();
   eq(await page.locator('.jcal__title').innerText(), '2026년 11월', '다음 달');
   // 월만 옮기면 선택 날짜·카드는 유지되고 제목에 날짜가 남는다
-  await waitText(page, '10월 16일(금)의 공동 예약');
+  await waitText(page, '10월 19일(월)의 공동 예약');
   truthy(await reqBtn(page).isEnabled(), '월 이동만으로는 선택 유지');
   await page.locator('.jcal button[data-day="2026-11-03"]').click();
   await waitText(page, '11월 3일(화)의 공동 예약');
@@ -1471,10 +1554,10 @@ await test('공동 예약 캘린더: 월 이동(다음 달 일정)·날짜 변�
   eq(await page.locator('.joint-card').count(), 1, '11/3 카드만');
   // 키보드: 방향키로 신청 가능 날짜 이동, Enter로 선택
   await page.getByRole('button', { name: '이전 달' }).click();
-  await dayBtn(page, '10-16').focus();
+  await dayBtn(page, '10-19').focus();
   await page.keyboard.press('Enter');
-  await waitText(page, '10월 16일(금)의 공동 예약');
-  truthy(await dayBtn(page, '10-16').evaluate((el) => el === document.activeElement && getComputedStyle(el).outlineStyle !== 'none'), '키보드 포커스 표시');
+  await waitText(page, '10월 19일(월)의 공동 예약');
+  truthy(await dayBtn(page, '10-19').evaluate((el) => el === document.activeElement && getComputedStyle(el).outlineStyle !== 'none'), '키보드 포커스 표시');
 });
 
 await test('공동 예약 캘린더: 이번 달에 일정이 없으면 가장 가까운 달, 연도 넘김(12월 → 1월)', async (page) => {
@@ -1505,15 +1588,15 @@ await test('공동 예약 캘린더: 공동 일정 없음 → 안내·새 날짜
   // 다음 조회(날짜별) 1회 실패: 저장소 변경 알림 없이 설정해 다른 화면 조회에는 영향을 주지 않는다
   await page.waitForFunction(() => !!window.__sagoDev);
   await page.evaluate(() => { window.__sagoDev.db.settings.failNextQuery = true; });
-  await dayBtn(page, '10-16').click();
+  await dayBtn(page, '10-19').click();
   await page.getByRole('button', { name: '다시 시도' }).click();
   await page.locator('.joint-card').first().waitFor(); 
-  eq(await page.locator('.joint-card').count(), 2, '재시도 후 카드');
+  eq(await page.locator('.joint-card').count(), 1, '재시도 후 카드');
 });
 
 await test('공동 예약 캘린더: 선택 후 그룹이 마감·자리 없음이 되면 선택 해제·사유·다른 일정 제공', async (page) => {
-  await start(page, { path: '/providers/p1' });
-  await dayBtn(page, '10-16').click();
+  await start(page, { path: '/providers/p1', patch: sameDayG1b });
+  await dayBtn(page, '10-19').click();
   await page.locator('.joint-card').nth(1).locator('input').check(); // g1b
   await dev(page, 'closeGroup', 'g1b'); // 업체가 접수 마감
   await waitText(page, '선택한 일정을 신청할 수 없게 됐어요');
@@ -1536,9 +1619,9 @@ for (const w of [360, 1280]) {
   await test(`공동 예약 캘린더: ${w}px 표시 — 날짜 칸·월 이동 버튼 크기, 펼친 카드가 넘치지 않음`, async (page) => {
     await page.setViewportSize({ width: w, height: 900 });
     await start(page, { path: '/providers/p1' });
-    const sz = await page.evaluate(() => [...document.querySelectorAll('.jcal__day, .jcal__head .icon-btn')].map((b) => { const r = b.getBoundingClientRect(); return Math.min(r.width, r.height); }));
-    truthy(Math.min(...sz) >= 40, `조작 영역이 작음: ${Math.min(...sz)}`);
-    await dayBtn(page, '10-16').click();
+    const sz = await page.evaluate(() => [...document.querySelectorAll('.jcal__day, .jcal__navbtn')].map((b) => { const r = b.getBoundingClientRect(); return Math.min(r.width, r.height); }));
+    truthy(Math.min(...sz) >= 44, `조작 영역이 작음: ${Math.min(...sz)}`);
+    await dayBtn(page, '10-19').click();
     await page.locator('.joint-card').first().waitFor();
     for (const d of await page.locator('.joint-card summary').all()) await d.click();
     const bad = await page.evaluate(() => {
@@ -1554,6 +1637,64 @@ for (const w of [360, 1280]) {
   }, { width: w });
 }
 
+
+for (const w of [360, 1280]) {
+  await test(`공동 예약 캘린더 디자인 ${w}px: 머리(왼쪽 월·안내 / 오른쪽 회색 이동 버튼), 같은 칸·원 가운데, 선택·가능·불가·오늘 구분, 범례·날짜 요약 없음 · 카드의 신청 가능한 시각은 접수 마감 위 정보 행`, async (page) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.setViewportSize({ width: w, height: 900 });
+    await start(page, { path: '/providers/p1', patch: (db) => { const g = db.groups.find((x) => x.id === 'g1'); g.date = '2026-10-13'; g.closeAt = '2026-10-13T23:00:00+09:00'; } /* 오늘(10-13)이 신청 가능한 경우도 확인 */ });
+    await page.locator('.jcal').waitFor();
+    const h = await page.evaluate(() => {
+      const cal = document.querySelector('.jcal'); const cr = cal.getBoundingClientRect();
+      const title = cal.querySelector('.jcal__title').getBoundingClientRect(); const hint = cal.querySelector('.jcal__hint');
+      const nav = [...cal.querySelectorAll('.jcal__navbtn')].map((b) => ({ r: b.getBoundingClientRect(), bg: getComputedStyle(b).backgroundColor, radius: parseFloat(getComputedStyle(b).borderTopLeftRadius) }));
+      const card = [...document.querySelectorAll('section .card')][0]?.getBoundingClientRect();
+      const tds = [...cal.querySelectorAll('tbody tr:first-child td')].map((td) => Math.round(td.getBoundingClientRect().width));
+      const days = [...cal.querySelectorAll('.jcal__day')].map((b) => { const r = b.getBoundingClientRect(); const n = b.querySelector('.jcal__num').getBoundingClientRect(); return { w: r.width, h: r.height, center: Math.abs((n.left + n.width / 2) - (r.left + r.width / 2)) }; });
+      const st = (d) => { const b = cal.querySelector(`button[data-day="${d}"]`); const n = b.querySelector('.jcal__num'); const c = getComputedStyle(n); return { bg: c.backgroundColor, color: getComputedStyle(b).color, ring: c.boxShadow, mark: b.querySelector('.jcal__mark').textContent }; };
+      return {
+        titleText: cal.querySelector('.jcal__title').textContent, hintText: hint.textContent, hintBelow: hint.getBoundingClientRect().top >= title.bottom - 1,
+        titleLeft: title.left - cr.left < 24, navRight: cr.right - nav[1].r.right < 24 && nav[0].r.left > title.right && Math.abs(nav[0].r.top - nav[1].r.top) < 1 && nav[0].r.left < nav[1].r.left,
+        navBg: nav.map((n) => n.bg), navRadius: nav[0].radius,
+        legend: cal.querySelectorAll('.jcal__legend').length, summary: /선택한 날짜/.test(cal.textContent), hr: cal.querySelectorAll('hr').length,
+        sameCols: new Set(tds).size === 1, minHit: Math.min(...days.map((d) => Math.min(d.w, d.h))), sameH: new Set(days.map((d) => Math.round(d.h))).size === 1, centered: days.every((d) => d.center < 1),
+        open: st('2026-10-21'), closed: st('2026-10-20'), today: st('2026-10-13'),
+        inView: cr.left >= 0 && cr.right <= innerWidth, overflow: document.documentElement.scrollWidth > innerWidth,
+      };
+    });
+    eq(h.titleText, '2026년 10월', '월 제목'); eq(h.hintText, '신청 가능한 날짜를 선택해 주세요.', '안내');
+    truthy(h.hintBelow && h.titleLeft && h.navRight && h.navBg.every((b) => b === 'rgb(238, 240, 243)') && h.navRadius >= 8, `머리 배치 ${JSON.stringify(h)}`);
+    truthy(h.legend === 0 && !h.summary && h.hr === 0, '범례·날짜 요약·구분선 없음');
+    truthy(h.sameCols && h.minHit >= 44 && h.sameH && h.centered && h.inView && !h.overflow, `칸·누르는 영역·가운데 ${JSON.stringify(h)}`);
+    truthy(h.open.bg === 'rgb(237, 243, 252)' && h.open.color === 'rgb(49, 93, 168)', `가능: 연한 블루 원·블루 숫자 ${JSON.stringify(h.open)}`);
+    truthy(h.closed.bg === 'rgba(0, 0, 0, 0)' && h.closed.color === 'rgb(201, 206, 214)', `불가: 옅은 회색 숫자 ${JSON.stringify(h.closed)}`);
+    truthy(h.today.mark === '오늘' && h.today.ring !== 'none' && h.today.bg === 'rgb(237, 243, 252)', `오늘(신청 가능): 연한 블루 원 + 바깥 테두리 + 오늘 ${JSON.stringify(h.today)}`);
+    // 선택: 블루 원·흰 숫자, 오늘이 선택돼도 테두리(오늘)와 채움(선택)이 함께
+    await dayBtn(page, '10-13').click();
+    await page.locator('.joint-card').first().waitFor();
+    const sel = await dayBtn(page, '10-13').evaluate((b) => { const n = getComputedStyle(b.querySelector('.jcal__num')); return { bg: n.backgroundColor, color: n.color, ring: n.boxShadow, pressed: b.getAttribute('aria-pressed') }; });
+    truthy(sel.bg === 'rgb(49, 93, 168)' && sel.color === 'rgb(255, 255, 255)' && sel.ring.includes('rgb(49, 93, 168)') && sel.pressed === 'true', `선택(오늘) ${JSON.stringify(sel)}`);
+    // 카드: 신청 가능한 시각 = 접수 마감 바로 위 정보 행(같은 크기·굵기 600, 오른쪽 정렬), 상단 중복 제목 없음, 라디오 이름에 날짜·참여 조건
+    const card = await page.evaluate(() => {
+      const c = document.querySelector('.joint-card'); const rows = [...c.querySelectorAll('.kv__row')].map((r) => r.querySelector('.kv__k').textContent);
+      const tv = c.querySelector('.kv__times').closest('.kv__v'); const dv = [...c.querySelectorAll('.kv__row')][1].querySelector('.kv__v');
+      const k = c.querySelector('.kv__k'); const r = c.querySelector('.kv__row').getBoundingClientRect(); const vr = tv.getBoundingClientRect();
+      return { rows: rows.slice(0, 2), timeText: tv.textContent, fs: [getComputedStyle(tv).fontSize, getComputedStyle(dv).fontSize], fw: getComputedStyle(tv).fontWeight, align: getComputedStyle(tv).textAlign,
+        kColor: getComputedStyle(k).color, rightEdge: Math.abs(vr.right - r.right) < 1, topTitle: c.querySelectorAll('.radio-card .strong').length === 0 || ![...c.querySelectorAll('.radio-card .strong')].some((e) => e.textContent.includes('신청 가능')),
+        chips: c.querySelectorAll('.kv__times button, .kv__times input, .kv__times .svc-chip').length, radio: c.querySelector('input[type=radio]').getAttribute('aria-label'),
+        overflow: [...c.querySelectorAll('*')].some((e) => e.getBoundingClientRect().right > c.getBoundingClientRect().right + 0.5) };
+    });
+    eq(card.rows.join('/'), '신청 가능한 시각/접수 마감', '접수 마감 바로 위');
+    eq(card.timeText, '09:00 · 10:00 · 11:00 · 13:00 · 14:00 · 15:00', '그룹 실제 시각');
+    truthy(card.fs[0] === card.fs[1] && card.fw === '600' && card.align === 'right' && card.rightEdge && card.kColor === 'rgb(96, 103, 115)', `정보 행 표현 ${JSON.stringify(card)}`);
+    truthy(card.topTitle && card.chips === 0 && !card.overflow, `상단 중복 제목·칩·넘침 없음 ${JSON.stringify(card)}`);
+    truthy(card.radio.includes('10월 13일 (화)') && card.radio.includes('같은 단지') && card.radio.includes('신청 가능한 시각 09:00'), `라디오 접근성 이름: ${card.radio}`);
+    await page.getByRole('radio', { name: /10월 13일 \(화\) 같은 단지 공동 예약/ }).check();
+    truthy(await reqBtn(page).isEnabled(), '그룹 선택 → 요청 버튼 활성');
+    await page.locator('.jcal').screenshot({ path: join(ROOT, `e2e/screens/${w}_joint_calendar.png`) });
+    await page.locator('.joint-card').first().screenshot({ path: join(ROOT, `e2e/screens/${w}_joint_card.png`) });
+  }, { width: w });
+}
 // ───────── 요청서 뒤로가기(업체 상세 ↔ 요청서 루프·복귀) ─────────
 const histIdx = (page) => page.evaluate(() => history.state?.idx);
 const pathQ = (page) => { const u = new URL(page.url()); return u.pathname + u.search; };
@@ -1572,8 +1713,8 @@ await test('요청서 뒤로가기: 공동 일정 → 요청서 → 상단 뒤�
   const req0 = (await db(page)).requests.length;
   for (let i = 0; i < 3; i++) {
     if (!(await page.locator('input[name="joint-group"]:checked').count())) {
-      await dayBtn(page, '10-16').click();
-      await page.locator('.joint-card').nth(1).locator('input').check();
+      await dayBtn(page, '10-21').click(); // g1b(데모: 21일)
+      await page.locator('.joint-card').first().locator('input').check();
     }
     await reqBtn(page).click();
     await page.waitForURL((u) => u.pathname === '/providers/p1/request');
@@ -1583,8 +1724,8 @@ await test('요청서 뒤로가기: 공동 일정 → 요청서 → 상단 뒤�
     await page.waitForURL((u) => u.pathname === '/providers/p1');
     eq(await histIdx(page), detailIdx, `#${i + 1} 같은 기록 항목으로 복귀(새 기록 아님)`);
     await page.locator('.joint-card').first().waitFor();
-    eq(await page.locator('.jcal button[aria-pressed="true"]').getAttribute('data-day'), '2026-10-16', '선택 날짜 유지');
-    truthy(await page.locator('.joint-card').nth(1).locator('input').isChecked(), '선택 그룹 유지');
+    eq(await page.locator('.jcal button[aria-pressed="true"]').getAttribute('data-day'), '2026-10-21', '선택 날짜 유지');
+    truthy(await page.locator('.joint-card').first().locator('input').isChecked(), '선택 그룹 유지');
     truthy(await reqBtn(page).isEnabled(), '다시 요청 가능');
     await page.waitForTimeout(500);
     eq(new URL(page.url()).pathname, '/providers/p1', '자동으로 요청서로 이동하지 않음');
@@ -1613,7 +1754,7 @@ await test('요청서 뒤로가기: 새 날짜 요청 → 요청서 → 상단 �
 await test('요청서 뒤로가기: 브라우저 뒤로·앞으로 — 선택 유지, 자동 이동 없음, 요청 생성 없음', async (page) => {
   await openDetailFromList(page);
   const req0 = (await db(page)).requests.length;
-  await dayBtn(page, '10-16').click();
+  await dayBtn(page, '10-19').click();
   await page.locator('.joint-card').first().locator('input').check();
   await reqBtn(page).click();
   await page.waitForURL((u) => u.pathname === '/providers/p1/request');
@@ -1671,8 +1812,8 @@ await test('요청서 뒤로가기: 잘못된 업체 → 안내·업체 찾기, 
 
 await test('요청서 뒤로가기: 요청서에 있는 동안 그룹이 마감되면 돌아왔을 때 선택 해제·사유 안내', async (page) => {
   await openDetailFromList(page);
-  await dayBtn(page, '10-16').click();
-  await page.locator('.joint-card').nth(1).locator('input').check(); // g1b
+  await dayBtn(page, '10-21').click();
+  await page.locator('.joint-card').first().locator('input').check(); // g1b(데모: 21일)
   await reqBtn(page).click();
   await waitText(page, '수리 요청서');
   await dev(page, 'closeGroup', 'g1b');
@@ -1683,6 +1824,97 @@ await test('요청서 뒤로가기: 요청서에 있는 동안 그룹이 마감�
   truthy(await reqBtn(page).isDisabled(), '요청 버튼 비활성');
 });
 
+
+// ───────── 공동 예약 데모 일정: 업체별 3개 날짜(10/19~25)·저장 상태 이전 ─────────
+const enabledDays = (page) => page.locator('.jcal button[data-day]:not([disabled])').evaluateAll((bs) => bs.map((b) => b.dataset.day));
+const PROVIDER_DATES = { p1: ['19', '21', '23'], p2: ['20', '22', '24'], p3: ['19', '22', '25'], p4: ['21', '22', '24'], p5: ['19', '20', '23'], p6: ['20', '23', '24'], p7: ['20', '23', '25'], p8: ['21', '24', '25'] };
+
+await test('공동 예약 데모 일정: 모든 업체 캘린더에 10/19~25 중 서로 다른 날짜 3개·날짜당 그룹 하나, 새로고침해도 같은 날짜, 요청서와 날짜 일치', async (page) => {
+  await start(page, { path: '/providers/p1' });
+  for (const [pid, days] of Object.entries(PROVIDER_DATES)) {
+    await page.goto(`${BASE}/providers/${pid}`);
+    await page.locator('.jcal').waitFor();
+    const want = days.map((d) => `2026-10-${d}`);
+    eq(JSON.stringify(await enabledDays(page)), JSON.stringify(want), `${pid} 신청 가능 날짜`);
+    for (const d of days) {
+      await dayBtn(page, `10-${d}`).click();
+      await page.locator('.joint-card').first().waitFor();
+      eq(await page.locator('.joint-card').count(), 1, `${pid} 10/${d} 그룹 하나`);
+    }
+    // 마지막 날짜 그룹 → 요청서 날짜·마감 일치
+    const last = days.at(-1);
+    const cardText = await page.locator('.joint-card').first().innerText();
+    await page.locator('.joint-card input').first().check();
+    await reqBtn(page).click();
+    await page.waitForURL((u) => u.pathname === `/providers/${pid}/request` && !!u.searchParams.get('group'));
+    await waitText(page, '수리 요청서');
+    const kv = await page.locator('form .card').first().innerText();
+    const dayText = `10월 ${Number(last)}일 (${"일월화수목금토"[new Date(Date.UTC(2026, 9, Number(last))).getUTCDay()]})`;
+    truthy(kv.includes(dayText), `${pid} 요청서 방문 날짜 ${dayText}: ${kv}`);
+    const close = cardText.match(/\d+월 \d+일 \([^)]+\) \d{2}:\d{2}/)?.[0];
+    truthy(close && kv.includes(close), `${pid} 접수 마감 일치 ${close}`);
+  }
+  // 새로고침해도 같은 날짜(고정 데이터)
+  await page.goto(`${BASE}/providers/p6`);
+  await page.locator('.jcal').waitFor();
+  const before = await enabledDays(page);
+  await page.reload(); await page.locator('.jcal').waitFor();
+  eq(JSON.stringify(await enabledDays(page)), JSON.stringify(before), '새로고침 후 같은 날짜');
+});
+
+await test('공동 예약 데모 일정: 예전 일정으로 저장된 탭 → 예전 일정 복원·병합 없이 새 일정, 다른 저장 데이터(주소·내 정보·기록) 유지', async (page) => {
+  await start(page, { path: '/' });
+  const prev = await page.evaluate((k) => {
+    const db = JSON.parse(sessionStorage.getItem(k));
+    delete db.scheduleVersion; // 예전 버전 저장 상태
+    const set = (id, date, closeAt) => { const g = db.groups.find((x) => x.id === id); g.date = date; g.closeAt = closeAt; };
+    set('g1', '2026-10-16', '2026-10-15T18:00:00+09:00'); set('g1b', '2026-10-16', '2026-10-15T12:00:00+09:00'); set('g1n', '2026-11-03', '2026-11-02T18:00:00+09:00');
+    db.groups = db.groups.filter((g) => !['g2a', 'g2b', 'g3a', 'g3b'].includes(g.id));
+    const base = db.groups.find((x) => x.id === 'g1');
+    db.groups.push({ ...base, id: 'g3', date: '2026-10-17', closeAt: '2026-10-16T18:00:00+09:00' });
+    db.customer.name = '이전상태 고객';
+    sessionStorage.setItem(k, JSON.stringify(db));
+    return { requests: JSON.stringify(db.requests), bookings: JSON.stringify(db.bookings) };
+  }, DB_KEY);
+  const app0 = await page.evaluate((k) => sessionStorage.getItem(k), APP_KEY);
+  await page.goto(`${BASE}/providers/p1`);
+  await page.locator('.jcal').waitFor();
+  eq(JSON.stringify(await enabledDays(page)), JSON.stringify(['2026-10-19', '2026-10-21', '2026-10-23']), '예전 일정(10/16·10/17·11/03) 복원 없음');
+  if (await page.getByRole('button', { name: '다음 달' }).isEnabled()) {
+    await page.getByRole('button', { name: '다음 달' }).click();
+    eq((await enabledDays(page)).length, 0, '다음 달(11/03 예전 일정) 없음');
+    await page.getByRole('button', { name: '이전 달' }).click();
+  }
+  const d = await db(page);
+  eq(d.scheduleVersion, 2, '일정 버전 갱신');
+  eq(d.groups.filter((g) => g.id === 'g1').length, 1, '같은 그룹 중복 없음');
+  truthy(!d.groups.some((g) => g.id === 'g3'), '참조 없는 예전 일정 제거');
+  eq(d.customer.name, '이전상태 고객', '내 정보 유지');
+  eq(JSON.stringify(d.requests), prev.requests, '요청 기록 그대로');
+  eq(JSON.stringify(d.bookings), prev.bookings, '예약 기록 그대로');
+  eq(await page.evaluate((k) => sessionStorage.getItem(k), APP_KEY), app0, '탐색 주소 등 앱 상태 유지');
+  await page.reload(); await page.locator('.jcal').waitFor();
+  eq(JSON.stringify(await enabledDays(page)), JSON.stringify(['2026-10-19', '2026-10-21', '2026-10-23']), '새로고침 후에도 새 일정');
+});
+
+await test('공동 예약 데모 일정: 저장해 둔 선택 날짜가 더 이상 신청 가능하지 않으면 정리(유효한 달로)·안내, 다시 고르면 정상', async (page) => {
+  await openDetailFromList(page);
+  await dayBtn(page, '10-21').click();
+  await page.locator('.joint-card input').first().check();
+  await reqBtn(page).click();
+  await waitText(page, '수리 요청서');
+  // 요청서에 있는 동안 데모 일정이 바뀜(g1b 10/21 → 11/05)
+  await page.evaluate(() => { const g = window.__sagoDev.db.groups.find((x) => x.id === 'g1b'); g.date = '2026-11-05'; g.closeAt = '2026-11-04T18:00:00+09:00'; window.__sagoDev.setSettings({}); });
+  await headerBack(page).click();
+  await page.waitForURL((u) => u.pathname === '/providers/p1');
+  await waitText(page, '선택한 일정을 신청할 수 없게 됐어요');
+  eq(await page.locator('.jcal button[aria-pressed="true"]').count(), 0, '예전 선택 날짜 정리');
+  eq(await page.locator('.jcal__title').innerText(), '2026년 10월', '유효한 신청 가능 날짜가 있는 달');
+  truthy(await reqBtn(page).isDisabled(), '요청 버튼 비활성');
+  await dayBtn(page, '10-19').click();
+  await page.locator('.joint-card input').first().check();
+  truthy(await reqBtn(page).isEnabled(), '다시 고르면 정상');
+});
 await test('배포 라우팅: Vercel식 정적 서버에서 규칙 없으면 깊은 경로 404(원인 재현), vercel.json 규칙 적용 시 새로고침·뒤로가기 정상·정적 파일 보존', async (page) => {
   const run = async (rewrite, port) => {
     const sp = spawn(process.execPath, [join(ROOT, 'e2e/vercel-static.mjs')], { cwd: ROOT, stdio: 'ignore', env: { ...process.env, PORT: String(port), ...(rewrite ? { REWRITE: '1' } : {}) } });
@@ -1734,7 +1966,7 @@ await test('비교 요청: 업체별 응답 요약 카드 — 결제 대기는 �
   eq(await bundleTitle(page).innerText(), '업체별 응답 · 5곳', '전체 업체 수');
   eq(await respCards(page).count(), 5, '카드 5개');
   const hb = await respCard(page, '한빛설비').innerText();
-  truthy(hb.includes('업체 승인 완료 · 결제 대기') && hb.includes('방문 예정') && hb.includes('10월 16일 (금)') && hb.includes('10:00') && hb.includes('약 112,500원') && hb.includes('결제 기한') && hb.includes('남음'), `결제 대기 카드: ${hb}`);
+  truthy(hb.includes('업체 승인 완료 · 결제 대기') && hb.includes('방문 예정') && hb.includes('10월 19일 (월)') && hb.includes('10:00') && hb.includes('약 112,500원') && hb.includes('결제 기한') && hb.includes('남음'), `결제 대기 카드: ${hb}`);
   truthy(!/그룹 총 출장비|예약금|부품·자재|업체 견적/.test(hb), `요약 카드에 상세 금액이 펼쳐짐: ${hb}`);
   eq(await respCard(page, '한빛설비').getByRole('link').count(), 1, '카드마다 버튼 하나');
   eq(await respCard(page, '한빛설비').getByRole('link', { name: '상세 조건 보기' }).getAttribute('href'), '/requests/rq-3/approval', '상세 이동');
@@ -1789,6 +2021,8 @@ await test('비교 요청: 상태 필터(결제 대기·추가 정보 필요·�
   eq(await booked.getByRole('link', { name: '예약 보기' }).count(), 1, '예약 완료 → 예약 보기');
   eq(await booked.getByRole('link', { name: '상세 조건 보기' }).count(), 0, '예약 확정에 결제 버튼 없음');
   await pickBundleStatus(page, '종료');
+  await page.waitForURL((u) => u.searchParams.get('status') === 'ended'); // 목록이 다시 그려진 뒤 확인
+  await page.locator('.resp-card').filter({ hasText: '예약 완료' }).first().waitFor({ state: 'detached', timeout: 3000 }).catch(() => {});
   eq(await page.locator('.resp-card').filter({ hasText: '예약 완료' }).count(), 0, '예약 완료는 종료에 없음');
 });
 
@@ -1895,14 +2129,14 @@ const expectStep = async (page, flow, current, doneCount, noteIncludes, label) =
 
 await test('진행 과정: 요청서(1) → 검토(2) → 보완(2) → 승인·결제 대기(3) → 결제 성공 시 예약 상세(내 예약 1)로 이동', async (page) => {
   await start(page, { path: '/providers/p1' });
-  await dayBtn(page, '10-16').click();
+  await dayBtn(page, '10-19').click();
   await page.locator('.joint-card').first().locator('input').check();
   await reqBtn(page).click();
   await waitText(page, '수리 요청서');
   await expectStep(page, 'request', '수리 요청', 0, null, '요청서');
-  await page.getByLabel('어떤 작업인가요?').fill('주방 수전 교체');
+  await pickTask(page, '수전 교체', '주방 수전 교체');
   await page.getByLabel('상세 주소', { exact: true }).fill('301동 1204호');
-  await page.getByRole('button', { name: '09:00~12:00' }).click();
+  await timeChip(page, '09:00').check(); await timeChip(page, '10:00').check(); // 업체가 이 중 10:00을 제안
   await page.getByRole('button', { name: '요청 보내기' }).click();
   await openSentDetail(page);
   await expectStep(page, 'request', '업체 검토·견적', 1, '업체가 작업 가능 여부와 견적을 확인하고 있어요.', '검토 중');
@@ -2084,7 +2318,8 @@ const focusInfo = (page) => page.evaluate(() => {
   const region = el.closest('[data-err-region]') ?? el.closest('.field') ?? el;
   const r = region.getBoundingClientRect();
   const h = document.querySelector('.app-header').getBoundingClientRect();
-  const bar = document.querySelector('.action-bar').getBoundingClientRect();
+  // 하단 고정 버튼 영역이 있으면 그 위, 없으면(요청서) 화면 아래까지
+  const barEl = document.querySelector('.action-bar'); const bar = barEl ? barEl.getBoundingClientRect() : { top: innerHeight };
   const errId = (el.getAttribute('aria-describedby') ?? '').split(' ').find((id) => id.endsWith('-err'));
   return {
     target: el.dataset.errTarget ?? el.tagName, invalid: el.getAttribute('aria-invalid'),
@@ -2107,12 +2342,13 @@ await test('요청서 오류 이동: 여러 항목이 비면 화면 순서상 �
   await sendBtn(page).click();
   await settle(page);
   let fi = await focusInfo(page);
-  truthy(fi.target.startsWith('task-') && fi.invalid === 'true' && fi.error.includes('작업 1에 어떤 수리가 필요한지 입력해 주세요'), `첫 오류=작업: ${JSON.stringify(fi)}`);
+  truthy(fi.target === 'tasks' && fi.invalid === 'true' && fi.error.includes('필요한 작업을 하나 이상 선택해 주세요.'), `첫 오류=작업 선택(첫 칩): ${JSON.stringify(fi)}`);
   truthy(fi.visible, `헤더·하단 버튼에 가리지 않음 ${JSON.stringify(fi)}`);
   eq(await page.locator('.field__error').count(), 4, '모든 오류를 항목 가까이에 표시(작업·상세 주소·날짜·시간)');
   truthy((await page.locator('form p.sr-only[role="status"]').innerText()).includes('고칠 항목 4개 중 첫 항목으로 이동'), '제출 실패 한 번 알림');
   eq(await page.locator('.field__error[role="alert"]').count(), 0, '오류 문구 개별 낭독 없음');
-  await page.keyboard.type('주방 수전 교체');
+  await page.keyboard.press('Space'); // 포커스된 첫 작업 칩을 키보드로 선택
+  eq(await taskChip(page, '수전 교체').isChecked(), true, '키보드로 작업 선택');
   eq(await page.locator('.field__error').count(), 3, '고친 항목 오류 해제');
   await sendBtn(page).click(); await settle(page);
   fi = await focusInfo(page);
@@ -2124,7 +2360,7 @@ await test('요청서 오류 이동: 여러 항목이 비면 화면 순서상 �
   await page.locator('[data-err-target="date"]').fill('2026-10-22');
   await sendBtn(page).click(); await settle(page);
   fi = await focusInfo(page);
-  truthy(fi.target === 'slots' && fi.error.includes('방문받을 수 있는 시간을 하나 이상 선택해 주세요') && fi.visible, `다음 오류=시간(첫 선택 버튼) ${JSON.stringify(fi)}`);
+  truthy(fi.target === 'slots' && fi.error.includes('방문 가능한 시각을 하나 이상 선택해 주세요') && fi.visible, `다음 오류=시간(첫 선택 버튼) ${JSON.stringify(fi)}`);
   await page.keyboard.press('Space'); // 포커스된 시간 버튼을 키보드로 선택
   eq(await page.locator('.field__error').count(), 0, '모든 오류 해제');
   eq((await db(page)).requests.length, req0, '오류 동안 제출 없음');
@@ -2133,30 +2369,30 @@ await test('요청서 오류 이동: 여러 항목이 비면 화면 순서상 �
   eq((await db(page)).requests.length, req0 + 1, '한 번만 제출');
 });
 
-await test('요청서 오류 이동: 복수 작업 중 비어 있는 작업, Enter 제출, 첨부 사진·입력 유지', async (page) => {
+await test('요청서 오류 이동: 작업을 모두 해제하고 Enter 제출 → 작업 선택으로 이동, 다시 고르면 작성 중 설명·사진 복원', async (page) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await start(page, { path: '/providers/p1/request?group=g1' });
-  await page.getByLabel('어떤 작업인가요?').fill('주방 수전 교체');
-  await page.locator('input[type="file"]').first().setInputFiles({ name: 'faucet.jpg', mimeType: 'image/jpeg', buffer: Buffer.from('x') });
-  await page.getByRole('button', { name: '작업 추가하기' }).click();
-  await page.getByRole('button', { name: '작업 추가하기' }).click();
-  await page.getByLabel('어떤 작업인가요?').nth(2).fill('배수 트랩 교체');
-  await page.getByLabel('자세한 설명').nth(2).click();
+  await pickTask(page, '수전 교체', '주방 수전 교체');
+  await taskCard(page, '수전 교체').locator('input[type="file"]').setInputFiles({ name: 'faucet.jpg', mimeType: 'image/jpeg', buffer: Buffer.from('x') });
+  await taskChip(page, '수전 교체').uncheck();
+  eq(await taskCard(page, '수전 교체').count(), 0, '해제하면 입력 영역 숨김');
+  await page.getByLabel('상세 주소', { exact: true }).fill('301동 1204호');
   // Enter 제출: 입력란에서 Enter → 같은 검증·이동
-  await page.getByLabel('어떤 작업인가요?').nth(2).press('Enter');
+  await page.getByLabel('상세 주소', { exact: true }).press('Enter');
   await settle(page);
   const fi = await focusInfo(page);
-  eq(fi.error, '작업 2에 어떤 수리가 필요한지 입력해 주세요. 예: 주방 수전 교체', '비어 있는 두 번째 작업으로');
+  truthy(fi.target === 'tasks' && fi.error === '필요한 작업을 하나 이상 선택해 주세요.', `작업 선택으로 ${JSON.stringify(fi)}`);
   truthy(fi.visible, `가림 없음 ${JSON.stringify(fi)}`);
-  eq(await page.getByLabel('어떤 작업인가요?').first().inputValue(), '주방 수전 교체', '입력 유지');
-  await waitText(page, 'faucet.jpg');
+  await page.keyboard.press('Space'); // 포커스된 첫 칩(수전 교체) 다시 선택
+  eq(await taskCard(page, '수전 교체').getByLabel('자세한 설명').inputValue(), '주방 수전 교체', '다시 고르면 설명 복원');
+  await taskCard(page, '수전 교체').getByText('faucet.jpg').waitFor();
 });
 
 await test('요청서 오류 이동: 건물 주소가 없으면 주소 선택 버튼으로 이동', async (page) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await start(page, { path: '/providers/p1/request?new=1', address: null, patch: [(d) => { d.exploreAddressId = null; }, (d) => { d.savedVisitAddress = null; }] });
   await waitText(page, '수리 요청서');
-  await page.getByLabel('어떤 작업인가요?').fill('주방 수전 교체');
+  await pickTask(page, '수전 교체', '주방 수전 교체');
   await sendBtn(page).click(); await settle(page);
   const fi = await page.evaluate(() => ({ target: document.activeElement.dataset.errTarget, text: document.activeElement.textContent, desc: document.getElementById(document.activeElement.getAttribute('aria-describedby') ?? '')?.textContent }));
   eq(fi.target, 'base', '주소 선택 버튼');
@@ -2166,7 +2402,7 @@ await test('요청서 오류 이동: 건물 주소가 없으면 주소 선택 �
 await test('요청서 오류 이동: 360×560 작은 화면·부드러운 스크롤에서도 첫 오류가 헤더·하단 버튼에 가리지 않음(한 번만 이동)', async (page) => {
   await page.setViewportSize({ width: 360, height: 560 });
   await start(page, { path: '/providers/p1/request?new=1', patch: noSaved });
-  await page.getByLabel('어떤 작업인가요?').fill('주방 수전 교체');
+  await pickTask(page, '수전 교체', '주방 수전 교체');
   await page.getByLabel('상세 주소', { exact: true }).fill('301동 1204호');
   await page.locator('[data-err-target="date"]').fill('2026-10-22');
   await page.evaluate(() => window.scrollTo(0, 0));
@@ -2181,21 +2417,21 @@ await test('요청서 오류 이동: 360×560 작은 화면·부드러운 스크
   truthy(new Set(diffs).size <= 1, `스크롤이 튐 ${ys.join(',')}`);
   // 모션 줄이기: 애니메이션 없이 즉시 위치
   await page.emulateMedia({ reducedMotion: 'reduce' });
-  await page.locator('.chip').first().click(); // 시간 선택 → 오류 해제
-  await page.getByLabel('어떤 작업인가요?').fill('');
+  await timeChip(page, '09:00').check(); // 시간 선택 → 오류 해제
+  await taskChip(page, '수전 교체').uncheck(); // 작업 선택 해제 → 작업 오류
   await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
   await sendBtn(page).click();
   await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => r())));
   const fi2 = await focusInfo(page);
-  truthy(fi2.target.startsWith('task-') && fi2.visible, `모션 줄이기: 즉시 이동 ${JSON.stringify(fi2)}`);
+  truthy(fi2.target === 'tasks' && fi2.visible, `모션 줄이기: 즉시 이동 ${JSON.stringify(fi2)}`);
 });
 
 await test('요청서 오류 이동: 네트워크·처리 실패는 입력란으로 이동하지 않고 폼 수준 안내·다시 보내기, 입력 유지·한 번만 제출', async (page) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await start(page, { path: '/providers/p1/request?group=g1' });
-  await page.getByLabel('어떤 작업인가요?').fill('주방 수전 교체');
+  await pickTask(page, '수전 교체', '주방 수전 교체');
   await page.getByLabel('상세 주소', { exact: true }).fill('301동 1204호');
-  await page.getByRole('button', { name: '09:00~12:00' }).click();
+  await timeChip(page, '09:00').check();
   const req0 = (await db(page)).requests.length;
   await page.waitForFunction(() => !!window.__sagoDev);
   await page.evaluate(() => { window.__sagoDev.db.settings.failNextWrite = true; });
@@ -2204,7 +2440,7 @@ await test('요청서 오류 이동: 네트워크·처리 실패는 입력란으
   const active = await page.evaluate(() => document.activeElement?.dataset?.errTarget ?? null);
   eq(active, null, '임의 입력란으로 포커스 이동 없음');
   eq(await page.locator('.field__error').count(), 0, '필드 오류로 표시하지 않음');
-  eq(await page.getByLabel('어떤 작업인가요?').inputValue(), '주방 수전 교체', '입력 유지');
+  eq(await taskCard(page, '수전 교체').getByLabel('자세한 설명').inputValue(), '주방 수전 교체', '입력 유지');
   eq((await db(page)).requests.length, req0, '실패 시 요청 없음');
   await page.getByRole('button', { name: '다시 보내기' }).click();
   await waitText(page, '요청을 보냈어요');
@@ -2495,7 +2731,7 @@ await test('내 정보 수정 → 새 요청서 기본값, 직접 입력한 값�
   await waitText(page, '요청용 이름');
   truthy((await page.locator('main').innerText()).includes('010-****-8888'), '제출한 연락처(마스킹)');
   const d = await db(page);
-  const created = d.requests.find((r) => r.tasks[0].title === '연락처 확인용 요청');
+  const created = d.requests.find((r) => r.tasks[0].description === '연락처 확인용 요청');
   eq(JSON.stringify(created.contact), JSON.stringify({ name: '요청용 이름', phone: '01077778888' }), '요청 스냅숏');
   eq(d.customer.name, '다른이름', '요청서에서 고쳐도 내 정보는 그대로');
   // 기존 요청·확정 예약은 제출 당시 정보
@@ -2707,8 +2943,13 @@ async function submitCompareRequest(page) {
   await page.waitForURL((u) => u.pathname === '/');
   await spaGo(page, '/providers/p3/request?new=1');
   await waitText(page, '같은 작업을 다른 업체에도 요청하고 있어요');
+  // 앞선 요청 작업(직접 입력: 욕실 세면대 수전 교체·배수 트랩 교체)은 밝은전기 작업 목록에 없어 미리 고르지 않는다 → 이 업체 작업을 고른다
+  await waitText(page, '이 업체 작업 목록에 없어 선택하지 않았어요');
+  eq(await page.locator('.task-pick .svc-chip__input:checked').count(), 0, '다른 업체 작업은 미리 선택되지 않음');
+  await pickTask(page, '스위치 교체', '거실 스위치');
+  await pickTask(page, '조명 교체', '거실 등');
   await page.getByLabel('희망 방문 날짜').fill('2026-10-21');
-  await page.getByRole('button', { name: '09:00~12:00' }).click();
+  await timeChip(page, '09:00').check();
   await detailInput(page).fill('301동 1204호');
   const n0 = (await db(page)).requests.length;
   await page.getByRole('button', { name: '요청 보내기' }).click();
@@ -2721,9 +2962,9 @@ await test('요청 완료: 단일 요청 제출 → 완료 화면(실제 요약�
   await start(page, { path: '/providers/p1' });
   await spaGo(page, '/providers/p1/request?new=1');
   await waitText(page, '수리 요청서');
-  await page.getByLabel('어떤 작업인가요?').fill('완료 화면 확인 작업');
+  await pickTask(page, '수전 교체', '완료 화면 확인 작업');
   await page.getByLabel('희망 방문 날짜').fill('2026-10-21');
-  await page.getByRole('button', { name: '09:00~12:00' }).click();
+  await timeChip(page, '09:00').check();
   await detailInput(page).fill('301동 1204호');
   const n0 = (await db(page)).requests.length;
   await page.getByRole('button', { name: '요청 보내기' }).dblclick(); // 연타해도 한 번만
@@ -2732,7 +2973,7 @@ await test('요청 완료: 단일 요청 제출 → 완료 화면(실제 요약�
   await sentHeading(page).waitFor();
   eq(await page.evaluate(() => document.activeElement?.textContent), '수리 요청을 보냈어요', '이동 후 제목에 포커스');
   const t = await sentText(page);
-  for (const s of ['업체가 작업 가능 여부와 견적을 확인하고 있어요.', '요청한 수리', '완료 화면 확인 작업', '요청한 업체', '한빛설비', '아직 예약이 확정된 것은 아니에요.', '업체 승인 후 예약금을 결제하면 예약이 확정돼요.', '요청 내용 확인하기', '보낸 요청에서 진행 상황을 확인할 수 있어요.']) truthy(t.includes(s), `완료 화면 ‘${s}’: ${t}`);
+  for (const s of ['업체가 작업 가능 여부와 견적을 확인하고 있어요.', '요청한 수리', '수전 교체', '요청한 업체', '한빛설비', '아직 예약이 확정된 것은 아니에요.', '업체 승인 후 예약금을 결제하면 예약이 확정돼요.', '요청 내용 확인하기', '보낸 요청에서 진행 상황을 확인할 수 있어요.']) truthy(t.includes(s), `완료 화면 ‘${s}’: ${t}`);
   for (const s of ['예약 완료', '예약이 확정됐어요', '방문 예정', '10월 21일', ' 외 ', '개 업체']) truthy(!t.includes(s), `표시하지 않음 ‘${s}’: ${t}`);
   eq(await page.locator('.sent__icon').evaluate((e) => getComputedStyle(e).color), 'rgb(49, 93, 168)', '블루 체크 아이콘');
   const d = await db(page);
@@ -2742,7 +2983,7 @@ await test('요청 완료: 단일 요청 제출 → 완료 화면(실제 요약�
   // 새로고침: 저장된 요청을 조회해 같은 내용, 새 요청 없음
   await page.reload();
   await sentHeading(page).waitFor();
-  truthy((await sentText(page)).includes('완료 화면 확인 작업'), '새로고침 후 같은 요약');
+  truthy((await sentText(page)).includes('수전 교체'), '새로고침 후 같은 요약');
   eq((await db(page)).requests.length, n0 + 1, '새로고침해도 새 요청 없음');
   // 뒤로가기: 요청서가 아니라 업체 상세(요청서 기록은 완료 화면으로 바뀜) → 앞으로 가도 재제출 없음
   await page.goBack();
@@ -2768,7 +3009,7 @@ await test('요청 완료: 단일 요청 제출 → 완료 화면(실제 요약�
 await test('요청 완료: 비교 요청 제출 → ‘N개 업체에 수리 요청을 보냈어요’·대표 작업 외 N건 → 비교 요청 상세', async (page) => {
   const n0 = await submitCompareRequest(page);
   const t = await sentText(page);
-  for (const s of ['3개 업체에 수리 요청을 보냈어요', '욕실 세면대 수전 교체 외 1건', '3개 업체', '한빛설비, 새봄수리, 밝은전기', '아직 예약이 확정된 것은 아니에요.']) truthy(t.includes(s), `비교 요약 ‘${s}’: ${t}`);
+  for (const s of ['3개 업체에 수리 요청을 보냈어요', '조명 교체 외 1건', '3개 업체', '한빛설비, 새봄수리, 밝은전기', '아직 예약이 확정된 것은 아니에요.']) truthy(t.includes(s), `비교 요약 ‘${s}’: ${t}`);
   const d = await db(page);
   eq(d.requests.length, n0 + 1, '요청 하나 추가');
   eq(d.requests.at(-1).bundleId, 'b-sink', '같은 비교 묶음');
@@ -2803,7 +3044,7 @@ await test('요청 완료: 제출 실패 시 작성 화면 유지(완료 화면 
   eq((await db(page)).requests.length, n0, '조회만으로 요청 생성 없음');
 });
 
-await test('요청 확정 안내 위치: 업체 찾기 홈에는 없음(주소·카테고리·공동 예약 안내 유지) · 요청서 ‘요청 보내기’ 옆 보조 설명 한 번', async (page) => {
+await test('요청 확정 안내 위치: 업체 찾기 홈·요청서에는 없음(주소·카테고리·공동 예약 안내 유지, 요청 완료 화면에서만 안내)', async (page) => {
   await start(page, { path: '/' });
   await page.locator('.cat-grid').waitFor();
   const home = await page.locator('main').innerText();
@@ -2815,8 +3056,8 @@ await test('요청 확정 안내 위치: 업체 찾기 홈에는 없음(주소·
   truthy(gap <= 1, `홈 하단 남는 여백 ${gap}px`);
   await page.goto(`${BASE}/providers/p1/request?new=1`);
   await page.getByRole('button', { name: '요청 보내기' }).waitFor();
-  eq((await page.locator('.action-bar__note').innerText()).trim(), '업체 승인 후 예약금을 결제하면 예약이 확정돼요.', '요청 보내기 옆 보조 설명');
-  eq(await page.getByText('업체 승인 후 예약금을 결제하면 예약이 확정돼요.', { exact: true }).count(), 1, '같은 안내 한 번만');
+  eq(await page.getByText('업체 승인 후 예약금을 결제하면 예약이 확정돼요.').count(), 0, '요청서 버튼 근처 안내 문구 없음(다른 곳에도 없음)');
+  eq(await page.locator('.action-bar').count(), 0, '하단 고정 버튼 영역 없음');
   eq(await page.locator('main .banner').filter({ hasText: '예약이 확정' }).count(), 0, '큰 배너 아님');
 });
 
@@ -2838,6 +3079,304 @@ for (const w of [360, 1280]) {
     truthy(r.logo && r.nav, '로고·공통 헤더');
     await page.mouse.move(0, 0);
     await page.screenshot({ path: join(ROOT, `e2e/screens/${w}_request_sent.png`) });
+  }, { width: w });
+}
+
+// ───────── 요청서 작업 선택: 업체 등록 작업 다중 선택 칩 ─────────
+const chipNames = (page) => page.locator('.task-pick .svc-chip').allInnerTexts().then((a) => a.map((x) => x.trim()));
+
+await test('작업 선택 칩: 업체별 등록 작업만(순서), 직접 입력·임의 항목 없음, 처음엔 미선택, 체크박스 선택 상태', async (page) => {
+  await start(page, { path: '/providers/p1/request?new=1' });
+  await page.locator('.task-pick .svc-chip').first().waitFor();
+  eq((await chipNames(page)).join('/'), '수전 교체/샤워기 교체/배수 트랩 교체/배수구 막힘 수리/세면대 부속 교체/실리콘 재시공', '한빛설비 작업');
+  const main = await page.locator('main').innerText();
+  for (const s of ['어떤 작업인가요?', '작업 추가하기', '목록에 없어요', '잘 모르겠어요']) truthy(!main.includes(s), `없음: ${s}`);
+  await waitText(page, '업체가 제공하는 작업 중 여러 개 선택할 수 있어요.');
+  eq(await page.locator('.task-pick .svc-chip__input:checked').count(), 0, '처음엔 선택 없음');
+  eq(await page.locator('[data-task]').count(), 0, '선택 전 작업 카드 없음');
+  eq(await taskChip(page, '수전 교체').getAttribute('type'), 'checkbox', '체크박스');
+  await page.goto(`${BASE}/providers/p3/request?new=1`);
+  await page.locator('.task-pick .svc-chip').first().waitFor();
+  eq((await chipNames(page)).join('/'), '조명 교체/스위치 교체/콘센트 교체/센서등 설치/생활 부속품 설치', '밝은전기 작업');
+});
+
+await test('작업 선택 칩: 여러 개 선택·해제, 카드는 업체 작업 순서·작업명 제목, 입력이 섞이지 않음, 재선택 시 복원, 해제한 작업은 제출 제외', async (page) => {
+  await start(page, { path: '/providers/p1/request?new=1' });
+  await pickTask(page, '실리콘 재시공', '욕실 벽 실리콘 들뜸');
+  await pickTask(page, '수전 교체', '주방·욕실 수전 각각 교체');
+  await taskCard(page, '수전 교체').locator('input[type="file"]').setInputFiles({ name: 'faucet.jpg', mimeType: 'image/jpeg', buffer: Buffer.from('x') });
+  eq((await page.locator('[data-task] h3').allInnerTexts()).join('/'), '수전 교체/실리콘 재시공', '업체 작업 순서(고른 순서와 무관)');
+  eq(await page.locator('.task-pick .svc-chip__input:checked').count(), 2, '두 개 선택');
+  // 수전 교체 해제 → 그 카드만 숨김, 실리콘 재시공 내용은 그대로
+  await taskChip(page, '수전 교체').uncheck();
+  eq((await page.locator('[data-task] h3').allInnerTexts()).join('/'), '실리콘 재시공', '해제한 작업 카드 숨김');
+  eq(await taskCard(page, '실리콘 재시공').getByLabel('자세한 설명').inputValue(), '욕실 벽 실리콘 들뜸', '다른 작업 내용 유지');
+  // 키보드로 다시 선택 → 작성 중 내용 복원
+  await taskChip(page, '수전 교체').focus();
+  await page.keyboard.press('Space');
+  eq(await taskChip(page, '수전 교체').isChecked(), true, '키보드 선택');
+  eq(await taskCard(page, '수전 교체').getByLabel('자세한 설명').inputValue(), '주방·욕실 수전 각각 교체', '재선택 시 설명 복원');
+  await taskCard(page, '수전 교체').getByText('faucet.jpg').waitFor();
+  await page.keyboard.press('Space');
+  eq(await taskChip(page, '수전 교체').isChecked(), false, '키보드 해제');
+  // 제출: 지금 고른 작업(실리콘 재시공)만
+  await page.getByLabel('희망 방문 날짜').fill('2026-10-21');
+  await timeChip(page, '09:00').check();
+  await detailInput(page).fill('301동 1204호');
+  await page.getByRole('button', { name: '요청 보내기' }).click();
+  await page.waitForURL((u) => /\/sent$/.test(u.pathname));
+  const rid = new URL(page.url()).pathname.split('/')[2];
+  const r = (await db(page)).requests.find((x) => x.id === rid);
+  eq(JSON.stringify(r.tasks.map((t) => [t.serviceId, t.title, t.description, t.photoNames])), JSON.stringify([['sv-p1-silicone', '실리콘 재시공', '욕실 벽 실리콘 들뜸', []]]), '해제한 작업은 제외, 작업 ID·당시 작업명 저장');
+  eq(r.status, 'reviewing', '업체 검토 그대로(작업 선택으로 확정 없음)');
+  truthy((await page.locator('.sent').innerText()).includes('실리콘 재시공'), '완료 화면 요약');
+  await openSentDetail(page);
+  await waitText(page, '실리콘 재시공'); await waitText(page, '욕실 벽 실리콘 들뜸');
+  // 이전 직접 입력 요청도 그대로 표시
+  await page.goto(`${BASE}/requests/bundle/b-sink`);
+  await waitText(page, '욕실 세면대 수전 교체');
+});
+
+await test('작업 선택 칩: 여러 작업 제출 → 요청 상세·비교 요청에 작업명·설명·사진 표시', async (page) => {
+  await start(page, { path: '/providers/p1/request?new=1' });
+  await pickTask(page, '배수 트랩 교체', '욕실 배수 냄새');
+  await pickTask(page, '수전 교체', '주방 수전 누수');
+  await taskCard(page, '수전 교체').locator('input[type="file"]').setInputFiles({ name: 'kitchen.jpg', mimeType: 'image/jpeg', buffer: Buffer.from('x') });
+  await page.getByLabel('희망 방문 날짜').fill('2026-10-21');
+  await timeChip(page, '09:00').check();
+  await detailInput(page).fill('301동 1204호');
+  await page.getByRole('button', { name: '요청 보내기' }).click();
+  await sentHeading(page).waitFor();
+  truthy((await page.locator('.sent').innerText()).includes('수전 교체 외 1건'), '대표 작업 외 1건');
+  await openSentDetail(page);
+  await waitText(page, '주방 수전 누수');
+  const t = await page.locator('main').innerText();
+  for (const s of ['수전 교체', '주방 수전 누수', '배수 트랩 교체', '욕실 배수 냄새', 'kitchen.jpg']) truthy(t.includes(s), `요청 상세 ‘${s}’`);
+  const rid = new URL(page.url()).pathname.split('/').pop();
+  const b = (await db(page)).requests.find((x) => x.id === rid).bundleId;
+  await page.goto(`${BASE}/requests/bundle/${b}`);
+  await waitText(page, '수전 교체');
+});
+
+await test('작업 선택 칩: 등록 작업이 없는 업체는 안내만(임의 목록 없음)·제출 불가 · 업체가 바뀌면 이전 업체 작업 선택이 남지 않음', async (page) => {
+  await start(page, { path: '/providers/p1/request?new=1', patch: (d) => { d.providers.find((p) => p.id === 'p7').services = []; } });
+  await pickTask(page, '수전 교체', '이전 업체 작업');
+  // 앱 안에서 다른 업체 요청서로 이동(같은 화면 구성) → 선택·작성 내용 초기화, 새 업체 작업만
+  await spaGo(page, '/providers/p3/request?new=1');
+  await waitText(page, '밝은전기');
+  await page.locator('.task-pick .svc-chip').filter({ hasText: '조명 교체' }).waitFor();
+  eq(await page.locator('.task-pick .svc-chip__input:checked').count(), 0, '이전 업체 선택 없음');
+  eq(await page.locator('[data-task]').count(), 0, '이전 업체 작업 카드 없음');
+  truthy(!(await chipNames(page)).includes('수전 교체'), '이전 업체 작업 없음');
+  // 등록 작업 없음
+  await page.goto(`${BASE}/providers/p7/request?new=1`);
+  await waitText(page, '이 업체에 등록된 작업이 없어요');
+  eq(await page.locator('.task-pick .svc-chip').count(), 0, '임의 칩 없음');
+  truthy(await page.getByRole('button', { name: '요청 보내기' }).isDisabled(), '제출 불가');
+});
+
+for (const w of [360, 1280]) {
+  await test(`작업 선택 칩 ${w}px: 방문 주소와 같은 흰 카드(중복 제목 없음), 작은 칩(28px·13px·6px 간격)·왼쪽부터 줄바꿈, 선택 전후 너비 같음, 누르는 영역 안 겹침, 긴 이름 넘침 없음, 포커스 표시`, async (page) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' }); // 색 전환 없이 최종 색으로 확인
+    await page.setViewportSize({ width: w, height: 900 });
+    await start(page, { path: '/providers/p1/request?new=1', patch: (d) => { d.providers.find((p) => p.id === 'p1').services.push({ id: 'sv-p1-long', name: '아주 긴 작업 이름 예시: 욕실 세면대 하부 배수관 전체 교체 및 주변 실리콘 재시공 포함 작업' }); } });
+    await page.locator('.task-pick .svc-chip').first().waitFor();
+    // 글꼴 부분 파일은 새 글자가 처음 보일 때 받아진다 → 작업 카드 글자를 한 번 띄웠다 닫고 글꼴이 준비된 뒤 측정(렌더링 차이 제외)
+    await taskChip(page, '수전 교체').check(); await taskChip(page, '배수 트랩 교체').check();
+    await page.evaluate(() => document.fonts.ready);
+    await taskChip(page, '수전 교체').uncheck(); await taskChip(page, '배수 트랩 교체').uncheck();
+    await page.evaluate(() => document.fonts.ready);
+    const before = await page.evaluate(() => [...document.querySelectorAll('.task-pick .svc-chip__pill')].map((e) => { const r = e.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top), Math.round(r.width * 10) / 10]; }));
+    await taskChip(page, '수전 교체').check();
+    await taskChip(page, '배수 트랩 교체').check();
+    const r = await page.evaluate(() => {
+      const card = document.querySelector('.task-pick'); const addr = [...document.querySelectorAll('section .card')].find((c) => c.textContent.includes('도로명·지번 주소'));
+      const st = (e) => { const c = getComputedStyle(e); return [c.backgroundColor, c.borderTopWidth, c.borderTopColor, c.borderTopLeftRadius, c.paddingLeft, c.paddingTop]; };
+      const cr = card.getBoundingClientRect(); const ar = addr.getBoundingClientRect();
+      const pills = [...document.querySelectorAll('.task-pick .svc-chip__pill')]; const pr = pills.map((e) => e.getBoundingClientRect());
+      const labels = [...document.querySelectorAll('.task-pick .svc-chip')].map((e) => e.getBoundingClientRect());
+      const overlap = labels.some((a, i) => labels.some((b, j) => i < j && a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5));
+      const rows = [...new Set(pr.map((x) => Math.round(x.top)))];
+      const sameRowGaps = pr.slice(1).map((x, i) => (Math.round(x.top) === Math.round(pr[i].top) ? Math.round(x.left - pr[i].right) : null)).filter((g) => g !== null);
+      const rowGap = rows.length > 1 ? Math.round(rows[1] - rows[0] - pr[0].height) : null;
+      const sel = pills.find((e) => e.previousElementSibling.checked); const cs = getComputedStyle(sel); const un = getComputedStyle(pills.find((e) => !e.previousElementSibling.checked));
+      const long = pills.at(-1).getBoundingClientRect();
+      return {
+        sameCard: JSON.stringify(st(card)) === JSON.stringify(st(addr)), cardStyle: st(card), sameWidth: Math.round(cr.width) === Math.round(ar.width) && Math.round(cr.left) === Math.round(ar.left),
+        dupTitle: [...document.querySelectorAll('main h2, main h3, main legend')].filter((e) => e.textContent.trim() === '어떤 작업이 필요한가요?' && getComputedStyle(e).position !== 'absolute').length,
+        sectionTitle: card.closest('section')?.querySelector('h2')?.textContent,
+        nested: !!card.querySelector('[data-task]') || !!card.querySelector('.card'), cardsBelow: [...document.querySelectorAll('[data-task]')].every((e) => e.getBoundingClientRect().top >= cr.bottom),
+        h: Math.round(pr[0].height), fs: parseFloat(getComputedStyle(pills[0]).fontSize), radius: parseFloat(getComputedStyle(pills[0]).borderTopLeftRadius),
+        firstLeft: Math.round(pr[0].left - cr.left), cardPad: parseFloat(getComputedStyle(card).paddingLeft) + parseFloat(getComputedStyle(card).borderLeftWidth),
+        rows: rows.length, sameRowGaps, rowGap, overlap,
+        selBg: cs.backgroundColor, selColor: cs.color, selBorder: cs.borderTopColor, unBg: un.backgroundColor, unColor: un.color, unBorder: un.borderTopColor,
+        icon: sel.querySelector('svg') ? Math.round(sel.querySelector('svg').getBoundingClientRect().width) : 0, unIcon: !!pills.find((e) => !e.previousElementSibling.checked).querySelector('svg'),
+        longInside: long.right <= cr.right + 0.5, overflow: document.documentElement.scrollWidth > innerWidth,
+        after: pr.map((x) => [Math.round(x.left), Math.round(x.top), Math.round(x.width * 10) / 10]),
+      };
+    });
+    truthy(r.sameCard && r.sameWidth, `방문 주소 카드와 같은 스타일·너비 ${JSON.stringify(r.cardStyle)}`);
+    eq(r.dupTitle, 0, '중복 제목 없음'); eq(r.sectionTitle, '작업 내용', '바깥 제목 유지');
+    truthy(!r.nested && r.cardsBelow, '작업 카드는 선택 카드 아래(중첩 없음)');
+    truthy(r.h >= 28 && r.h <= 30 && r.fs >= 12 && r.fs <= 13 && r.radius >= 14, `작은 타원형 칩 ${JSON.stringify(r)}`);
+    eq(r.firstLeft, r.cardPad, '카드 안쪽 여백에서 왼쪽부터');
+    truthy(r.sameRowGaps.every((g) => g >= 6 && g <= 8) && (r.rowGap === null || (r.rowGap >= 6 && r.rowGap <= 10)), `칩 간격 ${JSON.stringify([r.sameRowGaps, r.rowGap])}`);
+    truthy(r.rows >= 2 && !r.overlap && r.longInside && !r.overflow, `줄바꿈·누르는 영역 안 겹침·긴 이름 넘침 없음 ${JSON.stringify(r)}`);
+    truthy(r.selBg === 'rgb(237, 243, 252)' && r.selColor === 'rgb(49, 93, 168)' && r.selBorder === 'rgb(49, 93, 168)' && r.icon === 12 && !r.unIcon, `선택: 연한 블루·블루·12px 체크 ${JSON.stringify(r)}`);
+    truthy(r.unBg === 'rgb(255, 255, 255)' && r.unColor === 'rgb(32, 36, 44)' && r.unBorder === 'rgb(201, 206, 214)', `선택 전: 흰 바탕·회색 테두리·차콜 ${JSON.stringify(r)}`);
+    truthy(r.after.every(([l, t, wd], i) => Math.abs(l - before[i][0]) <= 1 && t === before[i][1] && Math.abs(wd - before[i][2]) <= 1), `선택해도 칩 너비·위치 그대로(1px 미만 글자 렌더링 차이 허용) ${JSON.stringify([before, r.after])}`);
+    // 키보드 포커스 표시(실선, 칩 바깥 2px)
+    await taskChip(page, '샤워기 교체').focus();
+    await page.keyboard.press('Shift+Tab'); await page.keyboard.press('Tab');
+    const f = await page.evaluate(() => { const p = document.activeElement.nextElementSibling; const c = getComputedStyle(p); return { style: c.outlineStyle, width: parseFloat(c.outlineWidth) }; });
+    truthy(f.style === 'solid' && f.width >= 2, `포커스 표시 ${JSON.stringify(f)}`);
+    await page.locator('.task-pick').screenshot({ path: join(ROOT, `e2e/screens/${w}_task_chips.png`) });
+  }, { width: w });
+}
+
+// ───────── 요청서 방문 가능한 시간: 정확한 시각 다중 선택 ─────────
+const timeNames = (page) => page.locator('.time-pick .svc-chip').allInnerTexts().then((a) => a.map((x) => x.trim()));
+
+await test('방문 가능한 시간: 새 날짜·공동 예약별 선택 가능 시각(1시간 간격), 안내 한 문장, 다중 선택·해제(키보드), 제출 시 정확한 시각 저장 → 상세 표시, 범위 칩 없음', async (page) => {
+  await start(page, { path: '/providers/p1/request?group=g1' });
+  await page.locator('.time-pick .svc-chip').first().waitFor();
+  eq((await timeNames(page)).join(' '), '09:00 10:00 11:00 13:00 14:00 15:00', '공동 예약(g1 09:00–12:00 · 13:00–16:00) 시각');
+  const sec = page.locator('section').filter({ has: page.getByRole('heading', { name: '방문 가능한 시간', exact: true }) });
+  const st = await sec.innerText();
+  truthy(st.includes('방문 가능한 시간을 여러 개 선택하면, 업체가 그중 방문 시간을 제안해요.'), '안내 한 문장');
+  for (const s of ['방문받을 수 있는 시각을 선택해 주세요', '업체가 선택한 시각 중 방문 시간을 제안해요', '09:00~12:00', '고객 가능 시간']) truthy(!st.includes(s), `없음: ${s}`);
+  eq(await page.getByText('방문 가능한 시간을 여러 개 선택하면, 업체가 그중 방문 시간을 제안해요.').count(), 1, '안내는 한 번만');
+  // 다중 선택·해제
+  await timeChip(page, '14:00').check();
+  await timeChip(page, '09:00').focus(); await page.keyboard.press('Space');
+  await timeChip(page, '11:00').check(); await timeChip(page, '11:00').uncheck();
+  eq(await page.locator('.time-pick .svc-chip__input:checked').count(), 2, '두 시각 선택');
+  await pickTask(page, '수전 교체', '시간 선택 확인');
+  await detailInput(page).fill('301동 1204호');
+  await page.getByRole('button', { name: '요청 보내기' }).click();
+  await page.waitForURL((u) => /\/sent$/.test(u.pathname));
+  const rid = new URL(page.url()).pathname.split('/')[2];
+  const r = (await db(page)).requests.find((x) => x.id === rid);
+  eq(JSON.stringify(r.slots), '["09:00","14:00"]', '고른 정확한 시각(시각 순)');
+  eq(r.status, 'reviewing', '시간 선택으로 배정·확정 없음');
+  await openSentDetail(page);
+  await waitText(page, '09:00, 14:00');
+  truthy((await page.locator('main').innerText()).includes('방문 가능한 시간'), '상세 라벨');
+  // 새 날짜 요청: 공통 시간대 9개 시각
+  await page.goto(`${BASE}/providers/p2/request?new=1`);
+  await page.locator('.time-pick .svc-chip').first().waitFor();
+  eq((await timeNames(page)).join(' '), '09:00 10:00 11:00 13:00 14:00 15:00 16:00 17:00 18:00', '새 날짜 요청 시각');
+});
+
+await test('방문 가능한 시간: 업체 제안은 고른 시각 중 하나만 → 결제로 예약 확정, 과거 범위형 요청은 범위 그대로 표시', async (page) => {
+  await start(page, { path: '/providers/p1/request?new=1' });
+  await fillNewDateRequest(page, '제안 확인');
+  await timeChip(page, '14:00').check();
+  await detailInput(page).fill('301동 1204호');
+  await page.getByRole('button', { name: '요청 보내기' }).click();
+  await page.waitForURL((u) => /\/sent$/.test(u.pathname));
+  const rid = new URL(page.url()).pathname.split('/')[2];
+  let res = await dev(page, 'approveRequest', rid, '10:00');
+  truthy(!res.ok && res.message.includes('고른 방문 가능한 시각(09:00, 14:00) 중 하나여야 해요'), `고르지 않은 시각 제안 거부: ${res.message}`);
+  res = await dev(page, 'approveRequest', rid, '14:00');
+  truthy(res.ok, '고른 시각으로 승인');
+  await page.goto(`${BASE}/requests/${rid}/approval`);
+  await waitText(page, '09:00, 14:00');
+  eq((await db(page)).requests.find((x) => x.id === rid).bookingId, undefined, '승인만으로 예약 없음');
+  // 과거 범위형 요청(rq-3: 직접 입력·범위 시간)은 범위 그대로
+  await page.goto(`${BASE}/requests/rq-3`);
+  await waitText(page, '방문 가능한 시간');
+  const t = await page.locator('main').innerText();
+  truthy(/\d{2}:\d{2}~\d{2}:\d{2}/.test(t), `범위 표시 유지: ${t.slice(0, 400)}`);
+  truthy(JSON.stringify((await db(page)).requests.find((x) => x.id === 'rq-3').slots).includes('–'), '저장값 범위 그대로');
+});
+
+await test('방문 가능한 시간: 미선택 오류는 카드 안 칩 아래·첫 칩으로 이동, 일정이 바뀌어 고른 시각이 사라지면 해제·안내, 선택 가능한 시각이 없으면 안내·제출 불가', async (page) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await start(page, { path: '/providers/p1/request?group=g1' });
+  await pickTask(page, '수전 교체', '오류 확인');
+  await detailInput(page).fill('301동 1204호');
+  await page.getByRole('button', { name: '요청 보내기' }).click();
+  await settle(page);
+  const fi = await focusInfo(page);
+  truthy(fi.target === 'slots' && fi.error === '방문 가능한 시각을 하나 이상 선택해 주세요.' && fi.visible, `첫 오류=첫 시각 칩 ${JSON.stringify(fi)}`);
+  const pos = await page.evaluate(() => { const e = document.getElementById('req-slots-err'); const card = e.closest('.card'); const chips = card.querySelector('.svc-chips'); return { inCard: !!card && !!card.querySelector('.time-pick'), below: e.getBoundingClientRect().top >= chips.getBoundingClientRect().bottom }; });
+  truthy(pos.inCard && pos.below, `오류 문구는 카드 안 칩 아래 ${JSON.stringify(pos)}`);
+  // 일정 변경: 그룹 시간대가 13:00–16:00만 남으면 고른 09:00은 해제·안내
+  await timeChip(page, '09:00').check(); await timeChip(page, '13:00').check();
+  await page.evaluate(() => { const d = window.__sagoDev.db; d.groups.find((g) => g.id === 'g1').slots = ['13:00–16:00']; window.__sagoDev.setSettings({}); });
+  await waitText(page, '선택할 수 없게 된 시각(09:00)은 선택을 해제했어요');
+  eq((await timeNames(page)).join(' '), '13:00 14:00 15:00', '바뀐 시각 목록');
+  eq(await page.locator('.time-pick .svc-chip__input:checked').count(), 1, '남은 선택 13:00');
+  // 선택 가능한 시각 없음
+  await page.evaluate(() => { const d = window.__sagoDev.db; d.groups.find((g) => g.id === 'g1').slots = []; window.__sagoDev.setSettings({}); });
+  await waitText(page, '지금 선택할 수 있는 방문 시각이 없어요');
+  truthy(await page.getByRole('button', { name: '요청 보내기' }).isDisabled(), '제출 불가');
+});
+
+for (const w of [360, 1280]) {
+  await test(`방문 가능한 시간 ${w}px: 제목은 카드 바깥, 안내·칩·오류는 연락받을 정보와 같은 흰 카드 안, 작은 칩 왼쪽부터 줄바꿈·넘침 없음`, async (page) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.setViewportSize({ width: w, height: 900 });
+    await start(page, { path: '/providers/p1/request?new=1' });
+    await page.locator('.time-pick .svc-chip').first().waitFor();
+    await timeChip(page, '10:00').check();
+    const r = await page.evaluate(() => {
+      const pick = document.querySelector('.time-pick'); const card = pick.closest('.card');
+      const contact = [...document.querySelectorAll('section')].find((s) => s.querySelector('h2')?.textContent === '연락받을 정보').querySelector('.card');
+      const st = (e) => { const c = getComputedStyle(e); return [c.backgroundColor, c.borderTopWidth, c.borderTopColor, c.borderTopLeftRadius, c.paddingLeft, c.paddingTop]; };
+      const cr = card.getBoundingClientRect(); const kr = contact.getBoundingClientRect();
+      const h2 = card.closest('section').querySelector('h2');
+      const pills = [...pick.querySelectorAll('.svc-chip__pill')].map((e) => e.getBoundingClientRect());
+      const hint = pick.querySelector('.time-pick__hint').getBoundingClientRect();
+      return {
+        sameCard: JSON.stringify(st(card)) === JSON.stringify(st(contact)), sameWidth: Math.round(cr.width) === Math.round(kr.width) && Math.round(cr.left) === Math.round(kr.left),
+        titleOutside: h2.textContent === '방문 가능한 시간' && h2.getBoundingClientRect().bottom <= cr.top, fieldsetBorder: getComputedStyle(pick).borderTopWidth,
+        h: Math.round(pills[0].height), left: Math.round(pills[0].left - cr.left), pad: parseFloat(getComputedStyle(card).paddingLeft) + 1,
+        rows: new Set(pills.map((p) => Math.round(p.top))).size, inside: pills.every((p) => p.right <= cr.right - 1),
+        hintGap: Math.round(pills[0].top - hint.bottom), overflow: document.documentElement.scrollWidth > innerWidth,
+      };
+    });
+    truthy(r.sameCard && r.sameWidth && r.titleOutside && r.fieldsetBorder === '0px', `카드 ${JSON.stringify(r)}`);
+    truthy(r.h >= 28 && r.h <= 30 && r.left === r.pad && r.inside && !r.overflow && r.hintGap >= 6 && r.hintGap <= 14, `칩·여백 ${JSON.stringify(r)}`);
+    if (w === 360) truthy(r.rows >= 2, `모바일 줄바꿈 ${r.rows}`);
+    await page.locator('.time-pick').locator('xpath=ancestor::div[contains(@class,"card")][1]').screenshot({ path: join(ROOT, `e2e/screens/${w}_visit_times.png`) });
+  }, { width: w });
+}
+
+for (const w of [360, 1280]) {
+  await test(`요청서 ‘요청 보내기’ ${w}px: 하단 고정 없음(문서 흐름), 마지막 입력 영역 다음 24px, 버튼 아래 본문 여백만, 배경 띠·구분선·안내 문구 없음`, async (page) => {
+    await page.setViewportSize({ width: w, height: 800 });
+    await start(page, { path: '/providers/p1/request?new=1' });
+    const btn = page.getByRole('button', { name: '요청 보내기' });
+    await btn.waitFor();
+    await page.evaluate(() => window.scrollTo(0, 0));
+    const r = await page.evaluate(() => {
+      const b = [...document.querySelectorAll('button')].find((x) => x.textContent.trim() === '요청 보내기');
+      const chain = []; for (let e = b; e && e !== document.body; e = e.parentElement) chain.push(getComputedStyle(e).position);
+      const br = b.getBoundingClientRect(); const prev = b.previousElementSibling.getBoundingClientRect();
+      const main = document.querySelector('main'); const mr = main.getBoundingClientRect();
+      const parent = getComputedStyle(b.parentElement);
+      return {
+        pinned: chain.some((p) => p === 'fixed' || p === 'sticky'), parentIsForm: b.parentElement.tagName === 'FORM',
+        gap: Math.round(br.top - prev.bottom), below: Math.round(mr.bottom - br.bottom), mainPad: parseFloat(getComputedStyle(main).paddingBottom),
+        offscreenAtTop: br.top > innerHeight, width: Math.round(br.width), formWidth: Math.round(b.parentElement.getBoundingClientRect().width),
+        parentBg: parent.backgroundColor, parentBorder: parent.borderTopWidth, parentShadow: parent.boxShadow, bg: getComputedStyle(b).backgroundColor,
+      };
+    });
+    truthy(!r.pinned && r.parentIsForm && r.offscreenAtTop, `고정 아님(처음 화면에 떠 있지 않음) ${JSON.stringify(r)}`);
+    eq(r.gap, 24, '마지막 입력 영역과 24px');
+    eq(r.below, r.mainPad, '버튼 아래는 본문 아래 여백만(보정 공간 없음)');
+    truthy(r.width === r.formWidth && r.bg === 'rgb(49, 93, 168)', `본문 너비·블루 ${JSON.stringify(r)}`);
+    truthy(r.parentBg === 'rgba(0, 0, 0, 0)' && r.parentBorder === '0px' && r.parentShadow === 'none', `배경 띠·구분선·그림자 없음 ${JSON.stringify(r)}`);
+    eq(await page.locator('.action-bar, .action-bar__note').count(), 0, '하단 바·안내 문구 없음');
+    eq(await page.getByText('업체 승인 후 예약금을 결제하면 예약이 확정돼요.').count(), 0, '안내 문구 없음');
+    // 끝까지 스크롤하면 버튼이 마지막 입력 영역 아래에 보이고, 입력 내용과 겹치지 않는다 → 제출 동작
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    await fillNewDateRequest(page, '고정 해제 확인');
+    await detailInput(page).fill('301동 1204호');
+    await btn.click();
+    await sentHeading(page).waitFor();
   }, { width: w });
 }
 

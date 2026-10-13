@@ -8,6 +8,8 @@ import { maskPhone, normalizeContact } from '../../domain/profile';
 import type { TripFeeBasis } from '../../domain/bookingCost';
 import { filterBookings, tabOf, type BookingListQuery, type PendingAction } from '../../domain/bookingFilter';
 import { bundleInRequestsTab } from '../../domain/reservationTabs';
+import { resolveSelectedTasks } from '../../domain/taskSelection';
+import { NEW_DATE_WINDOWS, isValidRequestTimes } from '../../domain/visitTime';
 import type {
   AdditionalWork, Booking, Category, ChangeProposal, CustomerContact, CustomerProfile, DelayNotice, FinalStatement, Address,
   ProviderDetail, ProviderSummary, RepairRequest, Review, Transaction, Won, GroupRecord, SavedVisitAddress, IsoDate, PublicGroup,
@@ -26,6 +28,8 @@ import {
   finalizeProposalAccept, freeCancelReasonOf, markPaymentFailure, nid, prepaidOf, seatsOf, stateOfRequest, toPublicGroup,
 } from './engine';
 import { DEFAULT_CUSTOMER, createSeed } from './seed';
+import { PROVIDER_SERVICES } from './providerServices';
+import { migrateDemoSchedule } from './scheduleMigration';
 
 // v3: 주소 구조 변경(탐색 주소 / 재사용 방문 주소 / 요청·예약 방문 주소 스냅숏 분리). 이전 형식 저장값은 읽지 않는다.
 const STORAGE_KEY = 'on-gimae/mock-db/v3';
@@ -50,7 +54,9 @@ export class MockRepository implements Repository {
     const loaded = this.persist ? this.load() : null;
     this.db = loaded ?? opts.seed ?? createSeed('full');
     if (opts.latencyMs !== undefined) this.db.settings.latencyMs = opts.latencyMs;
-    if (this.persist && !loaded) this.save(); // 새 세션의 시드도 저장해 새로고침·점검 도구가 같은 상태를 보게 한다
+    // 이전 버전 데모 일정으로 저장된 상태는 공동 예약 일정만 새 기준으로 옮긴다(다른 저장 데이터·기록은 그대로)
+    const migrated = !!loaded && migrateDemoSchedule(this.db, createSeed('full'));
+    if (this.persist && (!loaded || migrated)) this.save(); // 새 세션의 시드도 저장해 새로고침·점검 도구가 같은 상태를 보게 한다
   }
 
   // ───────── 인프라 ─────────
@@ -121,6 +127,8 @@ export class MockRepository implements Repository {
     if (!p) throw new RepoError('not_found');
     return p;
   }
+  /** 업체 등록 작업(표시 순서). 이전 목업 상태(작업 데이터가 없던 때 저장된 것)는 기본 데이터로 채운다 */
+  private servicesOf(p: ProviderRecord) { return p.services ?? PROVIDER_SERVICES[p.id] ?? []; }
   private request(id: string): RepairRequest {
     const r = byId(this.db.requests, id);
     if (!r) throw new RepoError('not_found');
@@ -229,6 +237,7 @@ export class MockRepository implements Repository {
       const gs = this.eligibleGroups(id, addressId) ?? [];
       return {
         ...this.summary(p, addressId), intro: p.intro, phone: p.phone, afterServiceTerms: p.afterServiceTerms, reviews: p.reviews,
+        services: this.servicesOf(p),
         groups: gs.sort((a, b) => a.date.localeCompare(b.date)).map(toPublicGroup),
       };
     });
@@ -250,10 +259,12 @@ export class MockRepository implements Repository {
     return this.write(() => {
       const existing = this.db.keyed[input.idempotencyKey];
       if (existing) return this.request(existing); // 같은 제출은 최초 접수 건을 돌려준다 (ERR-REQ-03)
-      this.provider(input.providerId);
+      const p = this.provider(input.providerId);
       const base = this.address(input.addressId);
       if (detailError(base.kind, input.addressDetail)) throw new RepoError('invalid');
-      if (!input.tasks.length || input.tasks.some((t) => !t.title.trim()) || !input.slots.length) throw new RepoError('invalid');
+      // 이 업체의 등록 작업만, 하나 이상, 중복 없이(이전 업체 작업 ID가 섞이면 거부). 작업명은 지금 이름을 요청 당시 이름으로 보관
+      const tasks = resolveSelectedTasks(this.servicesOf(p), input.tasks);
+      if (!tasks) throw new RepoError('invalid');
       const contact = normalizeContact(input.contact ?? { name: '', phone: '' });
       if (!contact) throw new RepoError('invalid');
       if (input.groupId) {
@@ -263,10 +274,13 @@ export class MockRepository implements Repository {
         if (!g || g.closed || g.ended || seatsOf(g) === 0) throw new RepoError('group_closed');
         if (!gs.some((x) => x.id === g.id)) throw new RepoError('address_not_eligible');
       } else if (!input.newDateWish) throw new RepoError('invalid');
+      // 방문 가능한 시각: 이 일정(공동 예약 = 그룹 시간대, 새 날짜 = 공통 시간대)에서 고를 수 있는 정확한 시각만. 범위·없는 시각·중복은 거부
+      const windows = input.groupId ? byId(this.db.groups, input.groupId)!.slots : NEW_DATE_WINDOWS;
+      if (!isValidRequestTimes(input.slots, windows)) throw new RepoError('invalid');
       const id = nid(this.db, 'rq');
       const r: RepairRequest = {
         id, bundleId: input.bundleId ?? `b-${id}`, providerId: input.providerId, groupId: input.groupId, newDateWish: input.newDateWish,
-        slots: input.slots, tasks: input.tasks.map((t) => ({ ...t, id: nid(this.db, 't') })), addressId: input.addressId,
+        slots: [...input.slots].sort(), tasks: tasks.map((t) => ({ ...t, id: nid(this.db, 't') })), addressId: input.addressId,
         // 저장 선택 여부와 관계없이 이번 요청에는 정확한 방문 주소를 스냅숏으로 보존한다
         visitAddress: toVisitAddress(base, input.addressDetail), status: 'reviewing', createdAt: this.db.now, updatedAt: this.db.now,
         // 제출 당시 이름·연락처 스냅숏(내 정보를 참조하지 않는다 — 나중에 내 정보를 수정해도 이 요청은 그대로)
