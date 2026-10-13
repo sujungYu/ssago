@@ -127,6 +127,13 @@ a.list-row:hover { background: #fafbfd; }
 .input[aria-invalid='true'], .textarea[aria-invalid='true'] { border-color: var(--c-danger); }
 .check { display: flex; gap: var(--sp-3); align-items: flex-start; padding: var(--sp-3) 0; }
 .check input { width: 22px; height: 22px; margin: 1px 0 0; accent-color: var(--c-primary); flex: none; }
+/*
+ * 동의 상자(label.check.card): .check의 padding(12px 0)이 뒤에 선언돼 .card의 padding을 덮어써 좌우 여백이 0이 되던 문제 —
+ * 두 클래스를 함께 쓸 때의 안쪽 여백을 여기서 정한다(모바일 16px, 600px 이상 좌우 24px). 체크박스(22px)는 15px·1.5 줄높이 첫 줄 가운데에 맞는다.
+ */
+.check.card { padding: var(--sp-4); cursor: pointer; }
+.check.card > span { min-width: 0; overflow-wrap: anywhere; }
+@media (min-width: 600px) { .check.card { padding: 18px var(--sp-6); } }
 .radio-card { display: flex; gap: var(--sp-3); align-items: flex-start; padding: var(--sp-4); border: 1px solid var(--c-line-strong); border-radius: var(--r-md); background: var(--c-surface); cursor: pointer; }
 .radio-card input { width: 22px; height: 22px; margin: 1px 0 0; accent-color: var(--c-primary); flex: none; }
 .radio-card:has(input:checked) { border-color: var(--c-primary); background: var(--c-info-bg); }

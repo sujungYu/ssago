@@ -1259,6 +1259,50 @@ await test('최종 정산: 112,500원 − 50,000원 = 62,500원 모의 결제', 
   eq(d.transactions.filter((t) => t.bookingId === 'bk-k9' && t.kind === 'balance').length, 1, '잔금 거래 수');
   eq(d.statements.find((s) => s.bookingId === 'bk-k9').status, 'settled', '정산 상태');
 });
+for (const w of [360, 320, 1280]) {
+  await test(`최종 정산 동의 상자: ${w}px — 안쪽 여백(좌우·상하)·체크박스 간격·첫 줄 정렬·줄바꿈, 상자 어디를 눌러도 선택, 키보드, 결제 버튼 활성화`, async (page) => {
+    await page.setViewportSize({ width: w, height: 800 });
+    await start(page, { path: '/bookings/bk-k9/final' });
+    await waitText(page, '62,500원');
+    const box = page.locator('label.check.card').filter({ hasText: '실제 작업 내용과 최종 금액을 확인했어요.' });
+    const pay = page.getByRole('button', { name: /62,500원 모의 결제/ });
+    const r = await box.evaluate((l) => {
+      const cs = getComputedStyle(l); const lr = l.getBoundingClientRect();
+      const cb = l.querySelector('input').getBoundingClientRect(); const sp = l.querySelector('span');
+      const range = document.createRange(); range.selectNodeContents(sp); const lines = [...range.getClientRects()];
+      const first = lines[0];
+      return {
+        pl: parseFloat(cs.paddingLeft), pr: parseFloat(cs.paddingRight), pt: parseFloat(cs.paddingTop), pb: parseFloat(cs.paddingBottom),
+        cbLeft: Math.round(cb.left - lr.left - parseFloat(cs.borderLeftWidth)), cbW: Math.round(cb.width), gap: Math.round(sp.getBoundingClientRect().left - cb.right),
+        firstLineMid: first.top + first.height / 2, cbMid: cb.top + cb.height / 2, radius: parseFloat(cs.borderTopLeftRadius), border: cs.borderTopWidth,
+        textRight: Math.round(lr.right - sp.getBoundingClientRect().right), overflow: document.documentElement.scrollWidth > innerWidth || sp.scrollWidth > sp.clientWidth + 1,
+        lines: new Set(lines.map((x) => Math.round(x.top))).size, labelFor: l.control === l.querySelector('input'), cursor: cs.cursor,
+      };
+    });
+    if (w >= 600) truthy(r.pl >= 20 && r.pl <= 24 && r.pr >= 20 && r.pr <= 24, `데스크톱 좌우 20~24px ${JSON.stringify(r)}`);
+    else truthy(r.pl >= 16 && r.pr >= 16, `모바일 좌우 16px 이상 ${JSON.stringify(r)}`);
+    truthy(r.pt >= 16 && r.pt <= 20 && r.pb >= 16 && r.pb <= 20, `상하 16~20px ${JSON.stringify(r)}`);
+    eq(r.cbLeft, r.pl, '체크박스는 안쪽 여백에서 시작(테두리에 붙지 않음)');
+    eq(r.cbW, 22, '체크박스 줄어들지 않음'); eq(r.gap, 12, '체크박스–문구 12px');
+    truthy(Math.abs(r.firstLineMid - r.cbMid) <= 2, `첫 줄과 정렬 ${JSON.stringify(r)}`);
+    truthy(r.radius >= 12 && r.border === '1px' && !r.overflow && r.labelFor && r.cursor === 'pointer', `테두리·모서리 유지, 넘침 없음, label 연결 ${JSON.stringify(r)}`);
+    if (w === 320) truthy(r.lines >= 2, `좁은 화면 여러 줄(${r.lines})`);
+    // 상자 안 여백(체크박스·문구가 아닌 곳)을 눌러도 선택·해제, 필수 확인 전 결제 버튼 비활성
+    truthy(await pay.isDisabled(), '확인 전 결제 비활성');
+    await box.scrollIntoViewIfNeeded(); const bb = await box.boundingBox();
+    await box.click({ position: { x: bb.width - 6, y: bb.height / 2 } }); // 오른쪽 안쪽 여백
+    truthy(await page.getByRole('checkbox').isChecked() && await pay.isEnabled(), '여백 클릭으로 선택 → 결제 활성');
+    await box.click({ position: { x: 6, y: 6 } }); // 왼쪽 위 안쪽 여백
+    truthy(!(await page.getByRole('checkbox').isChecked()) && await pay.isDisabled(), '다시 클릭하면 해제 → 결제 비활성');
+    // 키보드: Tab으로 체크박스 포커스(실선 표시, 상자 안에 그려짐) → Space로 선택
+    await page.getByRole('checkbox').focus();
+    await page.keyboard.press('Space');
+    const f = await page.evaluate(() => { const a = document.activeElement; const cs = getComputedStyle(a); const b = a.getBoundingClientRect(); const l = a.closest('label').getBoundingClientRect();
+      return { type: a.type, style: cs.outlineStyle, inside: b.left - parseFloat(cs.outlineOffset) - parseFloat(cs.outlineWidth) > l.left }; });
+    truthy(f.type === 'checkbox' && f.inside && await pay.isEnabled(), `키보드 선택·포커스 ${JSON.stringify(f)}`);
+    if (w !== 320) await box.screenshot({ path: join(ROOT, `e2e/screens/${w}_final_consent.png`) });
+  }, { width: w });
+}
 await test('최종 정산: 차액 0원은 결제 없이 확인', async (page) => {
   await start(page, { path: '/bookings/bk-k10/final' });
   await waitText(page, '추가 결제·환불');
