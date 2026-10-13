@@ -9,6 +9,7 @@ import { addDaysYmd, customRangeError, formatYmdDots, isValidYmd } from './reque
 import { seoulYmd } from './time';
 import type { Booking, IsoDate, IsoDateTime } from './types';
 import { bookingTabOf, type BookingTab } from './reservationTabs';
+import { ACTIVE_GROUP_LABEL, activeGroupOf, bookingHasTodo, type BookingDisplayInput, type PendingAction } from './statusDisplay';
 
 export type { BookingTab };
 /** 확정된 예약/완료·취소 구분 — 탭 분류 공통 규칙(src/domain/reservationTabs.ts)을 그대로 쓴다 */
@@ -20,10 +21,10 @@ export type PastStatus = 'all' | 'completed' | 'cancelled';
 
 export const ACTIVE_STATUS_OPTIONS: { value: ActiveStatus; label: string; hint?: string }[] = [
   { value: 'all', label: '전체' },
-  { value: 'scheduled', label: '방문 예정' },
-  { value: 'in_progress', label: '작업 중', hint: '후속 방문 대기 포함' },
-  { value: 'final_confirm', label: '최종 금액 확인 필요' },
-  { value: 'settlement_waiting', label: '정산 대기' },
+  { value: 'scheduled', label: ACTIVE_GROUP_LABEL.scheduled, hint: '일정 조율 중·후속 방문 예정 포함' },
+  { value: 'in_progress', label: ACTIVE_GROUP_LABEL.in_progress },
+  { value: 'final_confirm', label: ACTIVE_GROUP_LABEL.final_confirm },
+  { value: 'settlement_waiting', label: ACTIVE_GROUP_LABEL.settlement_waiting, hint: '금액 협의·결제 결과 확인 포함' },
 ];
 export const PAST_STATUS_OPTIONS: { value: PastStatus; label: string }[] = [
   { value: 'all', label: '전체' },
@@ -32,21 +33,10 @@ export const PAST_STATUS_OPTIONS: { value: PastStatus; label: string }[] = [
 ];
 
 /**
- * 확정된 예약 상태 그룹(작업 상태 workStatus 기준, 카드 배지와 같은 기준).
- * - followup_waiting(후속 방문 대기): 작업이 끝나지 않은 다일 작업이라 ‘작업 중’.
- * - final_confirm_waiting: 금액 협의 중(statement disputed)이어도 작업 상태는 그대로라 ‘최종 금액 확인 필요’(spec 미정 사항).
- * - 예약 상태 terms_recheck(조건 재확인)는 만드는 흐름이 없어 그룹에 넣지 않는다 → ‘전체’에서만 보인다.
+ * 확정된 예약 상태 그룹 = 카드 대표 상태와 같은 기준(src/domain/statusDisplay.ts activeGroupOf).
+ * 후속 방문 일정 확정 → 방문 예정, 금액 이견·잔금 결제 결과 확인·작업 중단 후 정산 대기 → 정산 진행 중. 조건 재확인 예약도 작업 상태로 분류한다.
  */
-export function activeStatusOf(b: Pick<Booking, 'status' | 'workStatus'>): Exclude<ActiveStatus, 'all'> | null {
-  if (b.status !== 'confirmed') return null;
-  switch (b.workStatus) {
-    case 'scheduled': return 'scheduled';
-    case 'in_progress': case 'followup_waiting': return 'in_progress';
-    case 'final_confirm_waiting': return 'final_confirm';
-    case 'stopped_settlement_waiting': return 'settlement_waiting';
-    default: return null;
-  }
-}
+export const activeStatusOf = (i: Omit<BookingDisplayInput, 'pendingActions' | 'schedule'>): Exclude<ActiveStatus, 'all'> | null => activeGroupOf(i);
 /** 완료·취소 상태 그룹: 취소가 우선, 그다음 작업 완료(중단 후 정산 완료 포함) */
 export function pastStatusOf(b: Pick<Booking, 'status' | 'workStatus'>): Exclude<PastStatus, 'all'> | null {
   if (b.status === 'cancelled') return 'cancelled';
@@ -55,8 +45,8 @@ export function pastStatusOf(b: Pick<Booking, 'status' | 'workStatus'>): Exclude
 }
 
 // ───────── 고객이 해야 할 행동(확인 필요) ─────────
-/** 실제 미처리 데이터에서 계산한 고객 행동. 카드 문구·색상으로 추정하지 않는다. */
-export type PendingAction = 'proposal' | 'material' | 'additional' | 'delay' | 'final_statement' | 'terms_recheck';
+/** 실제 미처리 데이터에서 계산한 고객 행동. 카드 문구·색상으로 추정하지 않는다(정의는 statusDisplay.ts). */
+export type { PendingAction };
 
 // ───────── 방문일 기간 ─────────
 export type ActivePeriod = 'all' | 'today' | 'this_week' | 'custom';
@@ -115,7 +105,7 @@ export function toBookingQuery(f: BookingsFilterState, nowIso: IsoDateTime): Boo
   return q;
 }
 
-type Filterable = { booking: Pick<Booking, 'status' | 'workStatus' | 'visitDate'>; pendingActions: PendingAction[] };
+type Filterable = { booking: Pick<Booking, 'status' | 'workStatus' | 'visitDate' | 'followUp'>; pendingActions: PendingAction[]; statementStatus?: BookingDisplayInput['statementStatus']; balanceInFlight?: boolean };
 
 /**
  * 조건으로 거른다(원본·순서 유지). 방문일이 없거나 잘못된 예약은 추정하지 않고, 날짜 조건이 있을 때만 제외하며 그 수를 돌려준다.
@@ -125,8 +115,8 @@ export function filterBookings<T extends Filterable>(items: T[], q: BookingListQ
   const out = items.filter((it) => {
     const b = it.booking;
     if (tabOf(b) !== q.tab) return false;
-    if (q.statusGroup && (q.tab === 'active' ? activeStatusOf(b) : pastStatusOf(b)) !== q.statusGroup) return false;
-    if (q.actionRequiredOnly && it.pendingActions.length === 0) return false;
+    if (q.statusGroup && (q.tab === 'active' ? activeStatusOf(it) : pastStatusOf(b)) !== q.statusGroup) return false;
+    if (q.actionRequiredOnly && !bookingHasTodo(it)) return false;
     if (q.visitFrom || q.visitTo) {
       if (!isValidYmd(b.visitDate)) { excluded++; return false; }
       if (q.visitFrom && b.visitDate < q.visitFrom) return false;

@@ -53,13 +53,14 @@ export function checkPayable(i: PayCheckInput): { ok: true } | { ok: false; reas
 // ───────── 상태 라벨 ─────────
 export type Tone = 'neutral' | 'info' | 'action' | 'success' | 'warn' | 'danger';
 
+/** 요청 상태의 표시 이름·색은 목록 대표 상태(src/domain/statusDisplay.ts REQUEST_DISPLAY)와 같다. hint는 상세·비교 화면 안내 */
 export const REQUEST_STATUS: Record<RequestStatus, { label: string; tone: Tone; hint: string }> = {
   reviewing: { label: '업체 검토 중', tone: 'info', hint: '업체가 요청을 검토하고 있어요. 아직 예약이 확정된 것은 아니에요.' },
-  needs_info: { label: '추가 정보 필요', tone: 'action', hint: '업체가 확인하고 싶은 내용이 있어요. 요청서를 보완해 주세요.' },
-  approved_pending_payment: { label: '예약금 결제 대기', tone: 'action', hint: '업체가 요청을 승인했어요. 예약금을 결제하면 예약이 확정돼요.' },
-  rejected: { label: '업체 거절', tone: 'danger', hint: '업체가 이번 요청을 수행하기 어렵다고 답했어요.' },
-  withdrawn: { label: '철회', tone: 'neutral', hint: '직접 철회한 요청이에요. 취소수수료는 없어요.' },
-  approval_expired: { label: '승인 만료', tone: 'warn', hint: '결제 기한이 지나 예약이 확정되지 않았어요. 취소수수료는 없어요.' },
+  needs_info: { label: '업체 검토 중', tone: 'info', hint: '업체가 확인하고 싶은 내용이 있어요. 요청서를 보완해 주세요.' },
+  approved_pending_payment: { label: '예약금 결제', tone: 'info', hint: '업체가 요청을 승인했어요. 예약금을 결제하면 예약이 확정돼요.' },
+  rejected: { label: '업체 거절', tone: 'neutral', hint: '업체가 이번 요청을 수행하기 어렵다고 답했어요.' },
+  withdrawn: { label: '요청 취소', tone: 'neutral', hint: '직접 취소한 요청이에요. 취소수수료는 없어요.' },
+  approval_expired: { label: '결제 기한 만료', tone: 'neutral', hint: '결제 기한이 지나 예약이 확정되지 않았어요. 취소수수료는 없어요.' },
   closed_other_booking: { label: '다른 업체 예약으로 종료', tone: 'neutral', hint: '같은 작업으로 다른 업체 예약이 확정되어 종료됐어요.' },
   booked: { label: '예약 완료', tone: 'success', hint: '예약금 결제로 요청 과정이 끝났어요. 일정·작업·정산은 내 예약에서 관리해요.' },
 };

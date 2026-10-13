@@ -35,6 +35,25 @@ export function PhoneButton({ phone, name }: { phone: string; name: string }) {
 export function Badge({ tone = 'neutral', children }: { tone?: Tone; children: ReactNode }) {
   return <span className={`badge badge--${tone}`}>{children}</span>;
 }
+/**
+ * 상세 상단 공통 행동 카드(spec 5.17): 회색 테두리 카드 + 연한 블루 머리(정보 아이콘 · ‘확인이 필요해요’) + 구체 제목 + 흰 본문 + 하단 버튼.
+ * 표시만 공통이고 입력·처리 로직은 상황별 컴포넌트가 가진다. head로 기다리는 상태 등 머리 문구를 바꿀 수 있다.
+ */
+export function ActionCard({ id, title, head = '확인이 필요해요', children, actions, className }: {
+  id: string; title: ReactNode; head?: string; children?: ReactNode; actions?: ReactNode; className?: string;
+}) {
+  return (
+    <section className={`act-card${className ? ` ${className}` : ''}`} id={id} tabIndex={-1} aria-labelledby={`${id}-title`}>
+      <p className="act-card__head"><Icon name="info" size={16} />{head}</p>
+      <div className="act-card__body stack--sm stack">
+        <h2 id={`${id}-title`} className="act-card__title">{title}</h2>
+        {children}
+      </div>
+      {actions && <div className="act-card__actions">{actions}</div>}
+    </section>
+  );
+}
+
 export function Banner({ tone = 'info', title, children, icon }: { tone?: 'info' | 'warn' | 'danger' | 'success'; title?: string; children?: ReactNode; icon?: string }) {
   const ic = icon ?? (tone === 'danger' || tone === 'warn' ? 'warn' : tone === 'success' ? 'check' : 'info');
   return (
@@ -216,7 +235,7 @@ export function Dialog({ title, onClose, children, actions, closeLabel, anchor, 
 
 // ───────── 싸고 공동 예약이란? ─────────
 /**
- * 업체 찾기 ‘어떤 수리가 필요하세요?’ 제목 영역의 한 줄 안내 + 원형 정보 아이콘 버튼(접근성 이름 ‘공동 예약 이용 방법’).
+ * 업체 찾기 ‘어떤 생활 수리가 필요하세요?’ 제목 아래의 소개 문구 + 원형 정보 아이콘 버튼(접근성 이름 ‘공동 예약 이용 방법’).
  * 마지막 어절과 아이콘을 줄바꿈 없이 묶어 아이콘만 다음 줄로 떨어지지 않게 한다. 호버·키보드 포커스 시 같은 문구의 툴팁을 보여준다. 누르면 상세 안내(모바일 하단 시트, 데스크톱 모달)를 연다.
  * 자동으로 띄우거나 확인을 강제하지 않는다. 출장비만 마감 때 확정되며 수리비는 작업 완료 후 최종 정산된다.
  */
@@ -229,7 +248,7 @@ export function CoopGuideHint() {
   return (
     <>
       <p className="coop-hint">
-        이웃과 같은 날 예약하면 출장비를 나눠{' '}
+        이웃과 같은 업체·같은 날 예약하고 출장비를 나눠{' '}
         <span className="nowrap">
           내요.
           <button type="button" className={`info-btn${tipStart ? ' info-btn--tip-start' : ''}`} aria-label="공동 예약 이용 방법" aria-haspopup="dialog"

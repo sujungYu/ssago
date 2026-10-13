@@ -16,11 +16,11 @@ describe('내 예약 조회(queryBookings)', () => {
     expect(active.items.length + past.items.length).toBe(all.length);
     expect(ids(past)).toEqual(['bk-k13', 'bk-k14', 'bk-k15', 'bk-k16', 'bk-k17', 'bk-k18']);
     expect(active.hasAnyInTab && past.hasAnyInTab).toBe(true);
-    // 기존 정렬 유지: 확인할 내용이 있는 예약이 먼저
-    const att = active.items.map((x) => !!x.attention);
+    // 기존 정렬 유지: 할 일이 있는 예약이 먼저
+    const att = active.items.map((x) => x.display.actions.length > 0);
     expect(att.indexOf(false) === -1 || att.slice(att.indexOf(false)).every((x) => !x)).toBe(true);
   });
-  it('확인 필요는 실제 미처리 데이터 기준(제안·자재·추가 작업·지연·최종 금액)', async () => {
+  it('할 일 있는 예약만은 실제 미처리 데이터 기준(제안·자재·추가 작업·지연·최종 금액)', async () => {
     const res = await repo().queryBookings({ tab: 'active', actionRequiredOnly: true });
     expect(ids(res)).toEqual(['bk-k10', 'bk-k11', 'bk-k3', 'bk-k4', 'bk-k5', 'bk-k6', 'bk-k9']);
     expect(ids(res)).not.toContain('bk-k12'); // 정산 대기(금액 협의 중) — 고객 앱 행동 없음

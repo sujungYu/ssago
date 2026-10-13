@@ -1,4 +1,4 @@
-import type { Booking, IsoDate, PaymentStatus, RefundStatus, TimeSlot, VisitTime } from '../domain/types';
+import type { IsoDate, PaymentStatus, RefundStatus, TimeSlot, VisitTime } from '../domain/types';
 import { formatDate } from '../domain/time';
 import { VISIT_TIME_MISSING, formatSlots, isValidVisitTime } from '../domain/visitTime';
 import { VISIT_ADDRESS_MISSING } from '../domain/address';
@@ -6,26 +6,41 @@ import type { CustomerContact, VisitAddress } from '../domain/types';
 import { maskPhone } from '../domain/profile';
 import type { Tone } from '../domain/rules';
 import { Badge } from '../components/ui';
+import { TONE_BADGE, actionSummary, bookingDisplay, type ActionKind, type BookingDisplay, type PendingAction, type StatusDisplay } from '../domain/statusDisplay';
+import type { BookingDetail } from '../data/repositories/types';
 
-export const WORK_STATUS: Record<Booking['workStatus'], { label: string; tone: Tone }> = {
-  scheduled: { label: '방문 예정', tone: 'info' },
-  in_progress: { label: '작업 중', tone: 'info' },
-  followup_waiting: { label: '후속 방문 대기', tone: 'action' },
-  final_confirm_waiting: { label: '최종 금액 확인 필요', tone: 'action' },
-  completed: { label: '이용 완료', tone: 'success' },
-  stopped_settlement_waiting: { label: '정산 대기', tone: 'warn' },
-};
+/** 대표 상태 배지. 목록·상세 공통(src/domain/statusDisplay.ts) */
+export function StatusBadges({ d }: { d: Pick<StatusDisplay, 'label' | 'tone'> }) {
+  return <span className="status-badges"><Badge tone={TONE_BADGE[d.tone]}>{d.label}</Badge></span>;
+}
 
 /**
- * 예약 상태 배지. 작업 진행 상태(workStatus)를 보여주되, 업체가 기존 일정에 방문할 수 없어 새 일정을 정하는 중이면(scheduleStateOf)
- * ‘방문 예정’ 대신 ‘일정 협의 중’으로 보여준다(목록·상세 공통). 작업 상태 값은 바꾸지 않는다.
+ * 목록 카드 하단 할 일 한 줄(spec 5.18): 작은 주황 점 + 행동 문구(+ ‘외 N건’). 버튼이 아니라 안내이며 카드를 누르면 상세 상단 확인 카드로 간다.
+ * 할 일이 없으면 영역·구분선을 그리지 않는다. 점은 장식이고 의미는 문구로 전달한다.
  */
-export function bookingBadge(b: Pick<Booking, 'status' | 'workStatus' | 'cancelCause'>, schedule?: { oldVisitUnavailable: boolean }) {
-  if (b.status === 'cancelled') return <Badge tone="neutral">취소됨</Badge>;
-  if (schedule?.oldVisitUnavailable && b.status === 'confirmed' && b.workStatus === 'scheduled') return <Badge tone="warn">일정 협의 중</Badge>;
-  if (b.status === 'terms_recheck') return <Badge tone="warn">조건 재확인 필요</Badge>;
-  const s = WORK_STATUS[b.workStatus];
-  return <Badge tone={s.tone}>{s.label}</Badge>;
+export function TodoLine({ actions }: { actions: ActionKind[] }) {
+  const text = actionSummary(actions);
+  if (!text) return null;
+  return <p className="card-todo"><span className="card-todo__dot" aria-hidden />{text}</p>;
+}
+
+/** 예약 상세 데이터에서 고객이 지금 해야 할 행동(목록의 pendingActions와 같은 기준) */
+export function pendingActionsOfDetail(d: BookingDetail): PendingAction[] {
+  if (d.booking.status === 'cancelled') return [];
+  const out: PendingAction[] = [];
+  if (d.proposals.some((p) => p.status === 'proposed')) out.push('proposal');
+  if (d.materials.some((m) => m.paymentStatus === 'none')) out.push('material');
+  if (d.additionalWorks.some((w) => w.status === 'proposed')) out.push('additional');
+  if (d.delay) out.push('delay');
+  const balancePending = d.ledger.some((l) => l.kind === 'payment' && l.tx.kind === 'balance' && (l.tx.status === 'processing' || l.tx.status === 'unknown'));
+  if (!balancePending && d.statement?.status === 'awaiting_customer') out.push('final_statement');
+  return out;
+}
+
+/** 예약 상세의 대표 상태(목록과 같은 매핑) */
+export function bookingDisplayOfDetail(d: BookingDetail): BookingDisplay {
+  const balanceInFlight = d.ledger.some((l) => l.kind === 'payment' && l.tx.kind === 'balance' && (l.tx.status === 'processing' || l.tx.status === 'unknown'));
+  return bookingDisplay({ booking: d.booking, schedule: d.schedule, statementStatus: d.statement?.status, balanceInFlight, pendingActions: pendingActionsOfDetail(d) });
 }
 
 export const PAYMENT_STATUS: Record<PaymentStatus, { label: string; tone: Tone; hint: string }> = {

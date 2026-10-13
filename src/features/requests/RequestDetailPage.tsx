@@ -5,12 +5,10 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Page } from '../../app/Page';
 import { useRepo } from '../../app/context';
 import { useAction, useAsync } from '../../app/hooks';
-import { REQUEST_STATUS } from '../../domain/rules';
 import { formatDate, formatDateTime } from '../../domain/time';
 import { Icon } from '../../components/Icon';
-import { AsyncView, Banner, Button, Dialog, KV, LinkButton, PhoneButton, Section } from '../../components/ui';
+import { ActionCard, AsyncView, Banner, Button, Dialog, KV, LinkButton, PhoneButton, Section } from '../../components/ui';
 import type { RequestDetail } from '../../data/repositories/types';
-import { RequestBadge } from './RequestsPage';
 import { progressOfRequest, unlessComplete } from '../../domain/progressStep';
 import { ProgressSteps } from '../../components/ProgressSteps';
 import { ContactText, VisitAddressText, slotsText } from '../shared';
@@ -23,7 +21,6 @@ function Body({ d }: { d: RequestDetail }) {
   const [confirm, setConfirm] = useState(false);
   const r = d.request;
   const ap = d.approval;
-  const meta = REQUEST_STATUS[r.status];
   // 철회 가능한 상태(기존 정책 그대로): 결제 전 진행 중 요청만. 예약 확정·종료된 요청에는 철회 버튼이 없다(확정 예약 취소는 예약 상세에서).
   const canWithdraw = ['reviewing', 'needs_info', 'approved_pending_payment'].includes(r.status) && !isConvertedToBooking(r);
   // 비교 요청(같은 묶음에 업체 2곳 이상)이면 철회 확인에 ‘다른 업체에 보낸 요청은 유지돼요.’를 덧붙인다
@@ -33,35 +30,24 @@ function Body({ d }: { d: RequestDetail }) {
 
   return (
     <>
-      {/* 업체 검토 중은 상단 진행 단계와 겹치고, 추가 정보 필요는 아래 ‘보완 필요’ 카드가 대신하므로 상태 배지·설명을 따로 두지 않는다. 다른 상태는 그대로 */}
-      {r.status !== 'reviewing' && r.status !== 'needs_info' && (
-        <div className="stack--sm stack">
-          <div className="row row--wrap"><RequestBadge status={r.status} recheck={!!ap?.recheck && r.status === 'approved_pending_payment'} /></div>
-          <p className="small muted">{meta.hint}</p>
-        </div>
-      )}
-
-      {/* 보완 요청(추가 정보 필요)일 때만: 배지 · 제목 · 업체명과 실제 요청 내용 · 보완 버튼을 한 카드에(하단 같은 버튼 없음) */}
+      {/* 상단 확인 영역(spec 5.17): 진행 단계 바로 아래, 일반 정보보다 위. 상태 배지·설명을 따로 반복하지 않는다(진행 단계·종료 안내·행동 카드가 대신) */}
+      {/* A. 요청서 보완: 업체가 남긴 실제 요청 내용 + [요청서 보완하기](기존 보완 화면·제출 흐름) */}
       {r.status === 'needs_info' && (
-        <section className="card stack--sm stack info-req" aria-labelledby="info-req-title">
-          <div><span className="badge badge--orange">보완 필요</span></div>
-          <h2 id="info-req-title" className="info-req__title">요청서를 보완해 주세요</h2>
+        <ActionCard id="info-req" title="요청서를 보완해 주세요"
+          actions={<LinkButton to={`/requests/${r.id}/supplement`} variant="primary" block>요청서 보완하기</LinkButton>}>
           <p className="small muted">{d.provider.name}의 요청{r.infoRequest ? ` · ${formatDateTime(r.infoRequest.requestedAt)}` : ''}</p>
           {r.infoRequest
-            ? <p className="info-req__msg">{r.infoRequest.message}</p>
-            : <p className="info-req__msg muted">요청 내용을 불러오지 못했어요. 업체에 전화로 확인해 주세요.</p>}
-          <div className="info-req__actions">
-            <LinkButton to={`/requests/${r.id}/supplement`} variant="primary">요청서 보완하기</LinkButton>
-          </div>
-        </section>
+            ? <p className="act-card__msg">{r.infoRequest.message}</p>
+            : <p className="act-card__msg muted">요청 내용을 불러오지 못했어요. 업체에 전화로 확인해 주세요.</p>}
+        </ActionCard>
       )}
       {r.status === 'reviewing' && r.infoRequest?.response && <Banner tone="info" title="보완한 내용을 업체가 확인하고 있어요">{r.infoRequest.response.message}</Banner>}
       {r.status === 'rejected' && <Banner tone="danger" title="업체가 거절했어요">{r.rejectionReason ?? '사유가 전달되지 않았어요.'} 취소수수료는 없어요. 다른 업체에 요청할 수 있어요.</Banner>}
       {r.status === 'approval_expired' && <Banner tone="warn" title="결제 기한이 지나 예약이 확정되지 않았어요">취소수수료는 없어요. 새 요청을 보낼 수 있어요.</Banner>}
       {r.status === 'closed_other_booking' && <Banner tone="info" title="같은 작업으로 다른 업체 예약이 확정됐어요">이 요청은 취소수수료 없이 종료됐어요.</Banner>}
-      {r.status === 'withdrawn' && <Banner tone="info" title="직접 철회한 요청이에요">취소수수료는 없어요.</Banner>}
+      {r.status === 'withdrawn' && <Banner tone="info" title="직접 취소한 요청이에요">취소수수료는 없어요.</Banner>}
 
-      {/* 승인·결제 대기: 조건 확인·동의와 예약금 결제를 이 화면에서(별도 승인 조건 화면 없음) */}
+      {/* B(예약 확정 전). 승인·결제 대기: 승인된 방문 시각·바뀐 조건 확인·동의와 예약금 결제를 이 화면 상단 카드에서(별도 승인 조건 화면 없음) */}
       {r.status === 'approved_pending_payment' && ap && <DepositPaySection requestId={r.id} />}
       {r.status === 'booked' && (
         <div className="card stack--sm stack done-summary" role="status">

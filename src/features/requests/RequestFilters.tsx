@@ -6,7 +6,6 @@ import {
 } from '../../domain/requestFilter';
 
 type Open = { kind: 'status' | 'period'; anchor: HTMLElement } | null;
-const ENDED_HINT = '업체 거절·철회·승인 만료 등 예약으로 이어지지 않고 끝난 요청';
 
 /**
  * 보낸 요청 필터 막대: [요청 상태 ▾] [접수일 ▾]  요청 묶음 N건. 초기화 버튼은 두지 않는다(각 필터의 ‘전체’로 그 조건만 해제).
@@ -24,7 +23,7 @@ export function RequestFilterBar({ filter, onApply, count }: { filter: RequestFi
       <p className="filter-bar__count small" aria-live="polite">{count === undefined ? ' ' : <>{COMPARE_REQUESTS_ENABLED ? '요청 묶음' : '보낸 요청'} <b>{count}</b>건</>}</p>
       {open?.kind === 'status' && (
         <OptionPicker title="요청 상태" name="status-group" anchor={open.anchor} onClose={() => setOpen(null)}
-          options={STATUS_GROUP_OPTIONS.map((o) => (o.value === 'ended' ? { ...o, hint: ENDED_HINT } : o))}
+          options={STATUS_GROUP_OPTIONS.map((o) => (o.value === 'reviewing' ? { ...o, hint: '추가 정보 요청 포함' } : o.value === 'payment_pending' ? { ...o, hint: '바뀐 조건 확인 포함' } : o))}
           value={filter.status} onApply={(status) => done({ ...filter, status })} />
       )}
       {open?.kind === 'period' && (

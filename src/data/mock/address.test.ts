@@ -169,3 +169,26 @@ describe('계정별 분리', () => {
     expect((await r.getBooking(res.bookingId!)).visitAddress?.detail).toBe('대문 옆');
   });
 });
+
+describe('방문 날짜 선택: 새 요청 희망 날짜·업체 상세 날짜 정보', () => {
+  it('새 요청 희망 날짜는 업체 접수 기준(운영 요일·휴무일·접수 기간)과 48시간 기준을 지켜야 접수된다', async () => {
+    const r = new MockRepository({ latencyMs: 0 });
+    expect(await code(r.createRequest(req({ newDateWish: '2026-10-22' })))).toBe('ok'); // 한빛설비 목요일
+    expect(await code(r.createRequest(req({ newDateWish: '2026-10-25' })))).toBe('invalid'); // 일요일(쉬는 요일)
+    expect(await code(r.createRequest(req({ newDateWish: '2026-10-28' })))).toBe('invalid'); // 휴무일
+    expect(await code(r.createRequest(req({ newDateWish: '2026-10-14' })))).toBe('invalid'); // 48시간 이전
+    expect(await code(r.createRequest(req({ newDateWish: '2026-12-01' })))).toBe('invalid'); // 접수 기간 밖
+  });
+  it('새 요청은 그룹 ID 없이 희망 날짜만 저장한다', async () => {
+    const r = new MockRepository({ latencyMs: 0 });
+    const created = await r.createRequest(req({ newDateWish: '2026-10-22' }));
+    expect(created.groupId).toBeNull();
+    expect(created.newDateWish).toBe('2026-10-22');
+  });
+  it('업체 상세는 새 요청 접수 기준을 주고, 기존 공동 예약 데모 날짜(10/19·21·23)는 그대로다', async () => {
+    const p = await new MockRepository({ latencyMs: 0 }).getProvider('p1', 'ad-apt');
+    expect(p.newRequest?.weekdays).toEqual([1, 2, 3, 4, 5, 6]);
+    expect([...new Set(p.groups.map((g) => g.date))]).toEqual(['2026-10-19', '2026-10-21', '2026-10-23']);
+    expect(p.closedJointDates).toEqual(['2026-10-14']); // 마감 처리된 시드 그룹(gc-p1)
+  });
+});

@@ -73,8 +73,22 @@ export interface ProviderDetail extends ProviderSummary {
   afterServiceTerms: string[]; // 업체가 직접 제시하는 사후 조건(플랫폼 공통 보증 아님)
   reviews: ProviderReview[];
   groups: PublicGroup[]; // 현재 주소로 참여 가능한 열린 그룹만
+  /** 현재 주소 기준 그룹 중 접수 마감 처리된 그룹의 날짜(오늘 이후). 새 요청 날짜 카드에서 ‘마감됐어요’ 안내용 */
+  closedJointDates: IsoDate[];
+  /** 새 요청 접수 기준. 없으면 새 요청 가능 날짜가 없다 */
+  newRequest: NewRequestPolicy | null;
   /** 업체 등록 작업(표시 순서). 비어 있으면 요청서에서 작업을 고를 수 없다 */
   services: ProviderService[];
+}
+
+/** 업체의 새 요청 접수 기준(공개 운영 정보). 판단은 domain/visitDays.ts. 없으면 새 요청을 받을 수 있는 날짜가 없다 */
+export interface NewRequestPolicy {
+  /** 새 요청을 받는 요일(0 = 일요일 ~ 6 = 토요일) */
+  weekdays: number[];
+  /** 운영 요일이어도 받지 않는 날(휴무일) */
+  closedDates: IsoDate[];
+  /** 희망 날짜로 고를 수 있는 마지막 날짜(포함) */
+  lastDate: IsoDate;
 }
 
 /** 공개 가능한 집계 정보만 담는다. 타 고객 주소·기준 좌표·작업 내용·정확한 거리는 포함하지 않는다. */

@@ -7,6 +7,7 @@ import { detailError, toVisitAddress } from '../../domain/address';
 import { maskPhone, normalizeContact } from '../../domain/profile';
 import type { TripFeeBasis } from '../../domain/bookingCost';
 import { filterBookings, tabOf, type BookingListQuery, type PendingAction } from '../../domain/bookingFilter';
+import { bookingDisplay } from '../../domain/statusDisplay';
 import { bundleInRequestsTab, requestInRequestsTab } from '../../domain/reservationTabs';
 import { COMPARE_REQUESTS_ENABLED } from '../../domain/demoScope';
 import { resolveSelectedTasks } from '../../domain/taskSelection';
@@ -33,6 +34,8 @@ import {
 import { DEFAULT_CUSTOMER, createSeed } from './seed';
 import { PROVIDER_SERVICES } from './providerServices';
 import { migrateDemoSchedule } from './scheduleMigration';
+import { PROVIDER_REQUEST_DAYS } from './providerRequestDays';
+import { newRequestBlock } from '../../domain/visitDays';
 
 // v3: 주소 구조 변경(탐색 주소 / 재사용 방문 주소 / 요청·예약 방문 주소 스냅숏 분리). 이전 형식 저장값은 읽지 않는다.
 const STORAGE_KEY = 'on-gimae/mock-db/v3';
@@ -132,6 +135,7 @@ export class MockRepository implements Repository {
   }
   /** 업체 등록 작업(표시 순서). 이전 목업 상태(작업 데이터가 없던 때 저장된 것)는 기본 데이터로 채운다 */
   private servicesOf(p: ProviderRecord) { return p.services ?? PROVIDER_SERVICES[p.id] ?? []; }
+  private requestDaysOf(p: ProviderRecord) { return PROVIDER_REQUEST_DAYS[p.id] ?? null; }
   private request(id: string): RepairRequest {
     const r = byId(this.db.requests, id);
     if (!r) throw new RepoError('not_found');
@@ -180,6 +184,7 @@ export class MockRepository implements Repository {
       paymentDeadline: r.status === 'approved_pending_payment' ? ap?.paymentDeadline : undefined,
       depositAmount: ap ? (ap.recheck?.newDepositAmount ?? ap.depositAmount) : undefined,
       depositAttempt: r.status === 'approved_pending_payment' ? this.depositAttemptOf(r.id) : undefined,
+      recheck: r.status === 'approved_pending_payment' && !!ap?.recheck,
     };
   }
   private depositAttemptOf(requestId: string): RequestListItem['depositAttempt'] {
@@ -237,11 +242,18 @@ export class MockRepository implements Repository {
   getProvider(id: string, addressId: string | null): Promise<ProviderDetail> {
     return this.read(() => {
       const p = this.provider(id);
-      const gs = this.eligibleGroups(id, addressId) ?? [];
+      const eligible = this.eligibleGroups(id, addressId);
+      const gs = eligible ?? [];
+      // 같은 주소 범위에서 접수 마감 처리된 그룹의 날짜(종료 그룹 제외). 새 요청 날짜 카드에서 ‘공동 예약은 마감됐어요’ 안내에 쓴다
+      const today = seoulYmd(this.db.now);
+      const anchors = eligible !== null && addressId ? addressAnchors(this.db, addressId) : [];
+      const closedJointDates = [...new Set(this.db.groups
+        .filter((g) => g.providerId === id && g.closed && !g.ended && g.date >= today && anchors.includes(g.anchorKey)).map((g) => g.date))].sort();
       return {
         ...this.summary(p, addressId), intro: p.intro, phone: p.phone, afterServiceTerms: p.afterServiceTerms, reviews: p.reviews,
         services: this.servicesOf(p),
         groups: gs.sort((a, b) => a.date.localeCompare(b.date)).map(toPublicGroup),
+        closedJointDates, newRequest: this.requestDaysOf(p),
       };
     });
   }
@@ -276,7 +288,10 @@ export class MockRepository implements Repository {
         const g = byId(this.db.groups, input.groupId);
         if (!g || g.closed || g.ended || seatsOf(g) === 0) throw new RepoError('group_closed');
         if (!gs.some((x) => x.id === g.id)) throw new RepoError('address_not_eligible');
-      } else if (!input.newDateWish) throw new RepoError('invalid');
+      } else if (!input.newDateWish || newRequestBlock(this.requestDaysOf(p), input.newDateWish, this.db.now)) {
+        // 새 요청의 희망 날짜는 업체 접수 기준(운영 요일·휴무일·접수 기간)과 공통 기준(48시간 이후)을 만족해야 한다
+        throw new RepoError('invalid');
+      }
       // 방문 가능한 시각: 이 일정(공동 예약 = 그룹 시간대, 새 날짜 = 공통 시간대)에서 고를 수 있는 정확한 시각만. 범위·없는 시각·중복은 거부
       const windows = input.groupId ? byId(this.db.groups, input.groupId)!.slots : NEW_DATE_WINDOWS;
       if (!isValidRequestTimes(input.slots, windows)) throw new RepoError('invalid');
@@ -483,27 +498,37 @@ export class MockRepository implements Repository {
     return null;
   }
 
-  /** 고객이 지금 해야 할 미처리 행동(실제 데이터). 처리·철회된 제안, 업체 응답 대기, 금액 협의 중, 리뷰 작성(선택)은 넣지 않는다. */
+  /**
+   * 고객이 지금 해야 할 미처리 행동(실제 데이터, spec 5.17 ‘확인 필요’ 기준). 처리·철회된 제안, 업체 응답 대기(내 변경 요청·다른 일정 요청),
+   * 금액 협의 중, 결제 처리 중·결과 확인 중, 리뷰 작성(선택)은 넣지 않는다. 조건 재확인(terms_recheck)은 별도 행동이 아니라 실제 원인으로만 본다.
+   */
   private pendingActionsOf(b: Booking): PendingAction[] {
     if (b.status === 'cancelled') return [];
     const db = this.db;
     const out: PendingAction[] = [];
-    if (b.status === 'terms_recheck') out.push('terms_recheck');
+    // 일정: 고객이 응답할 제안(업체 제안·재제안·고객 요청에 대한 업체 동의)이 있을 때만. 희망 일정을 보낸 뒤·업체 재제안을 기다리는 중에는 없다
     if (db.proposals.some((p) => p.bookingId === b.id && p.status === 'proposed')) out.push('proposal');
     if (db.materials.some((m) => m.bookingId === b.id && m.paymentStatus === 'none')) out.push('material');
     if (db.additionalWorks.some((w) => w.bookingId === b.id && w.status === 'proposed')) out.push('additional');
     if (db.delays.some((d) => d.bookingId === b.id && d.status === 'open')) out.push('delay');
-    if (db.statements.some((s) => s.bookingId === b.id && s.status === 'awaiting_customer')) out.push('final_statement');
+    // 최종 금액 확인: 잔금 결제가 처리 중·결과 확인 중이면 기다리는 중이라 넣지 않는다
+    const balancePending = db.transactions.some((t) => t.bookingId === b.id && t.kind === 'balance' && (t.status === 'processing' || t.status === 'unknown'));
+    if (!balancePending && db.statements.some((s) => s.bookingId === b.id && s.status === 'awaiting_customer')) out.push('final_statement');
     return out;
   }
 
   private bookingItems(): BookingListItem[] {
     return [...this.db.bookings].sort((a, b) => b.visitDate.localeCompare(a.visitDate)).map((b) => {
       const tf = this.tripFeeOf(b);
+      const pendingActions = this.pendingActionsOf(b);
+      const schedule = scheduleStateOf(b, this.db.proposals);
+      const statementStatus = this.db.statements.find((s) => s.bookingId === b.id)?.status;
+      const balanceInFlight = this.db.transactions.some((t) => t.bookingId === b.id && t.kind === 'balance' && (t.status === 'processing' || t.status === 'unknown'));
       return {
-        booking: b, providerName: this.provider(b.providerId).name, attention: this.attention(b), pendingActions: this.pendingActionsOf(b),
+        booking: b, providerName: this.provider(b.providerId).name, attention: this.attention(b), pendingActions,
         groupClosed: this.group(b.groupId).closed, tripFee: { kind: tf.kind, amount: tf.amount },
-        schedule: scheduleStateOf(b, this.db.proposals),
+        schedule, statementStatus, balanceInFlight,
+        display: bookingDisplay({ booking: b, schedule, statementStatus, balanceInFlight, pendingActions }),
       };
     });
   }
@@ -518,7 +543,7 @@ export class MockRepository implements Repository {
       const all = this.bookingItems();
       const { items, excludedMissingVisitDate } = filterBookings(all, query);
       return {
-        items: items.map((it, i) => ({ it, i })).sort((a, b) => Number(!!b.it.attention) - Number(!!a.it.attention) || a.i - b.i).map((x) => x.it),
+        items: items.map((it, i) => ({ it, i })).sort((a, b) => Number(b.it.display.actions.length > 0) - Number(a.it.display.actions.length > 0) || a.i - b.i).map((x) => x.it),
         hasAnyInTab: all.some((it) => tabOf(it.booking) === query.tab),
         excludedMissingVisitDate,
       };

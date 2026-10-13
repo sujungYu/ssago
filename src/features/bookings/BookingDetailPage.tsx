@@ -10,40 +10,33 @@ import { formatDate, formatDateTime } from '../../domain/time';
 import { formatWon } from '../../domain/money';
 import { Icon } from '../../components/Icon';
 import { AsyncView, Badge, Banner, EmptyState, KV, LinkButton, LoadingBlock, PhoneButton, Section } from '../../components/ui';
+import { AdditionalActionCard, DelayActionCard, MaterialActionCard } from './BookingActionCards';
+import { TONE_BADGE } from '../../domain/statusDisplay';
 import { ScheduleChangeCard } from './ScheduleChangeCard';
 import type { BookingDetail } from '../../data/repositories/types';
-import { ContactText, PAYMENT_STATUS, VisitAddressText, VisitText, bookingBadge, slotsText } from '../shared';
+import { ContactText, PAYMENT_STATUS, VisitAddressText, VisitText, bookingDisplayOfDetail, slotsText } from '../shared';
 import { BookingCostCard, PaymentRecords, costOf, settlementVisible } from './BookingCostCard';
 import { TRIP_LABEL } from '../../domain/bookingCost';
 import { DURATION_NOTE, formatVisit } from '../../domain/visitTime';
 import { visitLabel } from './BookingsPage';
 import { bookingTabOf, listPath } from '../../domain/reservationTabs';
 
-function ActionRow({ to, title, desc, tone = 'action' }: { to: string; title: string; desc?: string; tone?: 'action' | 'warn' }) {
-  return (
-    <Link to={to} className="list-row" style={{ background: tone === 'warn' ? 'var(--c-warn-bg)' : 'var(--c-info-bg)' }}>
-      <Icon name={tone === 'warn' ? 'clock' : 'info'} />
-      <div className="list-row__main"><span className="list-row__title">{title}</span>{desc && <span className="small muted">{desc}</span>}</div>
-      <Icon name="chevron" size={18} />
-    </Link>
-  );
-}
-
-/** 지금 확인할 내용: 지연·자재·추가 작업·후기(일정 변경은 상단 ‘일정 변경’ 카드에서 바로 응답). 최종 금액 확인·협의는 아래 ‘금액·정산’ 카드에서 바로 한다(별도 화면 이동 없음) */
-function Attention({ d }: { d: BookingDetail }) {
+/**
+ * 상단 확인 영역(spec 5.17): 진행 단계 바로 아래, 일반 정보보다 위. 확인 사항마다 공통 행동 카드 하나(숨기거나 합치지 않음).
+ * 일정 변경(B) · 방문 지연 · 추가 작업(C) · 자재(D) · 최종 금액(E, 기존 금액·정산 카드를 이 자리로 올림). 기다리기만 하는 상태(결제 확인 중 등)는 카드를 만들지 않는다.
+ */
+function ActionCards({ d, costOnTop }: { d: BookingDetail; costOnTop: boolean }) {
   const b = d.booking;
-  const rows: React.ReactNode[] = [];
-  if (b.status === 'confirmed') {
-    if (d.delay) rows.push(<ActionRow key="dl" tone="warn" to={`/delays/${d.delay.id}`} title="방문이 지연되고 있어요" desc="기다리기, 무료 변경, 무료 취소 중에서 선택해 주세요" />);
-    for (const m of d.materials.filter((x) => x.paymentStatus === 'none')) rows.push(<ActionRow key={m.id} to={`/materials/${m.id}`} title="자재 주문 조건을 확인해 주세요" desc={`${m.name} · ${formatWon(m.price)}`} />);
-    for (const m of d.materials.filter((x) => x.paymentStatus === 'processing' || x.paymentStatus === 'unknown')) rows.push(<ActionRow key={m.id} tone="warn" to={`/materials/${m.id}`} title="자재비 결제 결과를 확인 중이에요" desc="다시 결제하지 말고 결과를 확인해 주세요" />);
-    for (const w of d.additionalWorks.filter((x) => x.status === 'proposed')) rows.push(<ActionRow key={w.id} to={`/additional/${w.id}`} title="추가 작업 동의가 필요해요" desc={`${w.scope} · ${formatWon(w.amount)}`} />);
-    if (d.statement?.status === 'settled' && !d.review) rows.push(<ActionRow key="rv" to={`/bookings/${b.id}/review`} title="이용 후기를 남길 수 있어요" />);
-  }
-  if (!rows.length) return null;
-  return <Section title="지금 확인할 내용"><ul className="card card--flush divided">{rows.map((r, i) => <li key={i}>{r}</li>)}</ul></Section>;
+  const live = b.status === 'confirmed';
+  const cards = [
+    <ScheduleChangeCard key="sch" d={d} />,
+    live && d.delay ? <DelayActionCard key="dl" d={d} /> : null,
+    ...(live ? d.additionalWorks.filter((w) => w.status === 'proposed').map((w) => <AdditionalActionCard key={w.id} w={w} />) : []),
+    ...(live ? d.materials.filter((m) => m.paymentStatus === 'none').map((m) => <MaterialActionCard key={m.id} m={m} />) : []),
+    costOnTop ? <BookingCostCard key="cost" d={d} /> : null,
+  ];
+  return <div className="act-cards">{cards}</div>;
 }
-
 
 /** 작업별 실제 상태: 업체가 등록한 최종 작업 내역이 있으면 그 완료 여부, 없으면 예약의 진행 상태 */
 function taskState(d: BookingDetail, title: string): { label: string; tone: 'success' | 'warn' | 'info' | 'neutral' } | null {
@@ -71,6 +64,9 @@ function Body({ d }: { d: BookingDetail }) {
   // 금액·정산 카드: 최종 금액 등록 후(확인·협의·처리 중·정산 완료)와 기록이 있는 취소 예약만(공통 기준). 그 전에는 숨기고 결제 기록은 예약 세부 정보에서
   const showCost = settlementVisible(d);
   const c = costOf(d);
+  // E. 최종 금액 확인(협의로 수정된 금액 재확인 포함)이 필요하면 기존 금액·정산 카드를 상단 확인 영역으로 올린다(중복 카드 없음)
+  const costOnTop = showCost && c.stage === 'final_awaiting';
+  const disp = bookingDisplayOfDetail(d);
   // 요청 당시 내용(원본 기록 — 수정하거나 현재 작업으로 덮어쓰지 않는다)
   const origin = useAsync(() => (d.origin ? repo.getRequest(d.origin.requestId) : Promise.resolve(null)), [repo, d.origin?.requestId]);
   // 실제 작업 목록: 최종 내역이 있으면 업체가 등록한 실제 작업, 없으면 예약 작업
@@ -90,10 +86,7 @@ function Body({ d }: { d: BookingDetail }) {
       {/* 일정 변경과 무관한 무료 변경·취소 사유(지연·자재 납기 등)만 상단에. 일정 변경 사유는 아래 변경 카드·취소 버튼 근처에서 */}
       {d.freeCancel && sch.kind === 'normal' && !providerFreeCancel && <Banner tone="warn" title="무료 변경·취소가 적용돼요">{d.freeCancel.reason}</Banner>}
 
-      {/* 일정 변경: 응답이 필요한 제안·요청은 이 카드 하나에서 바로 처리 */}
-      <ScheduleChangeCard d={d} />
-
-      <Attention d={d} />
+      <ActionCards d={d} costOnTop={costOnTop} />
 
       {/* 예약 정보(통합): 업체·전화 / 작업·상태 / 방문 일정 / 주소·연락처 / 공동 예약 / 세부 정보·변경 내역·요청 당시 내용 */}
       <Section title="예약 정보">
@@ -130,7 +123,7 @@ function Body({ d }: { d: BookingDetail }) {
                         <span className="small muted">{m.spec} · {m.quantity}개 · 납기 {formatDate(m.deliveryDate)}</span>
                         <span className="small muted">결제 {m.paymentStatus === 'none' ? '전' : PAYMENT_STATUS[m.paymentStatus].label} · 주문 {m.orderStatus === 'ordered' ? '완료' : '전'}</span>
                       </div>
-                      {m.paymentStatus === 'none' ? <Badge tone="action">동의 필요</Badge> : <Icon name="chevron" size={18} />}
+                      {m.paymentStatus === 'none' ? <Badge tone="neutral">응답 전</Badge> : <Icon name="chevron" size={18} />}
                     </Link>
                   </li>
                 ))}
@@ -138,7 +131,7 @@ function Body({ d }: { d: BookingDetail }) {
                   <li key={w.id}>
                     <Link to={`/additional/${w.id}`} className="list-row">
                       <div className="list-row__main"><span className="list-row__title">추가 작업 · {w.scope}</span></div>
-                      <Badge tone={w.status === 'agreed' ? 'success' : w.status === 'declined' ? 'neutral' : 'action'}>{w.status === 'agreed' ? '동의함' : w.status === 'declined' ? '동의하지 않음' : '동의 필요'}</Badge>
+                      <Badge tone={w.status === 'agreed' ? 'success' : 'neutral'}>{w.status === 'agreed' ? '동의함' : w.status === 'declined' ? '동의하지 않음' : '응답 전'}</Badge>
                     </Link>
                   </li>
                 ))}
@@ -149,14 +142,15 @@ function Body({ d }: { d: BookingDetail }) {
 
           {/* 현재 방문 일정 또는 방문 불가·협의 상태(진행 중인 제안의 비교·응답은 상단 카드에서만) */}
           <KV rows={[
-            // 기존 방문 불가·새 일정 미확정이면 날짜 대신 ‘일정 협의 중’만(기존 날짜는 예약 세부 정보·변경 내역에 기록으로). 비교·사유·응답은 상단 카드에서만
-            sch.oldVisitUnavailable
-              ? { k: '방문 일정', v: bookingBadge(b, sch) }
-              : { k: visitLabel(b, sch), v: <span><VisitText date={b.visitDate} time={b.visitTime} strong />{d.delay && <> <Badge tone="warn">지연 안내</Badge></>}</span> },
+            // 기존 방문 불가·새 일정 미확정이면 날짜 대신 ‘방문 일정 조율 중’만(기존 날짜는 예약 세부 정보·변경 내역에 기록으로). 비교·사유·응답은 상단 카드에서만
+            disp.visitPending
+              ? { k: '방문 일정', v: '방문 일정 조율 중' }
+              : { k: visitLabel(b), v: <span><VisitText date={b.visitDate} time={b.visitTime} strong />{d.delay && <> <Badge tone="warn">지연 안내</Badge></>}</span> },
             // 지연 안내의 변경 도착 예상은 예약 방문 시각을 덮어쓰지 않고 따로 보여준다
             ...(d.delay ? [{ k: '변경 도착 예상', v: <span className="nowrap">{formatDateTime(d.delay.newEta)}</span> }] : []),
             ...(sch.kind !== 'normal' && !sch.oldVisitUnavailable && sch.label ? [{ k: '일정 변경', v: <span className="small">{sch.label}</span> }] : []),
-            ...(sch.oldVisitUnavailable ? [] : [{ k: '진행 상태', v: bookingBadge(b, sch) }]),
+            // 진행 상태: 목록과 같은 대표 상태(확인 필요 라벨은 상단 카드가 대신하므로 반복하지 않음)
+            { k: '진행 상태', v: <Badge tone={TONE_BADGE[disp.tone]}>{disp.label}</Badge> },
             ...(b.followUp ? [{ k: '후속 방문', v: <span>{formatDate(b.followUp.date)}<br />{b.followUp.window}</span> }] : []),
           ]} />
           {b.followUp && <p className="small muted">{b.followUp.note}</p>}
@@ -251,7 +245,7 @@ function Body({ d }: { d: BookingDetail }) {
       </Section>
 
       {/* 금액·정산(최종 금액 등록 후·기록이 있는 취소 예약만. 숨기면 영역·여백을 남기지 않는다) */}
-      {showCost && (
+      {showCost && !costOnTop && (
         <Section title="금액·정산">
           <BookingCostCard d={d} />
         </Section>

@@ -45,9 +45,9 @@ describe('탭 분류 규칙(공통)', () => {
 
 describe('탭 URL', () => {
   it('탭과 탭별 필터는 서로 다른 키로 독립 저장되고 그대로 복원된다', () => {
-    const f = { tab: 'active' as const, requests: { period: '7d' as const, status: 'ended' as const }, active: { ...DEFAULT_ACTIVE, actionOnly: true }, past: { ...DEFAULT_PAST, status: 'cancelled' as const } };
+    const f = { tab: 'active' as const, requests: { period: '7d' as const, status: 'withdrawn' as const }, active: { ...DEFAULT_ACTIVE, actionOnly: true }, past: { ...DEFAULT_PAST, status: 'cancelled' as const } };
     const s = writeReservationFilter(qs('x=1'), f).toString();
-    expect(s).toBe('tab=active&period=7d&status=ended&a_action=1&p_status=cancelled&x=1');
+    expect(s).toBe('tab=active&period=7d&status=withdrawn&a_action=1&p_status=cancelled&x=1');
     expect(parseReservationFilter(qs(s))).toEqual(f);
   });
   it('탭이 없으면(이전 주소) 들어 있는 필터 키로 탭을 정하고, 잘못된 값은 기본값', () => {
@@ -63,9 +63,9 @@ describe('탭 URL', () => {
     expect(hasReservationFilterParams(qs('x=1'))).toBe(false);
   });
   it('목록 키는 현재 탭과 그 탭의 필터로만 정해진다(다른 탭 필터가 바뀌어도 같음)', () => {
-    const base = parseReservationFilter(qs('tab=requests&status=ended'));
-    expect(tabFilterKey(base)).toBe('tab=requests&status=ended');
-    expect(tabFilterKey({ ...base, active: { ...DEFAULT_ACTIVE, status: 'scheduled' } })).toBe('tab=requests&status=ended');
+    const base = parseReservationFilter(qs('tab=requests&status=withdrawn'));
+    expect(tabFilterKey(base)).toBe('tab=requests&status=withdrawn');
+    expect(tabFilterKey({ ...base, active: { ...DEFAULT_ACTIVE, status: 'scheduled' } })).toBe('tab=requests&status=withdrawn');
     expect(tabFilterKey({ ...base, tab: 'past' })).toBe('tab=past');
   });
 });

@@ -4,10 +4,10 @@ import { Page } from '../../app/Page';
 import { useRepo } from '../../app/context';
 import { useAsync } from '../../app/hooks';
 import { formatWon } from '../../domain/money';
-import { Icon } from '../../components/Icon';
 import { AsyncView, EmptyState, LinkButton } from '../../components/ui';
 import type { BookingListItem, BookingQueryResult, RequestListResult } from '../../data/repositories/types';
-import { VisitText, bookingBadge } from '../shared';
+import { StatusBadges, TodoLine, VisitText } from '../shared';
+import { formatDate } from '../../domain/time';
 import { useListScrollRestore, useUrlFilter, type UrlFilterCodec } from '../../app/listFilter';
 import { toBookingQuery } from '../../domain/bookingFilter';
 import { toListQuery } from '../../domain/requestFilter';
@@ -21,28 +21,35 @@ import { SentRequestList } from '../requests/RequestsPage';
 
 const TRIP_LABEL = { expected: '마감 전 예상 출장비', confirmed: '확정 출장비', locked: '유지되는 확정 출장비' } as const;
 
-/** 예약 방문 시각 라벨. 고객 가능 시간 범위가 아니라 확정된 방문 시각을 보여준다. */
-/** 방문 일정 라벨. 업체가 기존 일정에 방문할 수 없으면 정상 방문 예정처럼 보이지 않게 ‘기존 일정(방문 불가)’ */
-export const visitLabel = (b: BookingListItem['booking'], schedule?: { oldVisitUnavailable: boolean }) =>
-  (schedule?.oldVisitUnavailable && b.status === 'confirmed' ? '기존 일정' : b.status === 'confirmed' && b.workStatus === 'scheduled' ? '방문 예정' : '방문 일정');
+/** 확정된 방문 일정 라벨(대표 상태가 방문 예정이면 ‘방문 예정’, 그 밖에는 ‘방문 일정’) */
+export const visitLabel = (b: BookingListItem['booking']) => (b.status === 'confirmed' && b.workStatus === 'scheduled' ? '방문 예정' : '방문 일정');
 
+/**
+ * 예약 카드: 업체 · [대표 상태] / 작업 / 방문 일정 / 출장비 / (할 일이 있으면) 주황 점 + 행동 문구 한 줄. 구체 확인 내용·안내 문구는 상세에서(목록에는 정보 아이콘·설명 문구 없음).
+ * 기존 일정 방문 불가 · 새 일정 미확정이면 기존 날짜를 방문 예정처럼 보이지 않게 날짜 자리에 ‘방문 일정 조율 중’.
+ * 후속 방문 일정이 확정된 작업은 그 날짜를 방문 예정으로 보여준다.
+ */
 export function BookingCard({ it }: { it: BookingListItem }) {
   const b = it.booking;
+  const disp = it.display;
+  const followUpNext = b.status === 'confirmed' && b.workStatus === 'followup_waiting' && b.followUp;
   return (
     <Link to={`/bookings/${b.id}`} className="card stack--sm stack" style={{ textDecoration: 'none', color: 'inherit' }}>
-      <div className="row row--between row--wrap">
-        <p className="strong">{it.providerName}</p>
-        {bookingBadge(b, it.schedule)}
+      <div className="row row--between row--top" style={{ gap: 'var(--sp-2)' }}>
+        <p className="strong" style={{ minWidth: 0, overflowWrap: 'anywhere' }}>{it.providerName}</p>
+        <StatusBadges d={disp} />
       </div>
       <p>{b.tasks.map((t) => t.title).join(' · ')}</p>
-      <p className="small">{visitLabel(b, it.schedule)} · <VisitText date={b.visitDate} time={b.visitTime} /></p>
-      {it.schedule.oldVisitUnavailable && it.schedule.label && <p className="small strong" style={{ color: 'var(--c-warn)' }}>{it.schedule.label}</p>}
+      {disp.visitPending ? <p className="small">방문 일정 조율 중</p>
+        : followUpNext ? <p className="small">후속 방문 예정 · <span className="nowrap">{formatDate(followUpNext.date)}</span> <span className="nowrap">{followUpNext.window}</span></p>
+        : <p className="small">{visitLabel(b)} · <VisitText date={b.visitDate} time={b.visitTime} /></p>}
       {b.status === 'confirmed' && it.tripFee.amount !== null && (
         <p className="small muted">{TRIP_LABEL[it.tripFee.kind]} <span className="money">{formatWon(it.tripFee.amount)}</span></p>
       )}
-      {it.attention && (
-        <p className="small strong row" style={{ color: 'var(--c-primary)' }}><Icon name="info" size={16} />{it.attention}</p>
-      )}
+      {/* 취소된 예약: 환불 처리 상태(정보, 행동 안내 아님) */}
+      {b.status === 'cancelled' && it.attention && <p className="small muted">{it.attention}</p>}
+      {/* 할 일(있을 때만): 주황 점 + 행동 문구. 처리는 상세 상단 확인 카드에서 */}
+      <TodoLine actions={disp.actions} />
     </Link>
   );
 }

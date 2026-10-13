@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { REQUEST_DISPLAY } from './statusDisplay';
 import {
   DEFAULT_REQUEST_FILTER, STATUS_GROUP_OPTIONS, STATUS_GROUP_STATUSES, addDaysYmd, customRangeError, filterRequestBundles, isDefaultFilter,
   parseRequestFilter, periodButtonLabel, periodSummary, statusSummary, toListQuery, writeRequestFilter, type RequestFilter,
@@ -80,44 +81,46 @@ describe('상태 그룹 필터(단일 선택)', () => {
     expect(r[0].items.map((x) => x.id)).toEqual(['rq-3']); // 같은 묶음의 거절 요청은 숨김(삭제 아님)
     expect(r[0].hiddenItemCount).toBe(1);
   });
-  it('보낸 요청 필터에는 예약 완료(booked) 선택지가 없다(예약으로 이어진 묶음은 보낸 요청에 나오지 않음)', () => {
-    expect(STATUS_GROUP_OPTIONS.map((o) => o.value)).toEqual(['all', 'payment_pending', 'needs_info', 'reviewing', 'ended']);
+  it('보낸 요청 필터 = 목록 대표 상태 다섯(예약 완료 선택지 없음)', () => {
+    expect(STATUS_GROUP_OPTIONS.map((o) => o.value)).toEqual(['all', 'reviewing', 'payment_pending', 'rejected', 'withdrawn', 'expired']);
+    expect(STATUS_GROUP_OPTIONS.map((o) => o.label)).toEqual(['전체', '업체 검토 중', '예약금 결제', '업체 거절', '요청 취소', '결제 기한 만료']);
     expect(Object.values(STATUS_GROUP_STATUSES).flat()).not.toContain('booked');
   });
-  it('종료 = 업체 거절·철회·승인 만료·다른 업체 예약으로 종료', () => {
-    expect([...STATUS_GROUP_STATUSES.ended].sort()).toEqual(['approval_expired', 'closed_other_booking', 'rejected', 'withdrawn']);
-    const r = run({ status: 'ended' });
-    expect(r.map((b) => b.bundleId)).toEqual(['b-sink', 'b-old']);
-    expect(r[0].items.map((x) => x.request.status)).toEqual(['rejected']); // 카드에는 구체 상태가 그대로
+  it('선택지 이름은 카드 배지(REQUEST_DISPLAY)와 같고, 그 선택지가 그 이름의 업무 상태만 거른다', () => {
+    for (const o of STATUS_GROUP_OPTIONS) {
+      if (o.value === 'all') continue;
+      for (const st of STATUS_GROUP_STATUSES[o.value]) expect(REQUEST_DISPLAY[st].label).toBe(o.label);
+    }
   });
-  it('추가 정보 필요·업체 검토 중', () => {
-    expect(run({ status: 'needs_info' }).map((b) => b.items.map((x) => x.id))).toEqual([['rq-2']]);
-    expect(run({ status: 'reviewing' }).map((b) => b.items.map((x) => x.id))).toEqual([['rq-1']]);
+  it('업체 거절·요청 취소·결제 기한 만료는 각각, 업체 검토 중은 추가 정보 필요 포함', () => {
+    const r = run({ status: 'rejected' });
+    expect(r.map((b) => b.bundleId)).toEqual(['b-sink']);
+    expect(r[0].items.map((x) => x.request.status)).toEqual(['rejected']);
+    expect(run({ status: 'reviewing' }).map((b) => b.items.map((x) => x.id))).toEqual([['rq-1', 'rq-2']]);
   });
-  it('예약 전 업무 상태 7개가 그룹에 빠짐없이 한 번씩 들어간다(새 상태 없음, booked는 보낸 요청에 없음)', () => {
+  it('업무 상태는 합치지 않는다: 다른 업체 예약으로 종료(비교 요청 결과)만 선택지 없이 전체에서만, 나머지는 한 번씩', () => {
     const all = Object.values(STATUS_GROUP_STATUSES).flat();
-    expect([...all].sort()).toEqual(Object.keys(REQUEST_STATUS).filter((k) => k !== 'booked').sort());
+    expect([...all].sort()).toEqual(Object.keys(REQUEST_STATUS).filter((k) => k !== 'booked' && k !== 'closed_other_booking').sort());
     expect(new Set(all).size).toBe(all.length);
-    expect(STATUS_GROUP_OPTIONS.map((o) => o.label)).toEqual(['전체', '예약금 결제 대기', '추가 정보 필요', '업체 검토 중', '종료']);
   });
   it('접수일 단독 · 상태 단독 · 두 조건 AND(묶음 안 업체별 접수일이 달라도 업체별 요청 기준)', () => {
     // 최근 7일(10-07~10-13): b-new 안에서 rq-1(10-12)만, rq-2(10-05)는 숨김
     const d = run({ period: '7d' });
     expect(d.map((b) => b.bundleId)).toEqual(['b-sink', 'b-new', 'b-booked']);
     expect(d.find((b) => b.bundleId === 'b-new')!.items.map((x) => x.id)).toEqual(['rq-1']);
-    // 추가 정보 필요 + 최근 7일 → rq-2는 10-05 접수라 결과 없음
-    expect(run({ period: '7d', status: 'needs_info' })).toEqual([]);
-    // 추가 정보 필요 + 최근 30일 → 있음
-    expect(run({ period: '30d', status: 'needs_info' }).map((b) => b.bundleId)).toEqual(['b-new']);
+    // 업체 검토 중 + 최근 7일 → rq-2(추가 정보 필요, 10-05 접수)는 빠지고 rq-1만
+    expect(run({ period: '7d', status: 'reviewing' }).map((b) => b.items.map((x) => x.id))).toEqual([['rq-1']]);
+    // 업체 검토 중 + 최근 30일 → 둘 다
+    expect(run({ period: '30d', status: 'reviewing' }).map((b) => b.items.map((x) => x.id))).toEqual([['rq-1', 'rq-2']]);
   });
   it('전체 선택은 그 조건만 해제한다', () => {
-    const both = f({ period: '7d', status: 'ended' });
+    const both = f({ period: '7d', status: 'expired' });
     expect({ ...both, status: 'all' }).toEqual(f({ period: '7d' }));
-    expect(toListQuery({ ...both, period: 'all' }, '2026-10-13T00:00:00Z')).toEqual({ statuses: STATUS_GROUP_STATUSES.ended });
+    expect(toListQuery({ ...both, period: 'all' }, '2026-10-13T00:00:00Z')).toEqual({ statuses: STATUS_GROUP_STATUSES.expired });
   });
   it('버튼 표시: 기본값이면 이름, 적용되면 선택값(직접 선택은 YYYY.MM.DD)', () => {
     expect([statusSummary(f({})), periodButtonLabel(f({}))]).toEqual([null, null]);
-    expect(statusSummary(f({ status: 'payment_pending' }))).toBe('예약금 결제 대기');
+    expect(statusSummary(f({ status: 'payment_pending' }))).toBe('예약금 결제');
     expect(periodButtonLabel(f({ period: '30d' }))).toBe('최근 30일');
     expect(periodSummary(f({ period: 'custom', from: '2026-10-01', to: '2026-10-08' }))).toBe('2026.10.01 ~ 2026.10.08');
   });
@@ -125,9 +128,12 @@ describe('상태 그룹 필터(단일 선택)', () => {
 
 describe('URL 쿼리', () => {
   it('왕복해도 같은 값', () => {
-    const v = f({ period: 'custom', from: '2026-10-01', to: '2026-10-08', status: 'ended' });
+    const v = f({ period: 'custom', from: '2026-10-01', to: '2026-10-08', status: 'withdrawn' });
     expect(parseRequestFilter(writeRequestFilter(qs(''), v))).toEqual(v);
-    expect(writeRequestFilter(qs(''), v).toString()).toBe('period=custom&from=2026-10-01&to=2026-10-08&status=ended');
+    expect(writeRequestFilter(qs(''), v).toString()).toBe('period=custom&from=2026-10-01&to=2026-10-08&status=withdrawn');
+    // 이전 주소: 추가 정보 필요 → 업체 검토 중, 종료 → 전체
+    expect(parseRequestFilter(qs('status=needs_info')).status).toBe('reviewing');
+    expect(parseRequestFilter(qs('status=ended')).status).toBe('all');
   });
   it('기본값은 쿼리에 넣지 않고, 다른 쿼리 값은 유지한다', () => {
     expect(writeRequestFilter(qs('x=1&period=7d&status=booked'), DEFAULT_REQUEST_FILTER).toString()).toBe('x=1');

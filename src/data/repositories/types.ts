@@ -12,11 +12,12 @@ import type { RequestListQuery } from '../../domain/requestFilter';
 export type { RequestListQuery } from '../../domain/requestFilter';
 import type { TripFeeBasis } from '../../domain/bookingCost';
 import type { BookingListQuery, PendingAction } from '../../domain/bookingFilter';
+import type { BookingDisplay } from '../../domain/statusDisplay';
 export type { BookingListQuery, PendingAction } from '../../domain/bookingFilter';
 import type {
   Address, AdditionalWork, SavedVisitAddress, VisitAddress, Approval, Booking, CancelCause, Category, ChangeProposal, CustomerContact, CustomerProfile, DelayChoice,
   DelayNotice, Deduction, FinalStatement, IsoDate, IsoDateTime, MaterialOffer, ProviderDetail, ProviderSummary,
-  PublicGroup, Refund, RepairRequest, Review, TaskItem, TimeSlot, Transaction, Won,
+  PublicGroup, Refund, RepairRequest, Review, StatementStatus, TaskItem, TimeSlot, Transaction, Won,
 } from '../../domain/types';
 import type { CancelPreview, DateChangePreview, Settlement } from '../../domain/pricing';
 
@@ -59,6 +60,8 @@ export interface RequestListItem {
   depositAmount?: Won;
   /** 결제 대기 중 마지막 예약금 결제 시도의 상태(실패·처리 중·결과 확인 중). 성공하면 예약이 생겨 보낸 요청에서 빠진다 */
   depositAttempt?: 'failed' | 'processing' | 'unknown';
+  /** 결제 대기 중 승인 조건이 바뀌어(조건 재확인) 새 조건 동의가 필요 */
+  recheck?: boolean;
 }
 
 export interface BundleListItem {
@@ -131,13 +134,19 @@ export interface BookingListItem {
   providerName: string;
   /** 예약 상세의 “지금 확인할 내용”에 해당하는 한 줄 요약 */
   attention: string | null;
-  /** 고객이 해야 할 미처리 행동(실제 데이터 기준). ‘확인 필요만’ 필터에 쓴다 */
+  /** 고객이 해야 할 미처리 행동(실제 데이터 기준). ‘할 일 있는 예약만’ 필터·카드 할 일 문구에 쓴다 */
   pendingActions: PendingAction[];
   groupClosed: boolean;
   /** 마감 전 예상 / 마감 후 확정 출장비 */
   tripFee: { kind: 'expected' | 'confirmed' | 'locked'; amount: Won | null };
   /** 일정 변경 상태(목록·상세 공통 기준) */
   schedule: ScheduleState;
+  /** 최종 내역(정산) 상태 — 대표 상태 매핑용 */
+  statementStatus?: StatementStatus;
+  /** 최종 잔금 결제가 처리 중·결과 확인 중 */
+  balanceInFlight: boolean;
+  /** 대표 상태 + 할 일(src/domain/statusDisplay.ts, 목록·필터 공통) */
+  display: BookingDisplay;
 }
 
 export interface BookingQueryResult {

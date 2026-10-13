@@ -47,7 +47,7 @@ function Row({ k, v, hint, strong, sub }: { k: string; v: React.ReactNode; hint?
 
 const STAGE_BADGE: Record<CostSummary['stage'], { label: string }> = {
   estimate: { label: '예상 금액' },
-  final_awaiting: { label: '최종 금액 확인 필요' },
+  final_awaiting: { label: '최종 정산' },
   final_disputed: { label: '금액 협의 중' },
   settled: { label: '정산 완료' },
   cancelled: { label: '취소됨' },
@@ -82,9 +82,16 @@ export function BookingCostCard({ d }: { d: BookingDetail }) {
     return { kind, label: c.balance.label, value: formatWon(c.balance.amount ?? 0) };
   })();
 
+  // E. 최종 금액 확인 대기: 상단 확인 영역에서 공통 행동 카드 머리(연한 블루 · ‘확인이 필요해요’)와 구체 제목을 붙인다.
+  // 협의로 금액이 수정돼 다시 확인할 때(내역 버전 2 이상)는 ‘수정된 최종 금액’. 잔금 결제 결과 확인 중이면 기다리는 상태로.
+  const attn = c.stage === 'final_awaiting';
+  const balanceInFlight = d.ledger.some((l) => l.kind === 'payment' && l.tx.kind === 'balance' && (l.tx.status === 'processing' || l.tx.status === 'unknown'));
+  const attnTitle = (d.statement?.version ?? 1) > 1 ? '수정된 최종 금액을 다시 확인해 주세요' : '최종 금액을 확인해 주세요';
   return (
-    // 카드 제목은 바깥 섹션 제목(‘금액·정산’), 상태는 예약 정보의 ‘진행 상태’와 겹치지 않게 차액 라벨·안내로만 보여준다
-    <div className="card stack cost" id="settlement" tabIndex={-1} role="region" aria-label={`금액·정산 · ${st.label}`}>
+    // 확인 대기가 아니면 카드 제목은 바깥 섹션 제목(‘금액·정산’), 상태는 예약 정보의 ‘진행 상태’와 겹치지 않게 차액 라벨·안내로만 보여준다
+    <div className={`card stack cost${attn ? ' cost--attn' : ''}`} id="settlement" tabIndex={-1} role="region" aria-label={attn ? attnTitle : `금액·정산 · ${st.label}`}>
+      {attn && <p className="act-card__head cost__head"><Icon name="info" size={16} />{balanceInFlight ? '결제 결과를 확인하고 있어요' : '확인이 필요해요'}</p>}
+      {attn && <h2 className="act-card__title">{attnTitle}</h2>}
 
       <div className={`cost__balance cost__balance--${hero.kind}`}>
         <span className="cost__balance-k">{hero.label}</span>

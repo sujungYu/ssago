@@ -8,7 +8,8 @@ import { ProgressSteps } from '../../components/ProgressSteps';
 import { Page } from '../../app/Page';
 import { useAppState, useRepo } from '../../app/context';
 import { useAction, useAsync, useAttemptKey } from '../../app/hooks';
-import { addHours, formatDate, formatDateTime, seoulYmd } from '../../domain/time';
+import { formatDate, formatDateTime } from '../../domain/time';
+import { NEW_REQUEST_BLOCK_TEXT, newRequestBlock } from '../../domain/visitDays';
 import { NEW_DATE_WINDOWS, selectableTimes } from '../../domain/visitTime';
 import { orderSelected } from '../../domain/taskSelection';
 import { formatWon } from '../../domain/money';
@@ -35,13 +36,17 @@ const EMPTY_DRAFT: TaskDraft = { description: '', photoNames: [] };
  */
 export function RequestFormPage() {
   const { id = '' } = useParams();
-  return <RequestForm key={id} id={id} />;
+  const [sp] = useSearchParams();
+  // 업체·요청 방식(그룹/새 요청)·희망 날짜가 바뀌면 작성 상태를 새로 시작해 이전 그룹·시각이 남지 않게 한다
+  return <RequestForm key={`${id}|${sp.get('group') ?? ''}|${sp.get('new') ?? ''}|${sp.get('date') ?? ''}`} id={id} />;
 }
 
 function RequestForm({ id }: { id: string }) {
   const [sp] = useSearchParams();
   const groupId = sp.get('group');
   const isNew = sp.get('new') === '1';
+  // 새 요청의 희망 날짜: 업체 상세 ‘방문 날짜 선택’에서 고른 새 요청 가능 날짜(주소에 담아 새로고침해도 유지). 확정 방문일이 아니다
+  const wishDate = isNew ? sp.get('date') : null;
   const repo = useRepo();
   const nav = useNavigate();
   const { addressId, bundleId, setBundleId } = useAppState();
@@ -66,7 +71,6 @@ function RequestForm({ id }: { id: string }) {
   // 방문 가능한 시각(고객 희망 시각, 정확한 시각 여러 개). 선택했다고 그 시각에 배정·확정되지 않는다
   const [slots, setSlots] = useState<string[]>([]);
   const [droppedTimes, setDroppedTimes] = useState<string[]>([]);
-  const [newDate, setNewDate] = useState('');
   const [detail, setDetail] = useState('');
   const [autofilled, setAutofilled] = useState<string | null>(null); // 자동 입력한 저장 상세 주소
   const [saveForNext, setSaveForNext] = useState(false); // 고객이 직접 선택(기본 미선택)
@@ -165,7 +169,8 @@ function RequestForm({ id }: { id: string }) {
           const joint = !isNew && !!groupId;
           const groupMissing = joint && !group;
           const now = repo.now();
-          const minDate = seoulYmd(addHours(now, 48));
+          // 희망 날짜가 없거나 지금 업체 접수 기준에 맞지 않으면(직접 진입·기준 변경) 업체 상세에서 날짜를 다시 고르게 한다
+          const wishBlock = joint ? null : wishDate ? newRequestBlock(p.newRequest, wishDate, now) : 'missing';
           const apartment = address.data?.kind === 'apartment';
 
           // 업체 등록 작업(표시 순서)과 지금 고른 작업. 목록에 없는 ID(이전 업체 작업 등)는 고른 것으로 보지 않는다
@@ -176,19 +181,18 @@ function RequestForm({ id }: { id: string }) {
           const err = {
             tasks: !noServices && chosen.length === 0 ? '필요한 작업을 하나 이상 선택해 주세요.' : null,
             slots: !noTimes && slots.length === 0 ? '방문 가능한 시각을 하나 이상 선택해 주세요.' : null,
-            date: !joint && !newDate ? '희망 방문 날짜를 선택해 주세요.' : !joint && newDate < minDate ? `${formatDate(minDate)} 이후 날짜를 선택해 주세요.` : null,
             base: !address.data ? '방문할 건물 주소를 선택해 주세요.' : null,
             detail: address.data ? detailError(address.data.kind, detail) : null,
             name: nameError(contactName),
             phone: phoneError(contactPhone),
           };
           // 등록 작업이 없는 업체는 고를 작업이 없으므로 제출하지 않는다(목록을 임의로 만들지 않음)
-          const valid = !Object.values(err).some(Boolean) && !groupMissing && !noServices && !noTimes;
-          // 화면 순서대로의 오류 대상(작업 선택 → 건물 주소 → 상세 주소 → 이름 → 연락처 → 희망 날짜 → 가능 시간). 안내 문구는 오류가 아니다
+          const valid = !Object.values(err).some(Boolean) && !groupMissing && !wishBlock && !noServices && !noTimes;
+          // 화면 순서대로의 오류 대상(작업 선택 → 건물 주소 → 상세 주소 → 이름 → 연락처 → 가능 시간). 안내 문구는 오류가 아니다
           errOrder.current = [
             ...(err.tasks ? ['tasks'] : []),
             ...(err.base ? ['base'] : []), ...(err.detail ? ['detail'] : []), ...(err.name ? ['name'] : []), ...(err.phone ? ['phone'] : []),
-            ...(err.date ? ['date'] : []), ...(err.slots ? ['slots'] : []),
+            ...(err.slots ? ['slots'] : []),
           ];
 
           const submit = () => {
@@ -202,7 +206,7 @@ function RequestForm({ id }: { id: string }) {
             setErrCount(0);
             void action.run(async () => {
               const r = await repo.createRequest({
-                providerId: p.id, groupId: joint ? groupId : null, newDateWish: joint ? undefined : newDate,
+                providerId: p.id, groupId: joint ? groupId : null, newDateWish: joint ? undefined : wishDate!,
                 slots: timeOptions.filter((t) => slots.includes(t)), // 지금 선택 가능한 시각만, 시각 순서
                 // 지금 고른 작업만(해제한 작업의 작성 내용은 넣지 않음). 작업명은 저장소가 등록 작업에서 요청 당시 이름으로 채운다
                 tasks: chosen.map((s) => ({ serviceId: s.id, description: (drafts[s.id]?.description ?? '').trim(), photoNames: drafts[s.id]?.photoNames ?? [] })),
@@ -225,14 +229,26 @@ function RequestForm({ id }: { id: string }) {
               <div className="card">
                 <KV rows={[
                   { k: '업체', v: p.name },
-                  { k: '요청 방식', v: joint && group ? '공동 예약 날짜 참여' : '새 날짜 요청' },
+                  { k: '요청 방식', v: joint ? '공동 예약 날짜 참여' : '새 요청' },
+                  ...(!joint && wishDate && !wishBlock ? [{ k: '희망 날짜', v: formatDate(wishDate) }] : []),
                   ...(group ? [
                     { k: '방문 날짜', v: formatDate(group.date) },
                     { k: '접수 마감', v: <span className="nowrap">{formatDateTime(group.closeAt)}</span> },
                     { k: '내 예상 출장비', v: <span className="money">약 {formatWon(expectedFeeForJoiner(group.totalTripFee, group.confirmedHouseholds))}</span> },
                   ] : []),
                 ]} />
+                {!joint && !wishBlock && (
+                  <p className="xs muted">희망 날짜예요. 업체가 방문 가능 여부를 확인하고, 승인할 때 방문 날짜·시각과 접수 마감을 정해요. 요청만으로 예약이 확정되지 않아요.</p>
+                )}
               </div>
+              {wishBlock && (
+                <div className="stack--sm stack">
+                  <Banner tone="warn" title="희망 날짜를 다시 골라 주세요">
+                    {wishBlock === 'missing' ? '업체 상세의 ‘방문 날짜 선택’에서 새 요청 날짜를 골라 주세요.' : `${NEW_REQUEST_BLOCK_TEXT[wishBlock]} 업체 상세에서 다른 날짜를 골라 주세요.`}
+                  </Banner>
+                  <Button variant="secondary" block onClick={onBack}><Icon name="calendar" size={18} />방문 날짜 다시 고르기</Button>
+                </div>
+              )}
               {groupMissing && (
                 <Banner tone="warn" title="이 공동 예약에는 지금 참여할 수 없어요">접수가 끝났거나 현재 주소로 참여할 수 없는 일정이에요. 업체 상세에서 다른 날짜를 고르거나 새 날짜로 요청해 주세요.</Banner>
               )}
@@ -346,14 +362,9 @@ function RequestForm({ id }: { id: string }) {
                 </div>
               </Section>
 
-              {/* 방문 가능한 시간: 제목은 카드 바깥, 날짜(새 날짜 요청)·안내·시각 칩·오류는 연락받을 정보·방문 주소와 같은 흰 카드 안 */}
+              {/* 방문 가능한 시간: 제목은 카드 바깥, 안내·시각 칩·오류는 연락받을 정보·방문 주소와 같은 흰 카드 안. 날짜는 업체 상세에서 고른다 */}
               <Section title="방문 가능한 시간">
                 <div className="card stack">
-                  {!joint && (
-                    <Field label="희망 방문 날짜" error={touched ? err.date : null} liveError={false} hint="새 날짜로 요청하면 업체가 승인하면서 접수 마감을 정해요.">
-                      {(fp) => <input {...fp} data-err-target="date" type="date" className="input" min={minDate} value={newDate} onChange={(e) => setNewDate(e.target.value)} />}
-                    </Field>
-                  )}
                   <fieldset className="svc-pick time-pick" data-err-region aria-describedby="req-time-hint">
                     <legend className="sr-only">방문 가능한 시각 (여러 개 선택 가능)</legend>
                     <p className="small muted time-pick__hint" id="req-time-hint">방문 가능한 시간을 여러 개 선택하면, 업체가 그중 방문 시간을 제안해요.</p>
@@ -387,7 +398,7 @@ function RequestForm({ id }: { id: string }) {
                 </div>
               )}
               {/* 하단 고정 없이 마지막 입력 영역 다음(폼 간격 24px)에 둔다. 아래 여백은 본문 아래 여백(32px) */}
-              <Button variant="primary" block type="submit" busy={action.busy} disabled={groupMissing || noServices || noTimes}>요청 보내기</Button>
+              <Button variant="primary" block type="submit" busy={action.busy} disabled={groupMissing || !!wishBlock || noServices || noTimes}>요청 보내기</Button>
             </form>
           );
         }}

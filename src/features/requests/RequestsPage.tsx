@@ -1,17 +1,18 @@
 import { Link } from 'react-router-dom';
 import { useRepo } from '../../app/context';
-import { REQUEST_STATUS } from '../../domain/rules';
 import { formatDate, formatRemaining, seoulYmd } from '../../domain/time';
 import { formatYmdDots } from '../../domain/requestFilter';
 import { Icon } from '../../components/Icon';
-import { Badge } from '../../components/ui';
+import { requestDisplay } from '../../domain/statusDisplay';
+import { StatusBadges, TodoLine } from '../shared';
 import type { FilteredBundleListItem } from '../../data/repositories/types';
 import type { RequestStatus } from '../../domain/types';
 
-export function RequestBadge({ status, recheck }: { status: RequestStatus; recheck?: boolean }) {
-  const s = REQUEST_STATUS[status];
-  return <Badge tone={s.tone}>{recheck ? '새 조건 확인 필요' : s.label}</Badge>;
+/** 요청 대표 상태(목록·상세 공통 매핑, src/domain/statusDisplay.ts) */
+export function RequestBadge({ status }: { status: RequestStatus; recheck?: boolean }) {
+  return <StatusBadges d={requestDisplay(status)} />;
 }
+const inFlight = (i: FilteredBundleListItem['items'][number]) => i.depositAttempt === 'processing' || i.depositAttempt === 'unknown';
 
 /** 예약으로 이어지지 않고 끝난 요청(업체 거절·철회·승인 만료 등) */
 const isEnded = (s: RequestStatus) => !['reviewing', 'needs_info', 'approved_pending_payment', 'booked'].includes(s);
@@ -51,13 +52,15 @@ export function SentRequestList({ bundles, busy }: { bundles: FilteredBundleList
                   <li key={i.request.id} className="row row--between row--wrap" style={{ gap: 'var(--sp-2)' }}>
                     <span className="small">{i.provider.name}{i.visitDate && <span className="muted"> · 방문일 {formatDate(i.visitDate)}</span>}</span>
                     <RequestBadge status={i.request.status} />
+                    {/* 결제 기한(정보)만 두고, 구체 확인 내용·결제 시도 안내는 상세에서 */}
                     {i.paymentDeadline && <span className="xs muted" style={{ flexBasis: '100%' }}>예약금 결제 기한 {formatRemaining(repo.now(), i.paymentDeadline)}</span>}
-                    {i.depositAttempt && <span className="xs strong" style={{ flexBasis: '100%', color: i.depositAttempt === 'failed' ? 'var(--c-danger)' : 'var(--c-primary)' }}>{i.depositAttempt === 'failed' ? '예약금 결제 실패 · 기한 안에 다시 결제할 수 있어요' : '예약금 결제 결과 확인 중 · 다시 결제하지 마세요'}</span>}
-                    {/* 종료된 요청: 종료 사유(업체 거절은 업체가 남긴 사유, 그 밖에는 상태 안내) */}
-                    {isEnded(i.request.status) && <span className="xs muted" style={{ flexBasis: '100%' }}>{i.request.status === 'rejected' && i.request.rejectionReason ? `거절 사유: ${i.request.rejectionReason}` : REQUEST_STATUS[i.request.status].hint}</span>}
+                    {/* 업체 거절: 업체가 남긴 사유(실제 데이터). 그 밖의 종료는 대표 상태로 충분 */}
+                    {i.request.status === 'rejected' && i.request.rejectionReason && <span className="xs muted" style={{ flexBasis: '100%' }}>거절 사유: {i.request.rejectionReason}</span>}
                   </li>
                 ))}
               </ul>
+              {/* 할 일(있을 때만): 예약금 결제·요청서 보완. 결제 결과 확인 중·업체 검토 중에는 없음 */}
+              <TodoLine actions={b.items.flatMap((i) => requestDisplay(i.request.status, { paymentInFlight: inFlight(i) }).actions)} />
               {b.hiddenItemCount > 0 && (
                 <p className="xs muted">조건에 맞지 않는 다른 업체 요청 {b.hiddenItemCount}건은 목록에서만 숨겼어요. 눌러서 모두 볼 수 있어요.</p>
               )}

@@ -25,6 +25,7 @@ const P: Record<string, ReactNode> = {
   tool: <path d="M14.5 6.5a4 4 0 0 0 4.9 4.9L21 13l-8 8a2.1 2.1 0 0 1-3-3l8-8-1.5-3.5z" />,
   filter: <path d="M4 5h16l-6 7.5V18l-4 2v-7.5L4 5z" />,
   more: <path d="M5 12h.01M12 12h.01M19 12h.01" />,
+  bell: <><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15L6 16z" /><path d="M10 20.5a2 2 0 0 0 4 0" /></>,
 };
 
 export function Icon({ name, size = 22, label }: { name: keyof typeof P | string; size?: number; label?: string }) {

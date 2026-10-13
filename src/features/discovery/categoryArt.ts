@@ -27,10 +27,10 @@ export const CATEGORY_ART_SIZE = { width: 96, height: 96 } as const;
 export const CATEGORY_TITLE: Record<string, string> = {
   c1: '방충망',
   c2: '수전·배수',
-  c3: '문 수리',
+  c3: '문손잡이·경첩',
   c4: '수납장·서랍',
   c5: '창문 보수',
-  c6: '조명·전기',
+  c6: '조명·스위치',
   c7: '커튼·선반',
   c8: '생활 부속품',
   c9: '실리콘·줄눈',

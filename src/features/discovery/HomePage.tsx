@@ -47,8 +47,8 @@ export function HomePage() {
         )}
       </Section>
 
-      {/* 공동 예약 안내는 카테고리 제목 영역에 둔다: 넓은 화면은 제목 오른쪽 끝, 좁은 화면은 제목 아래 줄. 상세는 ‘이용 방법’ */}
-      <Section title="어떤 수리가 필요하세요?" aside={<CoopGuideHint />} headClassName="section__head--hint">
+      {/* 제목 아래 왼쪽 정렬로 소개 문구 한 줄 + ⓘ(공동 예약 이용 방법). 배너·카드로 감싸지 않는다 */}
+      <Section title="어떤 생활 수리가 필요하세요?" aside={<CoopGuideHint />} headClassName="section__head--hint">
         <AsyncView state={cats} loading={<Skeleton h={140} n={4} />}>
           {(list) => (
             <ul className="cat-grid">

@@ -1,5 +1,5 @@
 /**
- * 업체 상세 ‘공동 예약 일정’ 캘린더의 순수 계산. 날짜는 모두 Asia/Seoul 기준 YYYY-MM-DD 문자열로 다룬다.
+ * 업체 상세 ‘방문 날짜 선택’ 캘린더의 순수 계산(공동 예약 부분). 날짜 유형 판단은 visitDays.ts. 날짜는 모두 Asia/Seoul 기준 YYYY-MM-DD 문자열로 다룬다.
  * 신청 가능 판단은 기존 기준(접수 중·마감 전·남은 자리·주소 범위)을 그대로 쓴다. 주소 범위는 저장소가 이미 거른 그룹만 받는다.
  */
 import { perHouseholdFee, tripFeeSavings } from './pricing';
@@ -87,12 +87,15 @@ export function formatDayTitle(ymd: IsoDate, today: IsoDate): string {
   const yy = y !== Number(today.slice(0, 4)) ? `${y}년 ` : '';
   return `${yy}${m}월 ${d}일(${weekdayOf(ymd)})`;
 }
-/** 날짜 버튼의 접근성 이름 */
-export function dayLabel(ymd: IsoDate, today: IsoDate, count: number, selected: boolean): string {
+/**
+ * 날짜 버튼의 접근성 이름. 색만으로 구분하지 않도록 날짜 유형을 함께 읽는다.
+ * kind: 'joint' = 공동 예약 참여 가능(그룹 수 count), 'new' = 새 요청 가능, 'none' = 요청 불가
+ */
+export function dayLabel(ymd: IsoDate, today: IsoDate, kind: 'joint' | 'new' | 'none', count: number, selected: boolean): string {
   const [y, m, d] = ymd.split('-').map(Number);
   const parts = [`${y}년 ${m}월 ${d}일 ${weekdayOf(ymd)}요일`];
   if (ymd === today) parts.push('오늘');
-  parts.push(count > 0 ? `신청 가능한 공동 예약 ${count}개` : '신청 가능한 공동 예약 없음');
+  parts.push(kind === 'joint' ? `공동 예약 참여 가능 ${count}개` : kind === 'new' ? '새 요청 가능' : '요청 불가');
   if (selected) parts.push('선택됨');
   return parts.join(', ');
 }

@@ -98,7 +98,7 @@ a.list-row:hover { background: #fafbfd; }
 /* ───────── 배지·칩 ───────── */
 .badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: var(--r-pill); font-size: var(--fs-xs); font-weight: 700; line-height: 1.4; background: var(--c-neutral-bg); color: var(--c-text-2); max-width: 100%; }
 .badge--info { background: var(--c-info-bg); color: var(--c-primary); }
-.badge--action { background: var(--c-primary); color: #fff; }
+.badge--action { background: var(--c-info-bg); color: var(--c-primary); }
 .badge--success { background: var(--c-success-bg); color: var(--c-success); }
 .badge--warn { background: var(--c-warn-bg); color: var(--c-warn); }
 .badge--danger { background: var(--c-danger-bg); color: var(--c-danger); }
@@ -214,7 +214,6 @@ a.list-row:hover { background: #fafbfd; }
 .cat-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-2); }
 .cat-grid > li { min-width: 0; }
 @media (min-width: 600px) { .cat-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-3); } }
-@media (min-width: 720px) { .cat-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; } }
 .cat-card {
   display: flex; flex-direction: column; align-items: center; gap: 14px; height: 100%; min-height: 44px; padding: 20px 12px 16px;
   text-decoration: none; color: var(--c-text); background: var(--c-surface); border: 1px solid var(--c-line); border-radius: var(--r-lg);
@@ -222,6 +221,7 @@ a.list-row:hover { background: #fafbfd; }
 }
 .cat-card__art { display: grid; place-items: center; width: 72px; height: 72px; flex: none; }
 .cat-card__art img { display: block; width: 72px; height: 72px; object-fit: contain; }
+/* 넓은 화면(3열)에서도 아이콘·높이는 키우지 않는다(64px) */
 @media (min-width: 720px) { .cat-card { padding: 18px 10px 16px; gap: 12px; } .cat-card__art, .cat-card__art img { width: 64px; height: 64px; } }
 /* 제목: 기존 폰트·차콜(본문 토큰 --c-text), 15px(--fs-md)·600, 가운데. 충분한 너비에서는 한 줄, 좁으면 ‘·’·띄어쓰기 뒤에서 자연스럽게 줄바꿈
    (말줄임·글자 축소 없음). 아이콘 아래 같은 위치에서 시작해 줄바꿈돼도 같은 행 카드의 정렬이 맞는다 */
@@ -348,12 +348,10 @@ a.list-row:hover { background: #fafbfd; }
 .save-address { display: flex; gap: var(--sp-2); align-items: flex-start; min-height: 44px; padding: var(--sp-2) 0; cursor: pointer; }
 .save-address input { width: 20px; height: 20px; margin: 2px 0 0; accent-color: var(--c-primary); flex: none; }
 
-/* 카테고리 제목 + 공동 예약 안내: 좁은 화면은 제목 아래 줄(왼쪽 정렬, 자연 줄바꿈), 넓은 화면은 같은 줄 오른쪽 끝(수직 중앙) */
-.section__head--hint { flex-direction: column; align-items: flex-start; gap: 0; }
-@media (min-width: 720px) {
-  .section__head--hint { flex-direction: row; align-items: center; justify-content: space-between; column-gap: var(--sp-6); }
-  .section__head--hint .coop-hint { text-align: right; }
-}
+/* 카테고리 제목 + 공동 예약 안내: 한 줄에 들어가면 제목 왼쪽·안내 오른쪽 끝(세로 가운데, 간격 24px 이상),
+   부족하면 안내가 제목 아래 줄로 내려가 왼쪽 정렬(간격 8px)되고 문구는 자연스럽게 줄바꿈한다. 카테고리까지는 섹션 간격(12px)만 */
+.section__head--hint { flex-wrap: wrap; align-items: center; justify-content: space-between; column-gap: var(--sp-6); row-gap: var(--sp-2); }
+.section__head--hint .coop-hint { min-width: 0; }
 
 /* 대화상자 팝오버 변형(데스크톱 필터 등): 연 버튼 아래, 배경을 어둡게 하지 않음 */
 .dialog-backdrop--popover { background: transparent; }
@@ -394,22 +392,27 @@ a.list-row:hover { background: #fafbfd; }
 .jcal__day--open { color: var(--c-primary); cursor: pointer; }
 .jcal__day--open .jcal__num { background: var(--c-info-bg); font-weight: 700; }
 .jcal__day--open:hover .jcal__num { box-shadow: inset 0 0 0 1px var(--c-primary); }
+/* 새 요청 가능: 연한 회색 원·진한 숫자 */
+.jcal__day--new { color: var(--c-text); cursor: pointer; }
+.jcal__day--new .jcal__num { background: var(--c-neutral-bg); font-weight: 600; }
+.jcal__day--new:hover .jcal__num { box-shadow: inset 0 0 0 1px var(--c-text-2); }
 .jcal__day--on .jcal__num, .jcal__day--on:hover .jcal__num { background: var(--c-primary); color: #fff; box-shadow: none; }
 /* 오늘: 원 바깥 얇은 테두리(가능·선택의 채움과 별개 층) */
 .jcal__day--today { color: var(--c-text); }
 .jcal__day--today .jcal__num { box-shadow: 0 0 0 1px var(--c-text-2); }
 .jcal__day--today.jcal__day--open { color: var(--c-primary); }
 .jcal__day--today.jcal__day--open .jcal__num { box-shadow: 0 0 0 1px var(--c-primary); }
+.jcal__day--today.jcal__day--new .jcal__num { box-shadow: 0 0 0 2px var(--c-surface), 0 0 0 3px var(--c-text-2); }
 .jcal__day--today.jcal__day--on .jcal__num { box-shadow: 0 0 0 2px var(--c-surface), 0 0 0 3px var(--c-primary); }
 .jcal__day:focus-visible { outline: 3px solid var(--c-focus); outline-offset: -1px; }
 @media (max-width: 400px) { .jcal { padding-left: var(--sp-2); padding-right: var(--sp-2); } }
 @media (prefers-reduced-motion: reduce) { .jcal__num, .jcal__navbtn { transition: none; } }
-.jcal__prompt { text-align: center; color: var(--c-text-2); padding: var(--sp-3) 0; }
+.jcal__legend { display: flex; flex-wrap: wrap; gap: var(--sp-1) var(--sp-4); margin: var(--sp-2) var(--sp-1) 0; padding: 0; list-style: none; font-size: var(--fs-xs); color: var(--c-text-2); }
+.jcal__legend li { display: inline-flex; align-items: center; gap: 6px; }
+.jcal__swatch { width: 12px; height: 12px; border-radius: 50%; flex: none; }
+.jcal__swatch--joint { background: var(--c-info-bg); box-shadow: inset 0 0 0 1px var(--c-primary); }
+.jcal__swatch--new { background: var(--c-neutral-bg); box-shadow: inset 0 0 0 1px var(--c-line-strong); }
 .joint-card { display: flex; flex-direction: column; border-radius: var(--r-md); }
-.joint-card .radio-card { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
-.joint-card__detail { border: 1px solid var(--c-line-strong); border-top: 0; border-radius: 0 0 var(--r-md) var(--r-md); padding: 0 var(--sp-4); background: var(--c-surface); }
-.joint-card__detail:last-child { border-bottom: 1px solid var(--c-line-strong); }
-.joint-card:has(input:checked) .joint-card__detail { border-color: var(--c-primary); }
 
 /* ───────── 비교 요청: 업체별 응답 요약 카드 ───────── */
 .section__head--filter { align-items: center; flex-wrap: wrap; }
@@ -497,8 +500,8 @@ a.list-row:hover { background: #fafbfd; }
 }
 /* 공동 예약 카드의 신청 가능한 시각(정보 행 값, 안내용): 다른 값과 같은 크기·굵기 600, 길면 값 영역 안에서 시각 단위로만 줄바꿈(항목명은 첫 줄에 맞춤) */
 .kv__times { word-break: keep-all; }
-.joint-card .radio-card .kv__k { flex: none; white-space: nowrap; }
-.joint-card .radio-card .kv__v { flex: 1; min-width: 0; max-width: none; }
+.joint-card .kv__k { flex: none; white-space: nowrap; }
+.joint-card .kv__v { flex: 1; min-width: 0; max-width: none; }
 /*
  * 요청 상세 하단 버튼 영역: 고정 없이 마지막 본문 다음(본문 간격 24px). 다음 행동 버튼(있으면) → [보낸 요청 목록으로 | 이 업체 요청 철회하기].
  * 모바일은 세로(목록 버튼 위), 600px 이상은 같은 너비로 나란히(간격 12px). hover는 바탕만 옅게 바꿔 의미 색(블루·빨강)과 대비를 유지한다.
@@ -539,8 +542,50 @@ a.list-row:hover { background: #fafbfd; }
 #schedule-change:focus-visible .sched { outline: 3px solid var(--c-focus); outline-offset: 2px; }
 .cancel-note { text-align: center; }
 /* 요청 상세 ‘보완 필요’ 카드: 일반 카드(흰 바탕·중립 테두리) + 작은 주황 배지. 요청 내용은 본문 그대로(줄바꿈 유지), 버튼은 내용 바로 아래 */
-.badge--orange { background: #fff1e6; color: #b5490c; }
+.badge--orange { background: #fff1e6; color: var(--c-orange); }
 .info-req__title { font-size: var(--fs-lg); line-height: 1.4; }
 .info-req__msg { white-space: pre-wrap; overflow-wrap: anywhere; word-break: keep-all; }
 .info-req__actions { padding-top: var(--sp-2); }
 @media (max-width: 479px) { .info-req__actions .btn { width: 100%; } }
+/* 목록 카드의 대표 상태 배지 */
+.status-badges { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; min-width: 0; }
+/*
+ * 상세 상단 공통 행동 카드(spec 5.17): 회색 테두리·둥근 모서리, 연한 블루 머리(정보 아이콘 · ‘확인이 필요해요’), 구체 제목, 흰 본문(왼쪽 정렬), 하단 버튼.
+ * 노란 바탕·노란 테두리·안쪽 카드 없음. 여러 확인 사항은 카드마다 따로 쌓는다.
+ */
+.act-cards { display: flex; flex-direction: column; gap: var(--sp-4); }
+.act-card { background: var(--c-surface); border: 1px solid var(--c-line); border-radius: var(--r-lg); overflow: hidden; }
+.act-card:focus { outline: none; }
+.act-card:focus-visible { outline: 3px solid var(--c-focus); outline-offset: 2px; }
+.act-card__head { display: flex; align-items: center; gap: 6px; padding: 10px var(--sp-4); background: var(--c-info-bg); color: var(--c-primary); font-size: var(--fs-sm); font-weight: 700; line-height: 1.4; }
+.act-card__head svg { flex: none; }
+.act-card__body { padding: var(--sp-4); }
+.act-card__title { font-size: var(--fs-lg); line-height: 1.4; word-break: keep-all; overflow-wrap: anywhere; }
+.act-card__body p, .act-card__body li { overflow-wrap: anywhere; word-break: keep-all; }
+.act-card__actions { padding: 0 var(--sp-4) var(--sp-4); display: flex; flex-direction: column; gap: var(--sp-3); }
+.act-card__actions > .detail-actions__pair { width: 100%; }
+/* 본문 정보: 이름 열 + 값(왼쪽 정렬로 읽는 흐름) */
+.act-card .kv__row { justify-content: flex-start; }
+.act-card .kv__k { flex: 0 0 7.5em; }
+.act-card .kv__v { flex: 1; max-width: none; text-align: left; min-width: 0; overflow-wrap: anywhere; word-break: keep-all; }
+.act-card__msg { white-space: pre-wrap; }
+.act-card__divider { border: 0; border-top: 1px solid var(--c-line); margin: var(--sp-1) 0; }
+.act-card .check { padding: var(--sp-2) 0 0; cursor: pointer; }
+.act-card .check > span { min-width: 0; overflow-wrap: anywhere; }
+/* 일정 비교: 기존 일정 | 제안 일정 나란히(좁은 화면에서도 두 칸, 너무 좁으면 세로) */
+.sched-compare { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-2); margin: var(--sp-1) 0; }
+@media (max-width: 339px) { .sched-compare { grid-template-columns: minmax(0, 1fr); } }
+.sched-compare__item { border: 1px solid var(--c-line); border-radius: var(--r-md); padding: var(--sp-3); display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.sched-compare__item--new { border-color: var(--c-primary); }
+.sched-compare__k { font-size: var(--fs-xs); color: var(--c-text-2); font-weight: 600; }
+.sched-compare__v { font-weight: 700; overflow-wrap: anywhere; word-break: keep-all; }
+/* 최종 금액 확인 대기(E): 기존 금액·정산 카드에 공통 행동 카드 머리를 붙인다(카드 안쪽 여백 위로 꽉 차게) */
+.cost--attn { padding-top: 0; overflow: hidden; }
+.cost--attn > .cost__head { margin: 0 calc(-1 * var(--sp-4)); }
+.sched-compare__item .sched__mark { align-self: flex-start; }
+/*
+ * 목록 카드 할 일(spec 5.18): 카드 정보 아래 얇은 회색 구분선 + 12px, 작은 주황 점(7px, 기존 주황 배지 색 토큰 --c-orange) + 8px + 차콜 본문 문구(600).
+ * 카드 바탕·테두리는 그대로. 할 일이 없으면 이 요소 자체가 없다.
+ */
+.card-todo { display: flex; align-items: baseline; gap: var(--sp-2); margin-top: var(--sp-1); padding-top: var(--sp-3); border-top: 1px solid var(--c-line); color: var(--c-text); font-size: var(--fs-md); font-weight: 600; line-height: 1.45; overflow-wrap: anywhere; word-break: keep-all; }
+.card-todo__dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--c-orange); transform: translateY(-2px); }

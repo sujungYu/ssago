@@ -7,7 +7,7 @@ import { addHours, formatDate, seoulYmd } from '../../domain/time';
 import { NEW_DATE_WINDOWS, formatSlot, isWithinSlots, selectableTimes } from '../../domain/visitTime';
 import { canRejectKeepingOld, canRequestOther } from '../../domain/scheduleChange';
 import { Icon } from '../../components/Icon';
-import { Banner, Button, KV, MockPayNotice, PhoneButton } from '../../components/ui';
+import { ActionCard, Banner, Button, KV, MockPayNotice, PhoneButton } from '../../components/ui';
 import type { BookingDetail } from '../../data/repositories/types';
 import { VisitText, slotsText } from '../shared';
 
@@ -47,12 +47,12 @@ export function ScheduleChangeCard({ d }: { d: BookingDetail }) {
   const outside = !!p?.newVisit.time && b.customerSlots.length > 0 && !isWithinSlots(p.newVisit.time, b.customerSlots);
   const shortfall = p && p.origin === 'customer' && !p.replyTo ? p.cost.additionalDeposit : 0;
 
-  // 제목·배지: 응답이 필요한 제안이면 ‘일정 확인 필요 · 새 방문 일정을 확인해 주세요’(보완 필요 카드와 같은 형식). 응답을 기다리는 상태만 다르게
+  // 제목: 응답이 필요한 제안이면 ‘새 방문 일정을 확인해 주세요’. 응답을 기다리는 상태만 다르게(머리 문구도 대기 상태로)
   const needsResponse = p?.status === 'proposed';
-  const { badge, title } = needsResponse ? { badge: '일정 확인 필요', title: '새 방문 일정을 확인해 주세요' }
-    : s.kind === 'negotiating' ? { badge: '일정 협의 중', title: '새 방문 일정을 협의하고 있어요' }
-    : s.kind === 'customer_requested' ? { badge: '업체 응답 대기', title: '일정 변경을 요청했어요' }
-    : { badge: '일정 확인 필요', title: '새 방문 일정을 정해야 해요' };
+  const title = needsResponse ? '새 방문 일정을 확인해 주세요'
+    : s.kind === 'negotiating' ? '새 방문 일정을 협의하고 있어요'
+    : s.kind === 'customer_requested' ? '일정 변경을 요청했어요'
+    : '새 방문 일정을 정해야 해요';
   // 기존 일정 옆 작은 표시: 방문 불가 / 방문 가능 여부 확인 필요(방문 가능한 제안에는 표시하지 않음 — 데이터 기준, 사유로 추측하지 않음)
   const oldMark = unavailable ? <span className="sched__mark sched__mark--no">방문 불가</span>
     : s.oldVisit === 'unknown' ? <span className="sched__mark">방문 가능 여부 확인 필요</span> : null;
@@ -80,33 +80,18 @@ export function ScheduleChangeCard({ d }: { d: BookingDetail }) {
     });
   };
 
+  // 머리 문구: 고객 응답이 필요하면 ‘확인이 필요해요’, 업체 응답을 기다리기만 하면 그 상태(확인 필요 라벨도 붙지 않음)
+  const waiting = s.kind === 'customer_requested' || s.kind === 'negotiating' || s.kind === 'unavailable_open'; // 업체 제안·응답 대기(목록 할 일 없음)
+  const newItem = p?.newVisit.time
+    ? { k: s.kind === 'customer_request_agreed' ? '업체가 제안한 새 일정' : '제안된 새 일정', v: <VisitText date={p.newVisit.date} time={p.newVisit.time} /> }
+    : p ? { k: p.replyTo ? '내가 요청한 희망 일정' : '요청한 일정', v: <span className="nowrap">{formatDate(p.newVisit.date)} {p.newVisit.wishSlot ? formatSlot(p.newVisit.wishSlot) : ''}</span> } : null;
+
   return (
-    <section className="section" id="schedule-change" tabIndex={-1} aria-labelledby="schedule-change-title">
-      {/* 보완 필요 카드와 같은 형식: 흰 일반 카드 + 작은 주황 배지 + 제목. 안쪽 상자 없음 */}
-      <div className="card stack--sm stack sched">
-        <div><span className="badge badge--orange">{badge}</span></div>
-        <h2 id="schedule-change-title" className="info-req__title">{title}</h2>
-        <KV rows={[
-          { k: '기존 방문 일정', v: <span className="sched__v"><VisitText date={b.visitDate} time={b.visitTime} />{oldMark && <> {oldMark}</>}</span> },
-          ...(p?.newVisit.time ? [{ k: s.kind === 'customer_request_agreed' ? '업체가 제안한 새 일정' : '제안된 새 일정', v: <span className="sched__v"><VisitText date={p.newVisit.date} time={p.newVisit.time} strong /></span> }] : []),
-          ...(p && !p.newVisit.time ? [{
-            k: p.replyTo ? '내가 요청한 희망 일정' : '요청한 일정',
-            v: <span className="sched__v strong nowrap">{formatDate(p.newVisit.date)} {p.newVisit.wishSlot ? formatSlot(p.newVisit.wishSlot) : ''}</span>,
-          }] : []),
-          ...(root ? [{ k: '변경 사유', v: <span className="sched__v sched__reason">{root.reason}</span> }] : []),
-          {
-            k: '비용',
-            v: <span className="sched__v">{providerCause ? '변경 비용 없음 · 확정 출장비 유지'
-              : p ? <>변경 비용 {formatWon(p.cost.tripFeeCharged)} · 추가 결제 {formatWon(p.cost.additionalDeposit)}<span className="xs muted" style={{ display: 'block' }}>{p.cost.note}</span></> : '-'}</span>,
-          },
-        ]} />
-        {outside && <p className="xs muted">처음 고른 방문 가능한 시각({slotsText(b.customerSlots)}) 밖의 제안이에요.</p>}
-        <p className="small">{guide}</p>
-
-        {shortfall > 0 && p?.status === 'proposed' && <MockPayNotice compact />}
+    <ActionCard id="schedule-change" className="sched" title={title} head={waiting ? '업체 응답을 기다리고 있어요' : undefined}
+      actions={!!action.error || (p?.status === 'proposed' && !otherOpen) || (s.kind === 'customer_requested' && p) || s.kind === 'negotiating' || s.kind === 'unavailable_open' || s.oldVisit === 'unknown' || otherOpen ? <>
         {action.error && <Banner tone="danger" title={action.error.title}>{action.error.hint} 다시 시도할 수 있어요.</Banner>}
-
-        {/* 응답 버튼(최신 진행 중 제안에만) */}
+        {shortfall > 0 && p?.status === 'proposed' && <MockPayNotice compact />}
+        {/* 응답 버튼(최신 진행 중 제안에만). 기존 방문 가능: 수락/거절 · 기존 방문 불가: 수락/다른 일정 요청 */}
         {p?.status === 'proposed' && !otherOpen && (
           <div className="detail-actions__pair">
             <Button variant="primary" block busy={action.busy} onClick={accept}>{shortfall > 0 ? `수락하고 ${formatWon(shortfall)} 모의 결제` : '새 일정 수락'}</Button>
@@ -150,7 +135,32 @@ export function ScheduleChangeCard({ d }: { d: BookingDetail }) {
             </div>
           </div>
         )}
+      </> : undefined}>
+      {/* 일정 비교: 기존 일정 | 제안(요청) 일정 나란히 */}
+      <div className="sched-compare">
+        <div className="sched-compare__item">
+          <span className="sched-compare__k">기존 방문 일정</span>
+          <span className="sched-compare__v"><VisitText date={b.visitDate} time={b.visitTime} /></span>
+          {oldMark}
+        </div>
+        {newItem && (
+          <div className="sched-compare__item sched-compare__item--new">
+            <span className="sched-compare__k">{newItem.k}</span>
+            <span className="sched-compare__v">{newItem.v}</span>
+          </div>
+        )}
       </div>
-    </section>
+      <KV rows={[
+        ...(root ? [{ k: '변경 사유', v: <span className="sched__reason">{root.reason}</span> }] : []),
+        { k: '기존 일정 방문', v: unavailable ? '업체가 방문할 수 없어요' : s.oldVisit === 'unknown' ? '가능 여부 확인 필요' : '가능 · 수락 전까지 기존 일정 유지' },
+        {
+          k: '비용',
+          v: <span>{providerCause ? '변경 비용 없음 · 확정 출장비 유지'
+            : p ? <>변경 비용 {formatWon(p.cost.tripFeeCharged)} · 추가 결제 {formatWon(p.cost.additionalDeposit)}<span className="xs muted" style={{ display: 'block' }}>{p.cost.note}</span></> : '-'}</span>,
+        },
+      ]} />
+      {outside && <p className="xs muted">처음 고른 방문 가능한 시각({slotsText(b.customerSlots)}) 밖의 제안이에요.</p>}
+      <p className="small">{guide}</p>
+    </ActionCard>
   );
 }

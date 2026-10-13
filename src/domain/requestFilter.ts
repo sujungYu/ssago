@@ -2,18 +2,19 @@
  * 내 예약 > 보낸 요청 목록 필터(조회 조건). 화면과 분리된 순수 함수.
  * - 날짜 기준은 ‘요청 접수일’(RepairRequest.createdAt)의 Asia/Seoul 날짜. 방문 예정일이 아니다.
  * - 기간은 시작일·종료일 모두 포함. ‘최근 N일’은 오늘을 포함한 N개의 날짜.
- * - 상태는 사용자용 상태 그룹 단일 선택(‘종료’는 예약으로 이어지지 않고 끝난 업무 상태를 묶음). 날짜와는 AND. 'all' = 전체.
+ * - 상태는 목록 대표 상태(src/domain/statusDisplay.ts)와 같은 이름의 단일 선택. 날짜와는 AND. 'all' = 전체.
  * - 보낸 요청 탭에는 예약으로 이어진 요청 묶음이 없으므로(src/domain/reservationTabs.ts) ‘예약 완료’ 선택지는 두지 않는다.
  * 필터는 조회 조건만 바꾸며 요청 데이터·상태를 바꾸지 않는다.
  */
 import { seoulYmd } from './time';
 import type { IsoDate, IsoDateTime, RepairRequest, RequestStatus } from './types';
+import { REQUEST_DISPLAY } from './statusDisplay';
 
 // ───────── 화면 필터 값(URL에 저장하는 값) ─────────
 export type PeriodPreset = 'all' | '7d' | '30d' | '90d' | 'custom';
 
 /** 사용자용 상태 그룹(필터 전용). 업무 상태(RequestStatus)를 바꾸지 않고 조회 조건으로만 묶는다. */
-export type StatusGroup = 'all' | 'payment_pending' | 'needs_info' | 'reviewing' | 'ended';
+export type StatusGroup = 'all' | 'reviewing' | 'payment_pending' | 'rejected' | 'withdrawn' | 'expired';
 
 export interface RequestFilter {
   period: PeriodPreset;
@@ -37,26 +38,30 @@ export const PERIOD_OPTIONS: { value: PeriodPreset; label: string }[] = [
 const PRESET_DAYS: Partial<Record<PeriodPreset, number>> = { '7d': 7, '30d': 30, '90d': 90 };
 
 /**
- * 상태 그룹 → 업무 상태 매핑. 예약 전 요청 상태 7개가 ‘전체’를 뺀 4개 그룹에 빠짐없이 한 번씩 들어간다.
- * booked(예약금 결제 성공)는 보낸 요청에 나오지 않아 어느 그룹에도 넣지 않는다.
- * - 결제 대기: approved_pending_payment. ‘승인 완료’만 따로 있는 상태는 없다(업체 승인 = 결제 대기 진입, 승인 조건 재확인
- *   recheck도 이 상태의 표시값). 그래서 결제 전 승인 상태를 하나로 묶는다.
- * - 종료: 업체 거절·철회·승인 만료·다른 업체 예약으로 종료. 카드에는 구체 상태를 그대로 보여준다.
+ * 상태 선택지 → 업무 상태 매핑(목록 대표 상태와 같은 기준). 업무 상태는 합치거나 바꾸지 않고 조회 조건으로만 묶는다.
+ * - 업체 검토 중: reviewing + needs_info(추가 정보 필요는 ‘업체 검토 중’ + 확인 필요로 보인다)
+ * - 예약금 결제: approved_pending_payment(조건 재확인·결제 실패·결과 확인 중 포함)
+ * - 업체 거절 / 요청 취소(withdrawn) / 결제 기한 만료(approval_expired)
+ * booked(예약 완료)와 closed_other_booking(비교 요청 결과 종료)은 보낸 요청 데모 목록에 나오지 않아 선택지가 없다(‘전체’에서만).
  */
 export const STATUS_GROUP_STATUSES: Record<Exclude<StatusGroup, 'all'>, RequestStatus[]> = {
+  reviewing: ['reviewing', 'needs_info'],
   payment_pending: ['approved_pending_payment'],
-  needs_info: ['needs_info'],
-  reviewing: ['reviewing'],
-  ended: ['rejected', 'withdrawn', 'approval_expired', 'closed_other_booking'],
+  rejected: ['rejected'],
+  withdrawn: ['withdrawn'],
+  expired: ['approval_expired'],
 };
 
 export const STATUS_GROUP_OPTIONS: { value: StatusGroup; label: string }[] = [
   { value: 'all', label: '전체' },
-  { value: 'payment_pending', label: '예약금 결제 대기' },
-  { value: 'needs_info', label: '추가 정보 필요' },
-  { value: 'reviewing', label: '업체 검토 중' },
-  { value: 'ended', label: '종료' },
+  { value: 'reviewing', label: REQUEST_DISPLAY.reviewing.label },
+  { value: 'payment_pending', label: REQUEST_DISPLAY.approved_pending_payment.label },
+  { value: 'rejected', label: REQUEST_DISPLAY.rejected.label },
+  { value: 'withdrawn', label: REQUEST_DISPLAY.withdrawn.label },
+  { value: 'expired', label: REQUEST_DISPLAY.approval_expired.label },
 ];
+/** 이전 주소의 상태 값: 추가 정보 필요 → 업체 검토 중, 종료(여러 상태 묶음) → 전체 */
+const LEGACY_STATUS: Record<string, StatusGroup> = { needs_info: 'reviewing', ended: 'all' };
 const isStatusGroup = (s: string | null): s is StatusGroup => STATUS_GROUP_OPTIONS.some((o) => o.value === s);
 
 // ───────── 날짜 ─────────
@@ -180,7 +185,7 @@ export function parseRequestFilter(p: URLSearchParams): RequestFilter {
     else { from = f!; to = t!; }
   }
   const rawStatus = p.get('status');
-  const status: StatusGroup = isStatusGroup(rawStatus) ? rawStatus : 'all'; // 이전 형식(쉼표 목록)·없앤 ‘예약 완료’(booked)·알 수 없는 값은 전체
+  const status: StatusGroup = isStatusGroup(rawStatus) ? rawStatus : rawStatus && LEGACY_STATUS[rawStatus] ? LEGACY_STATUS[rawStatus] : 'all'; // 이전 형식(쉼표 목록)·없앤 ‘예약 완료’(booked)·알 수 없는 값은 전체
   return period === 'custom' ? { period, from, to, status } : { period, status };
 }
 
