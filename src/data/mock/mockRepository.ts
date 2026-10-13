@@ -168,7 +168,8 @@ export class MockRepository implements Repository {
   }
   private summary(p: ProviderRecord, addressId: string | null): ProviderSummary {
     const gs = this.eligibleGroups(p.id, addressId);
-    const open = gs?.filter((g) => seatsOf(g) > 0).sort((a, b) => a.date.localeCompare(b.date));
+    // 카드의 ‘가까운 공동 날짜’ = 신청 가능한(남은 자리·접수 마감 전) 가장 빠른 후보. 정렬(방문 날짜·예상 출장비)도 이 값을 쓴다
+    const open = gs?.filter((g) => seatsOf(g) > 0 && isGroupJoinable(toPublicGroup(g), this.db.now)).sort((a, b) => a.date.localeCompare(b.date));
     return {
       id: p.id, name: p.name, categoryIds: p.categoryIds, scope: p.scope, rating: p.rating, reviewCount: p.reviewCount,
       soloTripFee: p.soloTripFee, area: p.area,

@@ -1,4 +1,6 @@
 import { Link, useSearchParams } from 'react-router-dom';
+import { DEFAULT_PROVIDER_SORT, PROVIDER_SORT_OPTIONS, isProviderSort, sortProviders, type ProviderSort } from '../../domain/providerSort';
+import { SortMenu } from '../../components/SortMenu';
 import { Page } from '../../app/Page';
 import { useRepo } from '../../app/context';
 import { useAsync } from '../../app/hooks';
@@ -22,8 +24,16 @@ export function JointBadge({ p, hasAddress, addressUnknown }: { p: ProviderSumma
 
 export function ProviderListPage() {
   const repo = useRepo();
-  const [sp] = useSearchParams();
+  const [sp, setSp] = useSearchParams();
   const categoryId = sp.get('category') ?? '';
+  // 정렬 기준은 주소(sort)에 남겨 업체 상세에서 돌아와도·새로고침해도 유지한다. 기본값은 주소에 쓰지 않는다. 카테고리·주소 조건은 그대로
+  const rawSort = sp.get('sort');
+  const sort: ProviderSort = isProviderSort(rawSort) ? rawSort : DEFAULT_PROVIDER_SORT;
+  const setSort = (s: ProviderSort) => {
+    const next = new URLSearchParams(sp);
+    if (s === DEFAULT_PROVIDER_SORT) next.delete('sort'); else next.set('sort', s);
+    setSp(next, { replace: true });
+  };
   // 업체 찾기와 같은 탐색 주소(앱 상태)를 쓴다. 업체 목록·공동 예약 후보 조회에도 같은 주소 id를 넘긴다.
   const { addressId, address } = useExploreAddress();
   const cats = useAsync(() => repo.listCategories(), [repo]);
@@ -75,8 +85,14 @@ export function ProviderListPage() {
                 다른 카테고리를 확인하거나 나중에 다시 찾아 주세요.
               </EmptyState>
             ) : (
+              <>
+              {/* 정렬: 왼쪽 업체 수, 오른쪽 정렬 기준 드롭다운. 순서만 바꾸고 카드의 공동 예약 후보·내용은 그대로 */}
+              <div className="sort-bar">
+                <p className="small" aria-live="polite">업체 <b>{items.length}</b>곳</p>
+                <SortMenu label="정렬" value={sort} options={PROVIDER_SORT_OPTIONS} onChange={setSort} />
+              </div>
               <ul className="stack" aria-label="업체 목록">
-                {items.map((p) => {
+                {sortProviders(items, sort).map((p) => {
                   const fee = p.nextJoint?.expectedFee ?? null;
                   const sv = fee !== null && fee < p.soloTripFee ? Math.round(((p.soloTripFee - fee) / p.soloTripFee) * 100) : null;
                   return (
@@ -104,6 +120,7 @@ export function ProviderListPage() {
                   );
                 })}
               </ul>
+              </>
             )}
           </>
         )}
