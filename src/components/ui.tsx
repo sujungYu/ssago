@@ -7,7 +7,7 @@ import { CoopVisitIllustration } from './brand/CoopVisitIllustration';
 import type { AsyncState } from '../app/hooks';
 
 // ───────── 버튼 ─────────
-type Variant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'default';
+type Variant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'danger-solid' | 'default';
 const vcls = (v: Variant, block?: boolean, sm?: boolean) =>
   ['btn', v !== 'default' && `btn--${v}`, block && 'btn--block', sm && 'btn--sm'].filter(Boolean).join(' ');
 
@@ -148,9 +148,15 @@ export function Field({ label, hint, error, children, id, liveError = true }: { 
  * 닫으면 연 버튼으로 포커스를 돌려준다(스크롤 위치는 그대로). 본문만 내부 스크롤되어 하단 버튼이 내용을 가리지 않는다.
  * anchor를 주면 768px 이상에서는 그 버튼 아래에 팝오버로 띄운다(배경 어둡게 하지 않음, 바깥을 누르면 닫힘).
  */
-export function Dialog({ title, onClose, children, actions, closeLabel, anchor }: { title: string; onClose: () => void; children: ReactNode; actions: ReactNode; closeLabel?: string; anchor?: HTMLElement | null }) {
+/**
+ * variant='confirm': 짧은 확인 대화상자. 모바일·데스크톱 모두 화면 가운데(좌우 여백), 최대 너비 420px, 안쪽 여백 24px, 하단 두 버튼을 같은 너비로 나란히.
+ * 처음 포커스는 actions의 첫 버튼(보조·안전한 선택을 왼쪽 첫 번째에 둔다), 닫으면 연 버튼으로 돌아간다.
+ */
+export function Dialog({ title, onClose, children, actions, closeLabel, anchor, variant }: { title: string; onClose: () => void; children?: ReactNode; actions: ReactNode; closeLabel?: string; anchor?: HTMLElement | null; variant?: 'confirm' }) {
   const ref = useRef<HTMLDivElement>(null);
   const tid = useId();
+  const bid = useId();
+  const hasBody = children !== undefined && children !== null && children !== false;
   // 팝오버 위치(데스크톱 + anchor일 때만). 열릴 때 한 번 계산한다(열린 동안 배경 스크롤은 잠김).
   const [pop] = useState<{ top: number; left: number } | null>(() => {
     if (!anchor || typeof window === 'undefined' || !window.matchMedia?.('(min-width: 768px)').matches) return null;
@@ -189,11 +195,11 @@ export function Dialog({ title, onClose, children, actions, closeLabel, anchor }
     };
   }, []);
   return (
-    <div className={`dialog-backdrop${pop ? ' dialog-backdrop--popover' : ''}`} onMouseDown={(e) => {
+    <div className={`dialog-backdrop${pop ? ' dialog-backdrop--popover' : ''}${variant === 'confirm' ? ' dialog-backdrop--center' : ''}`} onMouseDown={(e) => {
       // 바깥을 눌러 닫을 때 브라우저 기본 동작(포커스를 body로 옮김)을 막아, 닫은 뒤 연 버튼으로 포커스가 돌아가게 한다.
       if (e.target === e.currentTarget) { e.preventDefault(); onClose(); }
     }}>
-      <div className={`dialog${pop ? ' dialog--popover' : ''}`} role="dialog" aria-modal="true" aria-labelledby={tid} ref={ref}
+      <div className={`dialog${pop ? ' dialog--popover' : ''}${variant === 'confirm' ? ' dialog--confirm' : ''}`} role="dialog" aria-modal="true" aria-labelledby={tid} aria-describedby={hasBody ? bid : undefined} ref={ref}
         style={pop ? { top: pop.top, left: pop.left, maxHeight: `calc(100dvh - ${pop.top + 16}px)` } : undefined}>
         {closeLabel ? (
           <div className="dialog__head">
@@ -201,8 +207,8 @@ export function Dialog({ title, onClose, children, actions, closeLabel, anchor }
             <button type="button" className="icon-btn" aria-label={closeLabel} onClick={onClose}><Icon name="close" /></button>
           </div>
         ) : <h2 id={tid}>{title}</h2>}
-        <div className="stack dialog__body">{children}</div>
-        {actions && <div className="stack--sm stack dialog__actions">{actions}</div>}
+        {hasBody && <div className="stack dialog__body" id={bid}>{children}</div>}
+        {actions && <div className={variant === 'confirm' ? 'dialog__actions dialog__actions--pair' : 'stack--sm stack dialog__actions'}>{actions}</div>}
       </div>
     </div>
   );

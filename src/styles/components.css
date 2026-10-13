@@ -74,6 +74,10 @@ a.list-row:hover { background: #fafbfd; }
 .btn--secondary { background: var(--c-surface); color: var(--c-primary); border-color: var(--c-primary); }
 .btn--ghost { background: transparent; border-color: transparent; color: var(--c-primary); min-height: 44px; padding: 0 var(--sp-3); }
 .btn--danger { background: var(--c-surface); color: var(--c-danger); border-color: var(--c-danger); }
+/* 최종 확인(철회 등)의 빨간 채움 버튼 — 흰 글씨. 상세 화면의 진입 버튼은 .btn--danger(흰 바탕·빨간 테두리)를 쓴다 */
+.btn--danger-solid { background: var(--c-danger); color: #fff; border-color: var(--c-danger); }
+.btn--danger-solid:hover:not(:disabled) { background: #951f19; border-color: #951f19; }
+.btn--danger-solid:active:not(:disabled) { background: #7c1914; border-color: #7c1914; }
 .btn--block { width: 100%; }
 .btn--sm { min-height: 40px; padding: 0 var(--sp-4); font-size: var(--fs-sm); border-radius: var(--r-sm); }
 .btn:disabled, .btn[aria-disabled='true'] { background: var(--c-disabled-bg); color: var(--c-disabled-text); border-color: var(--c-disabled-bg); cursor: not-allowed; }
@@ -493,3 +497,19 @@ a.list-row:hover { background: #fafbfd; }
 .kv__times { word-break: keep-all; }
 .joint-card .radio-card .kv__k { flex: none; white-space: nowrap; }
 .joint-card .radio-card .kv__v { flex: 1; min-width: 0; max-width: none; }
+/*
+ * 요청 상세 하단 버튼 영역: 고정 없이 마지막 본문 다음(본문 간격 24px). 다음 행동 버튼(있으면) → [보낸 요청 목록으로 | 이 업체 요청 철회하기].
+ * 모바일은 세로(목록 버튼 위), 600px 이상은 같은 너비로 나란히(간격 12px). hover는 바탕만 옅게 바꿔 의미 색(블루·빨강)과 대비를 유지한다.
+ */
+.detail-actions { display: flex; flex-direction: column; gap: var(--sp-3); }
+.detail-actions__pair { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-3); }
+@media (min-width: 600px) { .detail-actions__pair:not(.detail-actions__pair--single) { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.detail-actions .btn--secondary:hover { background: var(--c-info-bg); }
+.detail-actions .btn--danger:hover:not(:disabled) { background: var(--c-danger-bg); }
+/* 짧은 확인 대화상자(Dialog variant=confirm): 모든 화면에서 가운데, 최대 420px·좌우 여백 16px, 안쪽 여백 24px, 두 버튼 같은 너비 나란히(44px, 간격 12px) */
+.dialog-backdrop--center { align-items: center; padding: var(--sp-4); }
+.dialog--confirm { width: 100%; max-width: 420px; border-radius: var(--r-lg); padding: var(--sp-6); gap: var(--sp-3); }
+.dialog--confirm h2 { font-size: var(--fs-lg); line-height: 1.4; word-break: keep-all; }
+.dialog--confirm .dialog__body { margin: calc(-1 * var(--focus-ring-space)) calc(-1 * var(--sp-6)); padding: var(--focus-ring-space) var(--sp-6); }
+.dialog__actions--pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-3); margin-top: var(--sp-2); }
+.dialog__actions--pair .btn { min-height: 44px; padding: 0 var(--sp-3); }

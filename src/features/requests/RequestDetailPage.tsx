@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ActionBar, Page } from '../../app/Page';
+import { useNavigate, useParams } from 'react-router-dom';
+import { Page } from '../../app/Page';
 import { useRepo } from '../../app/context';
 import { useAction, useAsync } from '../../app/hooks';
 import { REQUEST_STATUS } from '../../domain/rules';
@@ -14,7 +14,7 @@ import { progressOfRequest, unlessComplete } from '../../domain/progressStep';
 import { ProgressSteps } from '../../components/ProgressSteps';
 import { ContactText, VisitAddressText, VisitText, slotsText } from '../shared';
 import { DURATION_NOTE } from '../../domain/visitTime';
-import { LIST_LINK_LABEL, isConvertedToBooking, listPath } from '../../domain/reservationTabs';
+import { isConvertedToBooking, listPath } from '../../domain/reservationTabs';
 
 function Body({ d, now }: { d: RequestDetail; now: string }) {
   const repo = useRepo();
@@ -24,14 +24,21 @@ function Body({ d, now }: { d: RequestDetail; now: string }) {
   const r = d.request;
   const ap = d.approval;
   const meta = REQUEST_STATUS[r.status];
-  const canWithdraw = ['reviewing', 'needs_info', 'approved_pending_payment'].includes(r.status);
+  // 철회 가능한 상태(기존 정책 그대로): 결제 전 진행 중 요청만. 예약 확정·종료된 요청에는 철회 버튼이 없다(확정 예약 취소는 예약 상세에서).
+  const canWithdraw = ['reviewing', 'needs_info', 'approved_pending_payment'].includes(r.status) && !isConvertedToBooking(r);
+  // 비교 요청(같은 묶음에 업체 2곳 이상)이면 철회 확인에 ‘다른 업체에 보낸 요청은 유지돼요.’를 덧붙인다
+  const bundle = useAsync(() => (canWithdraw ? repo.getBundle(r.bundleId) : Promise.resolve(null)), [repo, r.bundleId, canWithdraw]);
+  const isCompare = !!bundle.data && new Set(bundle.data.items.map((i) => i.provider.id)).size > 1;
 
   return (
     <>
-      <div className="stack--sm stack">
-        <div className="row row--wrap"><RequestBadge status={r.status} recheck={!!ap?.recheck && r.status === 'approved_pending_payment'} /></div>
-        <p className="small muted">{meta.hint}</p>
-      </div>
+      {/* 업체 검토 중은 상단 진행 단계(‘업체 검토·견적’ + 같은 설명)와 겹치므로 상태 배지·설명을 따로 두지 않는다. 다른 상태는 그대로 */}
+      {r.status !== 'reviewing' && (
+        <div className="stack--sm stack">
+          <div className="row row--wrap"><RequestBadge status={r.status} recheck={!!ap?.recheck && r.status === 'approved_pending_payment'} /></div>
+          <p className="small muted">{meta.hint}</p>
+        </div>
+      )}
 
       {r.status === 'needs_info' && r.infoRequest && (
         <Banner tone="warn" title="업체가 확인하고 싶은 내용이 있어요">{r.infoRequest.message}</Banner>
@@ -111,32 +118,38 @@ function Body({ d, now }: { d: RequestDetail; now: string }) {
       )}
 
       {action.error && !confirm && <Banner tone="danger" title={action.error.title}>{action.error.hint}</Banner>}
-      {/* 예약으로 이어진 요청은 보낸 요청 목록에 없으므로 목록 링크 대신 위 ‘예약 보기’로 이동한다 */}
-      {!isConvertedToBooking(r) && <p className="xs muted"><Link to={listPath('requests')}>{LIST_LINK_LABEL.requests}</Link></p>}
 
-      {(r.status === 'needs_info' || r.status === 'approved_pending_payment' || canWithdraw) && (
-        <ActionBar>
+      {/* 하단 버튼 영역(고정 없이 마지막 본문 다음, 간격 24px). 다음 행동(보완·결제)이 있으면 먼저 두고,
+          그 아래 [보낸 요청 목록으로](흰 바탕·블루) + [이 업체 요청 철회하기](흰 바탕·빨강)를 데스크톱은 나란히, 모바일은 목록 버튼을 위로 세로 배치.
+          예약으로 이어진 요청은 보낸 요청 목록에 없으므로 목록 버튼 대신 위 ‘예약 보기’로 이동한다. */}
+      {!isConvertedToBooking(r) && (
+        <div className="detail-actions">
           {r.status === 'needs_info' && <LinkButton to={`/requests/${r.id}/supplement`} variant="primary" block>요청서 보완하기</LinkButton>}
           {r.status === 'approved_pending_payment' && (
             <LinkButton to={ap?.recheck ? `/requests/${r.id}/recheck` : `/requests/${r.id}/approval`} variant="primary" block>
               {ap?.recheck ? '새 예약 조건 확인하기' : '승인 조건 확인하고 결제하기'}
             </LinkButton>
           )}
-          {canWithdraw && <Button variant="ghost" block onClick={() => setConfirm(true)}>이 업체 요청 철회하기</Button>}
-        </ActionBar>
+          <div className={`detail-actions__pair${canWithdraw ? '' : ' detail-actions__pair--single'}`}>
+            <LinkButton to={listPath('requests')} variant="secondary" block>보낸 요청 목록으로</LinkButton>
+            {canWithdraw && <Button variant="danger" block onClick={() => setConfirm(true)}>이 업체 요청 철회하기</Button>}
+          </div>
+        </div>
       )}
 
+      {/* 철회 확인(한 번). 처음 포커스는 ‘돌아가기’, 닫으면 상세의 철회 버튼으로 돌아간다. ‘철회하기’를 눌렀을 때만 이 업체 요청을 철회한다 */}
       {confirm && (
         <Dialog
-          title="이 요청을 철회할까요?" onClose={() => setConfirm(false)}
+          variant="confirm" title={`${d.provider.name}에 보낸 요청을 철회할까요?`} onClose={() => { if (!action.busy) setConfirm(false); }}
           actions={<>
-            <Button variant="danger" block busy={action.busy} onClick={() => void action.run(async () => { await repo.withdrawRequest(r.id); setConfirm(false); nav(`/requests/${r.id}`, { replace: true }); })}>요청 철회하기</Button>
-            <Button block onClick={() => setConfirm(false)}>계속 유지하기</Button>
+            <Button block disabled={action.busy} onClick={() => setConfirm(false)}>돌아가기</Button>
+            <Button variant="danger-solid" block busy={action.busy} onClick={() => void action.run(async () => { await repo.withdrawRequest(r.id); setConfirm(false); nav(`/requests/${r.id}`, { replace: true }); })}>철회하기</Button>
           </>}
         >
-          <p>{d.provider.name}에 보낸 요청만 철회돼요. 다른 업체 요청과 확정된 예약에는 영향이 없어요.</p>
-          <p className="small muted">철회해도 취소수수료는 없어요. 결제 전이라 예약이 확정된 상태가 아니에요. 확정된 예약을 취소하는 것과는 달라요.</p>
-          {action.error && <Banner tone="danger" title={action.error.title}>{action.error.hint}</Banner>}
+          {(isCompare || action.error) ? <>
+            {isCompare && <p className="small muted">다른 업체에 보낸 요청은 유지돼요.</p>}
+            {action.error && <Banner tone="danger" title={action.error.title}>{action.error.hint} 다시 시도해 주세요.</Banner>}
+          </> : null}
         </Dialog>
       )}
     </>

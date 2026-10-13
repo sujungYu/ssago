@@ -164,7 +164,7 @@ await test('요청: 공동 날짜로 복수 작업 요청서 제출', async (pag
   await timeChip(page, '09:00').check();
   await page.getByRole('button', { name: '요청 보내기' }).dblclick(); // 연타해도 한 번만
   await openSentDetail(page);
-  await waitText(page, '업체 검토 중');
+  await waitText(page, '업체가 작업 가능 여부와 견적을 확인하고 있어요.'); // 검토 중: 진행 단계 설명(상태 배지는 중복이라 없음)
   const d = await db(page);
   const mine = d.requests.filter((r) => r.tasks.length === 2 && r.tasks[0].description === '주방·욕실 수전 각각 교체');
   eq(mine.length, 1, '연타 후 생성된 요청 수');
@@ -834,7 +834,7 @@ await test('요청 필터: 상세 진입 후 복귀·새로고침·뒤로가기�
   eq((await listBadges(page)).join(), '추가 정보 필요', '주소의 필터 적용');
   await page.getByRole('link', { name: /현관문 손잡이 교체/ }).click();
   await onPath(page, '/requests/rq-2');
-  await page.getByRole('link', { name: '보낸 요청으로' }).waitFor(); // 요청 상세의 목록 문구
+  await page.getByRole('link', { name: '보낸 요청 목록으로' }).waitFor(); // 요청 상세 하단 목록 버튼
   await page.getByRole('link', { name: '뒤로 가기' }).click(); // 헤더 ‘뒤로’는 탭만 있는 /bookings?tab=requests 링크 → 마지막 조건 복원
   await page.waitForURL((u) => u.pathname === '/bookings' && u.search === '?tab=requests&status=needs_info');
   eq((await listBadges(page)).join(), '추가 정보 필요', '상세 복귀 후 필터 유지');
@@ -902,18 +902,150 @@ await test('요청: 추가 정보 요청 → 보완 제출 → 검토 중', asyn
   await page.getByLabel('보완 내용').fill('손잡이 사진을 추가했어요.');
   await page.getByRole('button', { name: '보완 내용 보내기' }).click();
   await waitText(page, '보완한 내용을 보냈어요');
-  await waitText(page, '업체 검토 중');
+  await waitText(page, '업체가 작업 가능 여부와 견적을 확인하고 있어요.'); // 검토 중: 진행 단계 설명(상태 배지는 중복이라 없음)
 });
 
-await test('요청: 철회는 취소수수료 없음 안내 후 완료', async (page) => {
+await test('요청: 철회 확인(단일 업체) — 업체명 제목·보조 설명 없음, 돌아가기는 상태 유지·포커스 복원, 철회하기로만 철회', async (page) => {
   await start(page, { path: '/requests/rq-1' });
-  await page.getByRole('button', { name: '이 업체 요청 철회하기' }).click();
-  await waitText(page, '취소수수료는 없어요');
-  await page.getByRole('button', { name: '요청 철회하기', exact: true }).click();
+  const open = page.getByRole('button', { name: '이 업체 요청 철회하기' });
+  await open.click();
+  const dlg = page.getByRole('dialog', { name: '밝은전기에 보낸 요청을 철회할까요?' });
+  await dlg.waitFor();
+  const t = await dlg.innerText();
+  truthy(!t.includes('다른 업체에 보낸 요청은 유지돼요') && !t.includes('취소수수료') && !t.includes('확정된 예약'), `단일 업체: 보조 설명·긴 문구 없음 ${t}`);
+  eq(await page.evaluate(() => document.activeElement?.textContent), '돌아가기', '처음 포커스 = 돌아가기');
+  await dlg.getByRole('button', { name: '돌아가기' }).click();
+  eq(await page.getByRole('dialog').count(), 0, '돌아가기 → 닫힘');
+  eq(await page.evaluate(() => document.activeElement?.textContent), '이 업체 요청 철회하기', '닫으면 철회 버튼으로 포커스');
+  eq((await db(page)).requests.find((r) => r.id === 'rq-1').status, 'reviewing', '돌아가기는 상태 변경 없음');
+  await open.click();
+  await page.getByRole('dialog').getByRole('button', { name: '철회하기', exact: true }).click();
   await waitText(page, '직접 철회한 요청이에요');
   eq((await db(page)).requests.find((r) => r.id === 'rq-1').status, 'withdrawn', '철회 상태');
 });
 
+
+// ───────── 요청 상세: 중복 상태 안내 정리·하단 버튼·철회 확인 ─────────
+const withdrawBtn = (page) => page.getByRole('button', { name: '이 업체 요청 철회하기' });
+const listBtn = (page) => page.getByRole('link', { name: '보낸 요청 목록으로' });
+
+await test('요청 상세: 검토 중은 진행 단계 설명만(배지·중복 설명 없음), 다른 상태 안내 유지, 상태별 버튼 범위', async (page) => {
+  await start(page, { path: '/requests/rq-1' }); // 검토 중
+  await waitText(page, '업체가 작업 가능 여부와 견적을 확인하고 있어요.');
+  const m = await page.locator('main').innerText();
+  truthy(!m.includes('업체가 요청을 검토하고 있어요. 아직 예약이 확정된 것은 아니에요.'), '중복 설명 없음');
+  eq(await page.locator('main .badge').filter({ hasText: '업체 검토 중' }).count(), 0, '검토 중 배지 없음');
+  eq(await page.locator('.steps__current, [aria-current="step"]').count() >= 1, true, '진행 단계 강조 유지');
+  truthy(await listBtn(page).isVisible() && await withdrawBtn(page).isVisible(), '목록·철회 버튼');
+  // 추가 정보 필요: 배지·안내·보완 버튼 유지
+  await page.goto(`${BASE}/requests/rq-2`);
+  await waitText(page, '업체가 확인하고 싶은 내용이 있어요');
+  truthy(await page.locator('main .badge').filter({ hasText: '추가 정보 필요' }).count() === 1 && await page.getByRole('link', { name: '요청서 보완하기' }).isVisible() && await withdrawBtn(page).isVisible(), '보완 요청 안내·버튼');
+  // 결제 대기: 결제 기한 안내·결제 버튼·철회 유지
+  await page.goto(`${BASE}/requests/rq-3`);
+  await waitText(page, '결제 기한');
+  truthy(await page.getByRole('link', { name: '승인 조건 확인하고 결제하기' }).isVisible() && await withdrawBtn(page).isVisible(), '결제 대기 버튼');
+  // 종료(거절·철회·만료): 사유 안내 유지, 철회 버튼 없음, 목록 버튼만(전체 너비)
+  for (const [id, text] of [['rq-5', '업체가 거절했어요'], ['rq-6', '직접 철회한 요청이에요'], ['rq-7', '결제 기한이 지나 예약이 확정되지 않았어요']]) {
+    await page.goto(`${BASE}/requests/${id}`);
+    await waitText(page, text);
+    eq(await withdrawBtn(page).count(), 0, `${id} 철회 버튼 없음`);
+    truthy(await listBtn(page).isVisible(), `${id} 목록 버튼`);
+  }
+  // 예약으로 이어진 요청: 목록·철회 버튼 없이 예약 보기(확정 예약 취소는 예약 상세에서)
+  const booked = (await db(page)).requests.find((r) => r.status === 'booked');
+  await page.goto(`${BASE}/requests/${booked.id}`);
+  await waitText(page, '예약 완료 · 요청 과정이 끝났어요');
+  eq(await withdrawBtn(page).count() + await listBtn(page).count(), 0, '예약 확정 요청에는 철회·목록 버튼 없음');
+});
+
+await test('요청 상세: ‘보낸 요청 목록으로’는 내 예약 > 보낸 요청(마지막 필터 복원), 브라우저 뒤로가기로 상세 복귀', async (page) => {
+  await start(page, { path: '/bookings?tab=requests&status=needs_info' });
+  await page.getByRole('link', { name: /현관문 손잡이 교체/ }).click();
+  await page.waitForURL((u) => u.pathname === '/requests/rq-2');
+  await listBtn(page).click();
+  await page.waitForURL((u) => u.pathname === '/bookings' && u.search === '?tab=requests&status=needs_info');
+  eq(await page.getByRole('tab', { name: '보낸 요청' }).getAttribute('aria-selected'), 'true', '보낸 요청 탭');
+  await page.goBack();
+  await page.waitForURL((u) => u.pathname === '/requests/rq-2');
+});
+
+await test('요청 상세: 비교 요청 철회 — 보조 설명, 이 업체 요청만 철회(다른 업체 유지), 실패 시 안내·다시 시도, 처리 중 중복 방지', async (page) => {
+  await start(page, { path: '/requests/rq-3' }); // b-sink: 한빛설비(rq-3)·새봄수리(rq-4)
+  await withdrawBtn(page).click();
+  const dlg = page.getByRole('dialog', { name: '한빛설비에 보낸 요청을 철회할까요?' });
+  await dlg.waitFor();
+  await dlg.getByText('다른 업체에 보낸 요청은 유지돼요.').waitFor();
+  eq(await page.getByRole('dialog').count(), 1, '모달 하나');
+  // 실패 → 모달 안 오류, 상태 그대로 → 다시 시도
+  await page.evaluate(() => { window.__sagoDev.db.settings.failNextWrite = true; });
+  await dlg.getByRole('button', { name: '철회하기', exact: true }).click();
+  await dlg.locator('.banner--danger').waitFor();
+  eq((await db(page)).requests.find((r) => r.id === 'rq-3').status, 'approved_pending_payment', '실패 시 상태 그대로');
+  await dlg.getByRole('button', { name: '철회하기', exact: true }).dblclick(); // 다시 시도(연타해도 한 번)
+  await waitText(page, '직접 철회한 요청이에요');
+  const d = await db(page);
+  eq(d.requests.find((r) => r.id === 'rq-3').status, 'withdrawn', '이 업체 요청만 철회');
+  eq(d.requests.find((r) => r.id === 'rq-4').status, 'approved_pending_payment', '다른 업체 요청 유지');
+  eq(await withdrawBtn(page).count(), 0, '철회 후 버튼 없음');
+});
+
+for (const w of [390, 1280]) {
+  await test(`요청 상세 하단 버튼·철회 모달 ${w}px: 본문 다음 24px·카드 너비, ${w < 600 ? '세로(목록 위)' : '같은 너비 나란히 12px'}, 48px, 색 구분, 고정 없음 · 모달 420px·24px·버튼 나란히 44px·12px, 포커스 가두기·복원`, async (page) => {
+    await page.setViewportSize({ width: w, height: 800 });
+    await start(page, { path: '/requests/rq-1' });
+    await withdrawBtn(page).waitFor();
+    const r = await page.evaluate(() => {
+      const area = document.querySelector('.detail-actions'); const ar = area.getBoundingClientRect();
+      const prev = area.previousElementSibling.getBoundingClientRect(); const card = [...document.querySelectorAll('main section .card')].at(-1).getBoundingClientRect();
+      const [l, wd] = [...area.querySelectorAll('.btn')].map((b) => ({ r: b.getBoundingClientRect(), c: getComputedStyle(b), text: b.textContent }));
+      const chain = []; for (let e = area; e && e !== document.body; e = e.parentElement) chain.push(getComputedStyle(e).position);
+      return {
+        gap: Math.round(ar.top - prev.bottom), width: Math.round(ar.width) === Math.round(card.width) && Math.round(ar.left) === Math.round(card.left), pinned: chain.some((p) => p === 'fixed' || p === 'sticky'),
+        order: [l.text, wd.text], side: Math.abs(l.r.top - wd.r.top) < 1, stacked: wd.r.top > l.r.bottom, btnGap: Math.round(wd.r.top > l.r.bottom ? wd.r.top - l.r.bottom : wd.r.left - l.r.right),
+        sameW: Math.abs(l.r.width - wd.r.width) < 1, h: [Math.round(l.r.height), Math.round(wd.r.height)],
+        list: [l.c.backgroundColor, l.c.borderTopColor, l.c.color], wd: [wd.c.backgroundColor, wd.c.borderTopColor, wd.c.color],
+        bottomSpace: Math.round(document.querySelector('main').getBoundingClientRect().bottom - ar.bottom), overflow: document.documentElement.scrollWidth > innerWidth,
+      };
+    });
+    truthy(r.gap === 24 && r.width && !r.pinned && !r.overflow && r.bottomSpace >= 24, `배치 ${JSON.stringify(r)}`);
+    eq(r.order.join('/'), '보낸 요청 목록으로/이 업체 요청 철회하기', '목록 버튼 먼저');
+    if (w < 600) truthy(r.stacked && r.btnGap === 12, `모바일 세로 ${JSON.stringify(r)}`);
+    else truthy(r.side && r.sameW && r.btnGap === 12, `데스크톱 나란히 ${JSON.stringify(r)}`);
+    truthy(r.h.every((x) => x >= 44 && x <= 48), `높이 ${r.h}`);
+    eq(JSON.stringify(r.list), JSON.stringify(['rgb(255, 255, 255)', 'rgb(49, 93, 168)', 'rgb(49, 93, 168)']), '목록: 흰 바탕·블루 테두리·글씨');
+    eq(JSON.stringify(r.wd), JSON.stringify(['rgb(255, 255, 255)', 'rgb(179, 38, 30)', 'rgb(179, 38, 30)']), '철회: 흰 바탕·빨간 테두리·글씨(채움 아님)');
+    // hover: 의미 색 유지
+    await withdrawBtn(page).hover();
+    const hv = await withdrawBtn(page).evaluate((b) => [getComputedStyle(b).color, getComputedStyle(b).borderTopColor]);
+    eq(JSON.stringify(hv), JSON.stringify(['rgb(179, 38, 30)', 'rgb(179, 38, 30)']), 'hover도 빨간 글씨·테두리');
+    // 키보드로 열기 → 모달
+    await withdrawBtn(page).focus(); await page.keyboard.press('Enter');
+    const dlg = page.getByRole('dialog', { name: '밝은전기에 보낸 요청을 철회할까요?' });
+    await dlg.waitFor();
+    const m = await dlg.evaluate((el) => {
+      const r = el.getBoundingClientRect(); const c = getComputedStyle(el);
+      const [back, ok] = [...el.querySelectorAll('.dialog__actions .btn')].map((b) => ({ r: b.getBoundingClientRect(), c: getComputedStyle(b), t: b.textContent }));
+      return { w: Math.round(r.width), left: Math.round(r.left), right: Math.round(innerWidth - r.right), pad: c.paddingLeft, top: Math.round(r.top), h: Math.round(r.height),
+        order: [back.t, ok.t], side: Math.abs(back.r.top - ok.r.top) < 1, gap: Math.round(ok.r.left - back.r.right), bh: [Math.round(back.r.height), Math.round(ok.r.height)],
+        ok: [ok.c.backgroundColor, ok.c.color], back: [back.c.backgroundColor, back.c.borderTopColor], focus: document.activeElement?.textContent, describedby: el.getAttribute('aria-describedby') };
+    });
+    truthy(m.w <= 440 && m.w >= 280 && m.left >= 16 && m.right >= 16 && m.pad === '24px' && m.h < 260, `모달 크기 ${JSON.stringify(m)}`);
+    truthy(m.order.join('/') === '돌아가기/철회하기' && m.side && m.gap === 12 && m.bh.every((x) => x === 44), `모달 버튼 ${JSON.stringify(m)}`);
+    eq(JSON.stringify(m.ok), JSON.stringify(['rgb(179, 38, 30)', 'rgb(255, 255, 255)']), '철회하기: 빨간 채움·흰 글씨');
+    eq(m.back[1], 'rgb(201, 206, 214)', '돌아가기: 중립 테두리');
+    eq(m.focus, '돌아가기', '처음 포커스');
+    // 포커스 가두기: Tab 두 번이면 다시 돌아가기
+    await page.keyboard.press('Tab'); eq(await page.evaluate(() => document.activeElement?.textContent), '철회하기', 'Tab → 철회하기');
+    await page.keyboard.press('Tab'); eq(await page.evaluate(() => document.activeElement?.textContent), '돌아가기', '모달 안에 가둠');
+    if (w === 390) await page.screenshot({ path: join(ROOT, 'e2e/screens/390_withdraw_dialog.png') });
+    await page.keyboard.press('Escape');
+    eq(await page.getByRole('dialog').count(), 0, 'Escape로 닫힘');
+    eq(await page.evaluate(() => document.activeElement?.textContent), '이 업체 요청 철회하기', '포커스 복원');
+    eq((await db(page)).requests.find((x) => x.id === 'rq-1').status, 'reviewing', '닫아도 상태 그대로');
+    if (w === 390) { await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight)); await page.screenshot({ path: join(ROOT, 'e2e/screens/390_request_detail_actions.png') }); }
+  }, { width: w });
+}
 await test('요청 상태: 거절·철회·만료·타 업체 예약으로 종료 안내', async (page) => {
   await start(page, { path: '/requests/rq-5' }); await waitText(page, '업체가 거절했어요');
   await page.goto(`${BASE}/requests/rq-6`); await waitText(page, '직접 철회한 요청이에요');
@@ -2995,14 +3127,14 @@ await test('요청 완료: 단일 요청 제출 → 완료 화면(실제 요약�
   await page.getByRole('link', { name: '요청 내용 확인하기' }).focus();
   await page.keyboard.press('Enter');
   await page.waitForURL((u) => u.pathname === `/requests/${rid}`);
-  await waitText(page, '업체 검토 중');
+  await waitText(page, '업체가 작업 가능 여부와 견적을 확인하고 있어요.'); // 검토 중: 진행 단계 설명(상태 배지는 중복이라 없음)
   eq((await db(page)).requests.length, n0 + 1, '버튼으로 다시 제출되지 않음');
   // 나중에 보낸 요청 목록에서 고르면 완료 화면을 거치지 않고 상세로
   await page.goto(`${BASE}/bookings?tab=requests`);
   await resCount(page);
   await page.locator(`a[href="/requests/${rid}"]`).click();
   await page.waitForURL((u) => u.pathname === `/requests/${rid}`);
-  await waitText(page, '업체 검토 중');
+  await waitText(page, '업체가 작업 가능 여부와 견적을 확인하고 있어요.'); // 검토 중: 진행 단계 설명(상태 배지는 중복이라 없음)
   eq(await sentHeading(page).count(), 0, '목록에서는 완료 화면 없음');
 });
 
@@ -3947,7 +4079,7 @@ await test('접근성: 모든 입력에 이름이 있고 키보드로 대화상�
   await page.getByRole('button', { name: '이 업체 요청 철회하기' }).click();
   await page.keyboard.press('Escape');
   await page.waitForTimeout(150);
-  eq(await page.getByRole('dialog', { name: '이 요청을 철회할까요?' }).count(), 0, 'ESC로 닫기');
+  eq(await page.getByRole('dialog', { name: '밝은전기에 보낸 요청을 철회할까요?' }).count(), 0, 'ESC로 닫기');
   await page.keyboard.press('Shift+Tab'); // 열었던 버튼에서 이전 요소로 이동 가능해야 한다
   const focused = await page.evaluate(() => document.activeElement?.tagName);
   truthy(focused && focused !== 'BODY', `키보드 포커스 이동 (활성 요소: ${focused})`);
