@@ -629,3 +629,63 @@ a.list-row:hover { background: #fafbfd; }
 .pay-check > span { min-width: 0; overflow-wrap: anywhere; word-break: keep-all; font-weight: 600; }
 .pay-check:focus-within { outline: 3px solid var(--c-focus); outline-offset: 2px; }
 .pay-card .act-card__body { padding-bottom: var(--sp-2); }
+
+/* ───────── 업체 상세: 업체 소개 · 작업 사례(데모 콘텐츠) · 사진 확대 보기 ───────── */
+/* 이미지 자리: 원본 비율로 먼저 자리를 잡아 불러오는 동안·실패해도 레이아웃이 흔들리지 않는다 */
+.showcase-img { position: relative; display: block; width: 100%; aspect-ratio: 4 / 3; border-radius: var(--r-md); overflow: hidden; background: var(--c-neutral-bg); }
+.showcase-img > img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.showcase-img__fallback { position: absolute; inset: 0; display: grid; place-items: center; padding: var(--sp-2); text-align: center; font-size: var(--fs-xs); color: var(--c-text-2); word-break: keep-all; }
+.demo-tag { position: absolute; left: 8px; top: 8px; padding: 2px 8px; border-radius: var(--r-pill); background: rgba(32, 36, 44, .78); color: #fff; font-size: var(--fs-xs); font-weight: 600; line-height: 1.5; pointer-events: none; }
+/* 업체 소개: 좁은 화면은 이미지 아래에 글, 600px 이상은 이미지와 글을 나란히. 이미지는 작게 두어 홍보 배너처럼 보이지 않게 한다 */
+.pv-intro { display: flex; flex-direction: column; gap: var(--sp-3); padding: var(--sp-3); }
+.pv-intro__media { position: relative; flex: none; width: 100%; max-width: 220px; }
+.pv-intro__text { display: flex; flex-direction: column; gap: var(--sp-2); min-width: 0; word-break: keep-all; overflow-wrap: anywhere; }
+@media (min-width: 600px) {
+  .pv-intro { flex-direction: row; align-items: flex-start; gap: var(--sp-4); padding: var(--sp-4); }
+  .pv-intro__media { width: 200px; max-width: none; }
+  .pv-intro__text { flex: 1; }
+}
+/* 작업 사례: 한 줄 가로 스크롤 목록. 카드는 고정 너비(다음 카드 일부가 보이게), 가로 넘침은 목록 안에서만 생긴다 */
+.pf-note { margin-top: calc(-1 * var(--sp-1)); }
+.section__head--pf { align-items: center; min-height: 36px; }
+.pf-nav { display: none; flex: none; gap: var(--sp-2); }
+@media (min-width: 600px) { .pf-nav { display: flex; } }
+.pf-nav__btn { width: 36px; height: 36px; border: 1px solid var(--c-line-strong); border-radius: 50%; display: grid; place-items: center; background: var(--c-surface); color: var(--c-text); }
+.pf-nav__btn:hover:not(:disabled) { border-color: var(--c-primary); color: var(--c-primary); }
+.pf-nav__btn:focus-visible { outline: 3px solid var(--c-focus); outline-offset: 2px; }
+.pf-nav__btn:disabled { background: var(--c-disabled-bg); color: var(--c-disabled-text); border-color: var(--c-line); cursor: not-allowed; }
+/* 안쪽 여백(--focus-ring-space)은 카드 사진의 포커스 테두리가 잘리지 않게 두는 자리이고, 같은 만큼 바깥 여백을 빼 카드가 본문 너비에 맞게 시작한다 */
+.pf-list {
+  list-style: none; display: flex; gap: 14px; min-width: 0;
+  margin: calc(-1 * var(--focus-ring-space)); padding: var(--focus-ring-space);
+  overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch;
+  scroll-snap-type: x proximity; scroll-padding-inline: var(--focus-ring-space);
+}
+.pf-list:focus-visible { outline: 3px solid var(--c-focus); outline-offset: -3px; border-radius: var(--r-lg); }
+.pf-card { flex: none; width: min(calc(100% - 56px), 280px); display: flex; flex-direction: column; gap: var(--sp-2); padding: var(--sp-3); scroll-snap-align: start; word-break: keep-all; overflow-wrap: anywhere; }
+/* 사례가 하나뿐이면 넘길 것이 없으니 카드 한 장만 둔다(늘리지 않음) */
+.pf-card__photos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-2); }
+/* 한 장뿐인 사례: 전·후 한 쌍과 같은 높이의 자리에 사진 전체를 잘리지 않게 보여준다 */
+.pf-card__photos--1 { grid-template-columns: minmax(0, 1fr); }
+.pf-card__photos--1 .showcase-img { aspect-ratio: 8 / 3; }
+.pf-card__photos--1 .showcase-img > img { object-fit: contain; }
+.pf-card__title { font-size: var(--fs-md); line-height: 1.4; }
+.pf-thumb { position: relative; display: block; min-width: 0; padding: 0; border: 0; border-radius: var(--r-md); background: none; font: inherit; color: inherit; cursor: zoom-in; }
+.pf-thumb:hover .showcase-img { box-shadow: 0 0 0 2px var(--c-primary); }
+.pf-thumb:focus-visible { outline: 3px solid var(--c-focus); outline-offset: 2px; }
+.pf-thumb__role { position: absolute; left: 6px; bottom: 6px; padding: 1px 8px; border-radius: var(--r-pill); background: rgba(255, 255, 255, .94); color: var(--c-text); font-size: var(--fs-xs); font-weight: 700; line-height: 1.6; pointer-events: none; }
+.pf-thumb__zoom { position: absolute; right: 6px; top: 6px; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; background: rgba(255, 255, 255, .94); color: var(--c-text-2); pointer-events: none; }
+/* 사진 확대 보기: 화면 전체 대화상자. 위 = 제목·닫기, 가운데 = 사진(비율 유지·잘림 없음), 아래 = 이전·설명·다음 */
+.lightbox { position: fixed; inset: 0; z-index: 70; display: flex; flex-direction: column; background: rgba(20, 23, 29, .97); color: #fff; }
+.lightbox__bar { flex: none; display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-2) var(--sp-2) var(--sp-2) var(--sp-4); padding-top: calc(var(--sp-2) + env(safe-area-inset-top)); }
+.lightbox__title { flex: 1; min-width: 0; font-size: var(--fs-md); font-weight: 700; word-break: keep-all; overflow-wrap: anywhere; }
+.lightbox__btn { flex: none; width: 44px; height: 44px; border: 0; border-radius: 50%; display: grid; place-items: center; background: rgba(255, 255, 255, .16); color: #fff; }
+.lightbox__btn:hover { background: rgba(255, 255, 255, .3); }
+.lightbox__btn:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+.lightbox__stage { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: var(--sp-2) var(--sp-4); cursor: zoom-out; }
+.lightbox__stage .showcase-img { flex: none; aspect-ratio: var(--ratio, 4 / 3); width: min(100%, 960px, calc((100dvh - 210px) * var(--ratio, 1.3333))); background: #fff; cursor: default; }
+.lightbox__stage .showcase-img > img { object-fit: contain; }
+.lightbox__foot { flex: none; display: flex; align-items: center; justify-content: center; gap: var(--sp-3); min-height: 96px; padding: var(--sp-2) var(--sp-4) calc(var(--sp-4) + env(safe-area-inset-bottom)); }
+.lightbox__caption { flex: 1; min-width: 0; max-width: 520px; text-align: center; word-break: keep-all; overflow-wrap: anywhere; }
+.lightbox__count { font-weight: 500; opacity: .8; }
+.lightbox__note { margin-top: 2px; opacity: .8; }

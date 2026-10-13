@@ -9,6 +9,7 @@ import type {
 } from '../../domain/types';
 import { DEFAULT_SETTINGS, type AddressRecord, type MockDb, type ProviderRecord } from './db';
 import { PROVIDER_SERVICES } from './providerServices';
+import { EXTRA_JOINT_DAYS, EXTRA_PROVIDERS } from './providersExtra';
 import { DEMO_SCHEDULE_VERSION } from './scheduleMigration';
 
 export const MOCK_NOW = '2026-10-13T19:00:00+09:00';
@@ -48,6 +49,7 @@ const review = (id: string, author: string, rating: number, body: string, md: st
   id, author, rating, body, createdAt: k(md, '12:00'), workLabel,
 });
 
+// 기존 업체 p1~p8. 카테고리마다 10곳이 보이도록 더한 업체(p9~p35)는 providersExtra.ts에 두고 아래에서 이어 붙인다(전체 35곳)
 const providers: ProviderRecord[] = [
   {
     id: 'p1', name: '한빛설비', categoryIds: ['c2', 'c9', 'c10'], rating: 4.8, reviewCount: 126, soloTripFee: 50000, area: '가상구 일대',
@@ -105,6 +107,7 @@ const providers: ProviderRecord[] = [
     scope: ['커튼·블라인드 설치', '생활 부속품 설치'], intro: '설치 작업 중심의 가상 업체입니다.', phone: '010-0000-0108',
     afterServiceTerms: ['설치 후 이상은 업체에 직접 문의해 주세요.'], reviews: [],
   },
+  ...EXTRA_PROVIDERS,
 ];
 
 function group(p: Partial<GroupRecord> & Pick<GroupRecord, 'id' | 'providerId' | 'date' | 'totalTripFee' | 'closeAt' | 'anchorKey'>): GroupRecord {
@@ -122,7 +125,7 @@ const groups: GroupRecord[] = [
   // 접수 마감은 방문 전날 18:00(가장 늦은 마감, latestCloseAt) 이전. 같은 날 여러 그룹 구조는 그대로 지원하지만 데모에서는 한 주소에서 날짜당 하나만 보이게 둔다.
   // 다른 지역 데모 기록용 그룹(g6 = 달빛길 단독주택 반경, g7 = 푸른숲 2단지)은 같은 날짜에 햇살마을 그룹(g4c·g5b)을 함께 둔다 — 업체 날짜는 3개 그대로, 기본 데모 주소(햇살마을)에서는 모든 업체가 3개 날짜·날짜당 하나로 보인다.
   // p1 한빛설비 19·21·23 / p2 새봄수리 20·22·24 / p3 밝은전기 19·22·25 / p4 든든문고리 21·22·24 / p5 깔끔마감 19·20·23
-  // p6 손맵시 20·23·24 / p7 맑은창방충망 20·23·25 / p8 반듯설치 21·24·25
+  // p6 손맵시 20·23·24 / p7 맑은창방충망 20·23·25 / p8 반듯설치 21·24·25 / p9~p35는 providersExtra.ts(EXTRA_JOINT_DAYS)
   group({ id: 'g1', providerId: 'p1', date: ymd('10-19'), closeAt: k('10-18', '18:00'), totalTripFee: 50000, capacity: 6, confirmedHouseholds: 3, pendingSeats: 1, anchorKey: 'complex:haessal3' }),
   group({ id: 'g1b', providerId: 'p1', date: ymd('10-21'), closeAt: k('10-20', '12:00'), totalTripFee: 45000, capacity: 4, confirmedHouseholds: 1, slots: ['13:00–16:00'], anchorKey: 'complex:haessal3' }),
   group({ id: 'g1n', providerId: 'p1', date: ymd('10-23'), closeAt: k('10-22', '18:00'), totalTripFee: 50000, capacity: 5, confirmedHouseholds: 2, anchorKey: 'complex:haessal3' }),
@@ -149,6 +152,11 @@ const groups: GroupRecord[] = [
   group({ id: 'g8a', providerId: 'p8', date: ymd('10-21'), closeAt: k('10-20', '18:00'), totalTripFee: 40000, capacity: 4, confirmedHouseholds: 1, anchorKey: 'complex:haessal3' }),
   group({ id: 'g8b', providerId: 'p8', date: ymd('10-24'), closeAt: k('10-23', '18:00'), totalTripFee: 40000, capacity: 5, confirmedHouseholds: 2, slots: ['09:00–12:00'], anchorKey: 'complex:haessal3' }),
   group({ id: 'g8c', providerId: 'p8', date: ymd('10-25'), closeAt: k('10-24', '18:00'), totalTripFee: 40000, capacity: 4, anchorKey: 'complex:haessal3' }),
+  // 추가 업체(p9~p35): 업체마다 10/19~25 중 서로 다른 날짜 3개·날짜당 하나(providersExtra.ts의 고정 값). 접수 마감은 방문 전날 18:00, 총 출장비는 기본 출장비(따로 정한 그룹 제외)
+  ...EXTRA_PROVIDERS.flatMap((p) => EXTRA_JOINT_DAYS[p.id].map((d, i) => group({
+    id: `gx-${p.id}-${i + 1}`, providerId: p.id, date: ymd(`10-${d.day}`), closeAt: k(`10-${d.day - 1}`, '18:00'), totalTripFee: d.totalTripFee ?? p.soloTripFee,
+    capacity: d.capacity, confirmedHouseholds: d.confirmedHouseholds, pendingSeats: d.pendingSeats ?? 0, slots: [...d.slots], anchorKey: 'complex:haessal3',
+  }))),
   // 시나리오 그룹(캘린더에 보이지 않음): g8 = 업체 사정으로 종료된 그룹(rq-10 조건 재확인), g9 = 그 대신 만든 새 그룹(pending-new — 주소 범위 판단 전)
   group({ id: 'g8', providerId: 'p6', date: ymd('10-16'), closeAt: k('10-15', '18:00'), totalTripFee: 50000, capacity: 4, anchorKey: 'complex:haessal3', ended: true }),
   group({ id: 'g9', providerId: 'p6', date: ymd('10-19'), closeAt: k('10-18', '18:00'), totalTripFee: 60000, capacity: 4, anchorKey: 'pending-new', slots: ['09:00–12:00'] }),

@@ -35,6 +35,7 @@ import { DEFAULT_CUSTOMER, createSeed } from './seed';
 import { PROVIDER_SERVICES } from './providerServices';
 import { migrateDemoSchedule } from './scheduleMigration';
 import { PROVIDER_REQUEST_DAYS } from './providerRequestDays';
+import { PROVIDER_SHOWCASE } from './providerShowcase';
 import { newRequestBlock } from '../../domain/visitDays';
 
 // v3: 주소 구조 변경(탐색 주소 / 재사용 방문 주소 / 요청·예약 방문 주소 스냅숏 분리). 이전 형식 저장값은 읽지 않는다.
@@ -136,6 +137,8 @@ export class MockRepository implements Repository {
   /** 업체 등록 작업(표시 순서). 이전 목업 상태(작업 데이터가 없던 때 저장된 것)는 기본 데이터로 채운다 */
   private servicesOf(p: ProviderRecord) { return p.services ?? PROVIDER_SERVICES[p.id] ?? []; }
   private requestDaysOf(p: ProviderRecord) { return PROVIDER_REQUEST_DAYS[p.id] ?? null; }
+  /** 업체 소개·작업 사례(가상 데모 콘텐츠). 업체 ID로 찾는 고정 데이터라 이전에 저장된 목업 상태에서도 같은 내용이 나온다 */
+  private showcaseOf(p: ProviderRecord) { return PROVIDER_SHOWCASE[p.id] ?? null; }
   private request(id: string): RepairRequest {
     const r = byId(this.db.requests, id);
     if (!r) throw new RepoError('not_found');
@@ -249,9 +252,10 @@ export class MockRepository implements Repository {
       const anchors = eligible !== null && addressId ? addressAnchors(this.db, addressId) : [];
       const closedJointDates = [...new Set(this.db.groups
         .filter((g) => g.providerId === id && g.closed && !g.ended && g.date >= today && anchors.includes(g.anchorKey)).map((g) => g.date))].sort();
+      const showcase = this.showcaseOf(p);
       return {
         ...this.summary(p, addressId), intro: p.intro, phone: p.phone, afterServiceTerms: p.afterServiceTerms, reviews: p.reviews,
-        services: this.servicesOf(p),
+        services: this.servicesOf(p), profile: showcase?.profile ?? null, portfolio: showcase?.portfolio ?? [],
         groups: gs.sort((a, b) => a.date.localeCompare(b.date)).map(toPublicGroup),
         closedJointDates, newRequest: this.requestDaysOf(p),
       };

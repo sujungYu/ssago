@@ -79,6 +79,10 @@ export interface ProviderDetail extends ProviderSummary {
   newRequest: NewRequestPolicy | null;
   /** 업체 등록 작업(표시 순서). 비어 있으면 요청서에서 작업을 고를 수 없다 */
   services: ProviderService[];
+  /** 업체 소개(사진·소개글). 등록된 소개가 없으면 null */
+  profile: ProviderProfile | null;
+  /** 작업 사례(표시 순서). 없으면 빈 배열 */
+  portfolio: PortfolioCase[];
 }
 
 /** 업체의 새 요청 접수 기준(공개 운영 정보). 판단은 domain/visitDays.ts. 없으면 새 요청을 받을 수 있는 날짜가 없다 */
@@ -120,6 +124,46 @@ export type RequestStatus =
 export interface ProviderService {
   id: string;
   name: string;
+  /** 이 작업이 속한 카테고리(업체 소속 카테고리와 등록 작업이 맞는지 점검용). 이전 데이터에는 없을 수 있다 */
+  categoryId?: string;
+}
+
+// ───────── 업체 소개·작업 사례(데모 콘텐츠) ─────────
+/** 업체 소개·작업 사례 이미지. 목록·카드에는 src, 확대 보기에는 fullSrc(없으면 src — 벡터 이미지는 한 파일로 충분)를 쓴다 */
+export interface ShowcaseImage {
+  src: string;
+  fullSrc?: string;
+  /** 그림에 실제로 보이는 내용을 설명하는 대체 텍스트 */
+  alt: string;
+  /** 원본 크기(비율 유지·레이아웃 흔들림 방지용) */
+  width: number;
+  height: number;
+}
+
+/** 업체 소개: 소개 이미지 + 주로 하는 작업 설명 */
+export interface ProviderProfile {
+  photo: ShowcaseImage;
+  /** 주로 제공하는 생활 수리를 설명하는 짧은 소개글 */
+  about: string;
+  /** true면 가상 업체의 데모 이미지(실제 업체·직원 사진 아님) — 화면에 ‘데모 이미지’로 표시한다 */
+  demo: boolean;
+}
+
+/** 작업 사례 사진의 역할. 전·후는 같은 대상·같은 구도의 한 쌍으로만 쓰고, 쌍이 없으면 single 한 장으로 보여준다(가짜 전후 비교를 만들지 않음) */
+export type PortfolioPhotoRole = 'before' | 'after' | 'single';
+export interface PortfolioPhoto extends ShowcaseImage {
+  role: PortfolioPhotoRole;
+}
+
+export interface PortfolioCase {
+  id: string;
+  /** 이 사례에 해당하는 업체 등록 작업 ID(업체가 등록하지 않은 작업의 사례는 두지 않는다) */
+  serviceId: string;
+  title: string;
+  description: string;
+  photos: PortfolioPhoto[];
+  /** true면 실제 실적이 아닌 데모 사례 — 화면에 데모 안내를 함께 보여준다 */
+  demo: boolean;
 }
 
 export interface TaskItem {

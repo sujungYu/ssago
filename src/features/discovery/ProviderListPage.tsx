@@ -67,7 +67,6 @@ export function ProviderListPage() {
             {addressUnknown && (
               <Banner tone="warn" title="주소를 확인하지 못해 공동 예약 참여 가능 여부를 알 수 없어요">주소를 다시 불러오거나 변경한 뒤 확인해 주세요.</Banner>
             )}
-            {addressId && !addressUnknown && items.some((p) => p.jointAvailable) && <p className="xs muted">‘공동 예약 후보’는 선택한 지역·건물 기준이에요. 신청할 때 정확한 방문 주소로 참여 조건을 다시 확인해요.</p>}
             {addressId && !addressUnknown && items.some((p) => p.jointAvailable === null) && (
               <Banner tone="warn" title="현재 공동 예약 참여 가능 여부를 확인하기 어려워요">다시 확인하기 전에는 참여할 수 있다고 안내하지 않아요. 잠시 뒤 다시 시도해 주세요.</Banner>
             )}

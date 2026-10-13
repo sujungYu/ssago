@@ -29,7 +29,7 @@ describe('탐색·개인정보', () => {
     expect(d.groups).toHaveLength(0);
   });
   it('데이터 없는 카테고리는 빈 목록', async () => {
-    expect(await repo().listProviders({ categoryId: 'c5', addressId: 'ad-apt' })).toEqual([]);
+    expect(await repo().listProviders({ categoryId: 'c-none', addressId: 'ad-apt' })).toEqual([]); // 데모 카테고리(c1~c10)는 모두 업체 10곳이 있어, 없는 카테고리 ID로 확인한다
   });
   it('조회 실패는 1회만 발생하고 재시도하면 성공', async () => {
     const r = repo(); r.__db().settings.failNextQuery = true;

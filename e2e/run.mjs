@@ -153,7 +153,7 @@ await test('탐색: 주소 판단 서비스 장애 시 확인 필요 안내', as
 });
 
 await test('탐색: 업체 없는 카테고리는 빈 상태', async (page) => {
-  await start(page, { path: '/providers?category=c5' });
+  await start(page, { path: '/providers?category=c-none' }); // 데모 카테고리(c1~c10)는 모두 업체 10곳이 있어 없는 카테고리 ID로 확인한다
   await waitText(page, '이 작업을 맡는 업체가 아직 없어요');
 });
 
@@ -2670,7 +2670,7 @@ const headerBack = (page) => page.locator('.app-header').getByRole('button', { n
 /** 업체 목록 → 업체 상세(앱 안 이동) */
 async function openDetailFromList(page) {
   await start(page, { path: '/providers?category=c2' });
-  await page.locator('ul[aria-label="업체 목록"] a').first().click();
+  await page.locator('ul[aria-label="업체 목록"] a[href="/providers/p1"]').click(); // 한빛설비(업체가 늘어 목록 첫 항목이 아닐 수 있다)
   await page.locator('.jcal').waitFor();
 }
 
@@ -2797,7 +2797,11 @@ await test('요청서 뒤로가기: 요청서에 있는 동안 그룹이 마감�
 
 // ───────── 공동 예약 데모 일정: 업체별 3개 날짜(10/19~25)·저장 상태 이전 ─────────
 const enabledDays = (page) => page.locator('.jcal button.jcal__day--open:not([disabled])').evaluateAll((bs) => bs.map((b) => b.dataset.day));
-const PROVIDER_DATES = { p1: ['19', '21', '23'], p2: ['20', '22', '24'], p3: ['19', '22', '25'], p4: ['21', '22', '24'], p5: ['19', '20', '23'], p6: ['20', '23', '24'], p7: ['20', '23', '25'], p8: ['21', '24', '25'] };
+const PROVIDER_DATES = { p1: ['19', '21', '23'], p2: ['20', '22', '24'], p3: ['19', '22', '25'], p4: ['21', '22', '24'], p5: ['19', '20', '23'], p6: ['20', '23', '24'], p7: ['20', '23', '25'], p8: ['21', '24', '25'],
+  // 추가 업체(p9~p35, src/data/mock/providersExtra.ts)
+  p9: ['19', '20', '22'], p10: ['21', '23', '25'], p11: ['19', '24', '25'], p12: ['20', '21', '23'], p13: ['22', '23', '24'], p14: ['19', '21', '24'], p15: ['20', '22', '25'], p16: ['21', '22', '23'], p17: ['19', '20', '24'],
+  p18: ['22', '24', '25'], p19: ['20', '21', '22'], p20: ['19', '23', '25'], p21: ['21', '23', '24'], p22: ['19', '20', '21'], p23: ['20', '24', '25'], p24: ['19', '22', '23'], p25: ['21', '22', '25'], p26: ['20', '21', '24'],
+  p27: ['19', '23', '24'], p28: ['22', '23', '25'], p29: ['19', '20', '25'], p30: ['20', '22', '23'], p31: ['19', '21', '22'], p32: ['23', '24', '25'], p33: ['20', '21', '25'], p34: ['19', '22', '24'], p35: ['19', '21', '25'] };
 
 await test('공동 예약 데모 일정: 모든 업체 캘린더에 10/19~25 중 서로 다른 날짜 3개·날짜당 그룹 하나, 새로고침해도 같은 날짜, 요청서와 날짜 일치', async (page) => {
   await start(page, { path: '/providers/p1' });
@@ -2832,6 +2836,234 @@ await test('공동 예약 데모 일정: 모든 업체 캘린더에 10/19~25 중
   eq(JSON.stringify(await enabledDays(page)), JSON.stringify(before), '새로고침 후 같은 날짜');
 });
 
+// ───────── 업체 확장(카테고리마다 10곳) · 업체 소개 · 작업 사례(데모 콘텐츠) ─────────
+const ALL_PROVIDERS = Object.keys(PROVIDER_DATES);
+const lightbox = (page) => page.locator('.lightbox');
+const focusLabel = (page) => page.evaluate(() => document.activeElement?.getAttribute('aria-label') ?? document.activeElement?.tagName);
+
+await test('업체 확장: 카테고리 10개 모두 업체 목록에 중복 없이 10곳', async (page) => {
+  await start(page, { path: '/' });
+  eq(ALL_PROVIDERS.length, 35, '전체 고유 업체 수');
+  const seen = new Set();
+  for (let i = 1; i <= 10; i++) {
+    await page.goto(`${BASE}/providers?category=c${i}`);
+    await page.locator('ul[aria-label="업체 목록"] > li').first().waitFor();
+    const hrefs = await page.locator('ul[aria-label="업체 목록"] > li > a').evaluateAll((as) => as.map((a) => a.getAttribute('href')));
+    eq(hrefs.length, 10, `c${i} 업체 수`);
+    eq(new Set(hrefs).size, 10, `c${i} 중복 없음`);
+    hrefs.forEach((h) => seen.add(h));
+    eq(await page.getByText('이 작업을 맡는 업체가 아직 없어요').count(), 0, `c${i} 빈 상태 아님`);
+  }
+  eq(seen.size, 35, '목록에 나온 고유 업체 수');
+  eq((await db(page)).providers.length, 35, '저장된 업체 수');
+});
+
+await test('업체 소개·작업 사례: 모든 업체(35곳)에 소개 이미지·소개글·사례 2개 이상, 데모 표시, 깨진 이미지 없음, 영역 순서', async (page) => {
+  await start(page, { path: '/providers/p1' });
+  const srcs = new Set();
+  for (const pid of ALL_PROVIDERS) {
+    await page.goto(`${BASE}/providers/${pid}`);
+    await page.locator('.pv-intro').waitFor();
+    const info = await page.evaluate(async () => {
+      const intro = document.querySelector('.pv-intro');
+      const img = intro.querySelector('img');
+      if (!img.complete) await new Promise((r) => { img.onload = r; img.onerror = r; });
+      const cases = [...document.querySelectorAll('.pf-card')];
+      return {
+        h2: [...document.querySelectorAll('main section > .section__head > h2')].map((h) => h.textContent.trim()),
+        nameFirst: document.querySelector('main h2').compareDocumentPosition(intro) & Node.DOCUMENT_POSITION_FOLLOWING,
+        chips: document.querySelectorAll('.svc-tags').length === 1 && !!(document.querySelector('.svc-tags').compareDocumentPosition(intro) & Node.DOCUMENT_POSITION_FOLLOWING),
+        tag: intro.querySelector('.demo-tag')?.textContent, introOk: img.naturalWidth > 0, alt: img.alt, lazy: [...document.querySelectorAll('.pf-card img')].every((i) => i.loading === 'lazy' && i.width > 0 && i.height > 0 && i.alt.length > 5),
+        texts: [...intro.querySelectorAll('.pv-intro__text p')].map((p) => p.textContent.trim().length),
+        cases: cases.length, more: document.querySelector('.pf-more')?.textContent ?? '', note: document.querySelector('.pf-note')?.textContent,
+        caseOk: cases.every((c) => c.querySelector('h3').textContent.trim() && c.querySelector('p').textContent.trim() && [1, 2].includes(c.querySelectorAll('.pf-thumb').length)),
+        roles: cases.map((c) => [...c.querySelectorAll('.pf-thumb__role')].map((r) => r.textContent).join('+')),
+        imgs: [...document.querySelectorAll('.pv-intro img, .pf-card img')].map((i) => i.getAttribute('src')),
+        fallback: document.querySelectorAll('.showcase-img__fallback').length,
+      };
+    });
+    eq(info.h2.join(' > '), '업체 소개 > 작업 사례 > 방문 날짜 선택 > 리뷰 > 연락처·사후 처리 조건', `${pid} 영역 순서`);
+    truthy(info.nameFirst && info.chips, `${pid} 업체명·평점 → 제공 작업 칩(한 번) → 소개 순서`);
+    truthy(info.tag === '데모 이미지' && info.introOk && info.alt.length > 5, `${pid} 소개 이미지·데모 표시 ${JSON.stringify(info)}`);
+    truthy(info.texts.length === 2 && info.texts.every((n) => n > 15), `${pid} 소개글 ${info.texts}`);
+    truthy(info.cases >= 2 && info.more === '' && info.caseOk && info.lazy, `${pid} 사례 ${JSON.stringify(info)}`);
+    truthy(info.roles.every((r) => r === '작업 전+작업 후' || r === '작업 사진'), `${pid} 전후 한 쌍 또는 한 장 ${info.roles}`);
+    eq(info.note, '실제 실적이 아닌 데모 이미지예요.', `${pid} 데모 안내`);
+    eq(info.fallback, 0, `${pid} 깨진 이미지 없음`);
+    info.imgs.forEach((x) => srcs.add(x));
+  }
+  // 화면 밖(지연 로딩) 이미지까지 모든 경로가 실제 파일로 응답하는지 확인
+  const bad = await page.evaluate(async (list) => {
+    const out = [];
+    for (const u of list) { const r = await fetch(u); if (!r.ok || !(r.headers.get('content-type') ?? '').includes('webp')) out.push(u); }
+    return out;
+  }, [...srcs]);
+  truthy(srcs.size >= 35 && !bad.length && [...srcs].every((u) => u.startsWith('/demo/')), `이미지 경로 ${srcs.size}개, 깨진 경로: ${bad.join(', ')}`);
+});
+
+for (const w of [390, 1280]) {
+  await test(`업체 소개·작업 사례 ${w}px: 사진·글 배치, 사례 카드 열, 더 보기, 사진 확대(키보드·닫기·포커스 복원·배경 스크롤 잠금)`, async (page) => {
+    await start(page, { path: '/providers/p17' });
+    await page.locator('.pv-intro').waitFor();
+    const box = (sel) => page.locator(sel).first().evaluate((el) => { const r = el.getBoundingClientRect(); return { l: r.left, t: r.top, r: r.right, b: r.bottom, w: r.width, h: r.height }; });
+    const media = await box('.pv-intro__media'); const text = await box('.pv-intro__text');
+    if (w >= 600) truthy(media.r <= text.l && Math.abs(media.t - text.t) < 4, `데스크톱: 사진과 소개글 나란히 ${JSON.stringify({ media, text })}`);
+    else truthy(text.t >= media.b && Math.abs(media.l - text.l) < 2, `모바일: 사진 아래 소개글 ${JSON.stringify({ media, text })}`);
+    truthy(media.h <= 230, `소개 사진이 큰 배너가 아님 ${media.h}`);
+    const cards = await page.locator('.pf-card').evaluateAll((els) => els.map((el) => { const r = el.getBoundingClientRect(); return { l: Math.round(r.left), t: Math.round(r.top), w: Math.round(r.width) }; }));
+    // 가로 스크롤 목록: 사례 전체가 한 줄, 카드 간격 12~16px, 다음 카드 일부가 보임, 넘침은 목록 안에서만
+    eq(cards.length, 3, '사례 전체가 목록에 있음');
+    truthy(cards[0].t === cards[1].t && cards[1].t === cards[2].t && cards[1].l - (cards[0].l + cards[0].w) >= 12 && cards[1].l - (cards[0].l + cards[0].w) <= 16 && cards[0].w >= 260, `한 줄·간격 ${JSON.stringify(cards)}`);
+    const sc = await page.locator('.pf-list').evaluate((l) => { const r = l.getBoundingClientRect(); const c = [...l.children].map((x) => x.getBoundingClientRect()); const nav = document.querySelector('.pf-nav');
+      return { max: l.scrollWidth - l.clientWidth, peek: c.findIndex((x) => x.left < r.right && x.right > r.right), nav: nav && getComputedStyle(nav).display !== 'none' ? [...nav.querySelectorAll('button')].map((b) => b.disabled) : null, more: document.querySelectorAll('.pf-more').length }; });
+    truthy(sc.max > 0 && sc.peek > 0 && sc.more === 0, `다음 카드 일부가 보이고 더 보기 버튼 없음 ${JSON.stringify(sc)}`);
+    if (w >= 600) {
+      eq(JSON.stringify(sc.nav), '[true,false]', '데스크톱: 이전 비활성·다음 활성');
+      await page.getByRole('button', { name: '다음 작업 사례' }).click();
+      await page.waitForFunction(() => { const l = document.querySelector('.pf-list'); return l.scrollLeft >= l.scrollWidth - l.clientWidth - 1; });
+      truthy(await page.getByRole('button', { name: '다음 작업 사례' }).isDisabled() && await page.getByRole('button', { name: '이전 작업 사례' }).isEnabled(), '끝: 다음 비활성·이전 활성');
+      await page.getByRole('button', { name: '이전 작업 사례' }).click();
+      await page.waitForFunction(() => document.querySelector('.pf-list').scrollLeft === 0);
+    } else eq(sc.nav, null, '모바일: 이동 버튼 없음(터치 스크롤)');
+    // 사진 확대: 키보드로 열기
+    const thumb = page.getByRole('button', { name: '샤워기 교체 작업 전 사진 크게 보기' });
+    await thumb.scrollIntoViewIfNeeded();
+    const y0 = await page.evaluate(() => scrollY);
+    await thumb.focus();
+    await page.keyboard.press('Enter');
+    await lightbox(page).waitFor();
+    eq(await lightbox(page).getAttribute('aria-modal'), 'true', '모달 대화상자');
+    eq(await page.getByRole('dialog', { name: '샤워기 교체 사진 크게 보기' }).count(), 1, '대화상자 이름');
+    eq(await focusLabel(page), '닫기', '열리면 닫기 버튼에 포커스');
+    eq(await page.evaluate(() => document.documentElement.style.overflow), 'hidden', '배경 스크롤 잠금');
+    await waitText(page, '작업 전 1/2');
+    await lightbox(page).getByText('실제 실적이 아닌 데모 이미지예요.').waitFor();
+    const big = await lightbox(page).locator('img').evaluate(async (i) => { if (!i.complete) await new Promise((r) => { i.onload = r; }); const r = i.getBoundingClientRect(); return { w: r.width, h: r.height, vw: innerWidth, vh: innerHeight, nat: i.naturalWidth, in: r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight }; });
+    const small = await thumb.evaluate((el) => el.getBoundingClientRect().width);
+    truthy(big.nat > 0 && big.in && big.w > small * 1.8 && Math.abs(big.w / big.h - 4 / 3) < 0.03, `확대 사진: 썸네일보다 크고 화면 안, 비율 유지 ${JSON.stringify({ big, small })}`);
+    await page.keyboard.press('ArrowRight');
+    await lightbox(page).getByText('작업 후 2/2').waitFor();
+    await page.keyboard.press('ArrowRight'); // 끝에서 처음으로
+    await lightbox(page).getByText('작업 전 1/2').waitFor();
+    await page.keyboard.press('ArrowLeft');
+    await lightbox(page).getByText('작업 후 2/2').waitFor();
+    // Tab은 대화상자 안에서만 돈다(닫기 → 이전 → 다음 → 닫기)
+    const order = [];
+    for (let i = 0; i < 4; i++) { await page.keyboard.press('Tab'); order.push(await focusLabel(page)); truthy(await page.evaluate(() => !!document.activeElement.closest('.lightbox')), 'Tab 포커스가 대화상자 안'); }
+    eq(order.join('>'), '이전 사진>다음 사진>닫기>이전 사진', 'Tab 순서');
+    await page.keyboard.press('Shift+Tab');
+    eq(await focusLabel(page), '닫기', 'Shift+Tab');
+    await page.keyboard.press('Shift+Tab');
+    eq(await focusLabel(page), '다음 사진', 'Shift+Tab 처음 → 끝');
+    await page.keyboard.press('Enter'); // 다음 사진 버튼
+    await lightbox(page).getByText('작업 전 1/2').waitFor();
+    await page.keyboard.press('Escape');
+    await lightbox(page).waitFor({ state: 'detached' });
+    eq(await focusLabel(page), '샤워기 교체 작업 전 사진 크게 보기', 'Escape로 닫으면 연 사진으로 포커스 복원');
+    eq(await page.evaluate(() => document.documentElement.style.overflow), '', '배경 스크롤 잠금 해제');
+    eq(await page.evaluate(() => scrollY), y0, '스크롤 위치 유지');
+    // 마우스: 다른 사진으로 열기 → 닫기 버튼, 바깥 영역
+    const after = page.getByRole('button', { name: '샤워기 교체 작업 후 사진 크게 보기' });
+    await after.click();
+    await lightbox(page).getByText('작업 후 2/2').waitFor();
+    await lightbox(page).getByRole('button', { name: '닫기' }).click();
+    await lightbox(page).waitFor({ state: 'detached' });
+    eq(await focusLabel(page), '샤워기 교체 작업 후 사진 크게 보기', '닫기 버튼 → 포커스 복원');
+    await after.click();
+    await lightbox(page).waitFor();
+    await page.mouse.click(6, Math.round(page.viewportSize().height / 2)); // 사진 바깥 어두운 영역
+    await lightbox(page).waitFor({ state: 'detached' });
+    eq(await focusLabel(page), '샤워기 교체 작업 후 사진 크게 보기', '바깥 영역으로 닫아도 포커스 복원');
+    if (process.env.E2E_SHOTS !== '0') await page.screenshot({ path: join(ROOT, `e2e/screens/${w}_provider_showcase.png`), fullPage: true });
+  }, { width: w });
+}
+
+await test('업체 소개·작업 사례: 한 장뿐인 사례는 전후 비교 없이 한 장, 확대 보기에 이전·다음 없음', async (page) => {
+  await start(page, { path: '/providers/p11' });
+  await page.locator('.pf-card').nth(2).waitFor();
+  const single = page.getByRole('button', { name: '창문 잠금장치 교체 작업 사진 사진 크게 보기' });
+  eq(await single.count(), 1, '한 장 사례');
+  eq(await page.locator('.pf-card').nth(2).locator('.pf-thumb').count(), 1, '사진 한 장만');
+  await single.click();
+  await lightbox(page).waitFor();
+  eq(await lightbox(page).getByRole('button').count(), 1, '닫기 버튼만(이전·다음 없음)');
+  await page.keyboard.press('ArrowRight'); // 넘길 사진이 없어도 오류 없이 그대로
+  await page.keyboard.press('Tab');
+  eq(await focusLabel(page), '닫기', 'Tab이 대화상자 안에 머묾');
+  await page.keyboard.press('Escape');
+  await lightbox(page).waitFor({ state: 'detached' });
+});
+
+await test('업체 소개·작업 사례: 이미지를 불러오지 못해도 같은 크기 자리에 안내를 보여주고 제목·날짜 선택은 그대로', async (page) => {
+  await page.route('**/demo/**', (route) => route.abort());
+  await start(page, { path: '/providers/p9' });
+  await page.locator('.pv-intro .showcase-img__fallback').waitFor();
+  await page.locator('.pf-card').first().scrollIntoViewIfNeeded();
+  await page.locator('.pf-card .showcase-img__fallback').first().waitFor();
+  const info = await page.evaluate(() => ({
+    intro: document.querySelector('.pv-intro .showcase-img').getBoundingClientRect().height,
+    thumbs: [...document.querySelectorAll('.pf-card .showcase-img')].map((el) => +(el.getBoundingClientRect().width / el.getBoundingClientRect().height).toFixed(2)),
+    label: document.querySelector('.pv-intro .showcase-img__fallback').getAttribute('aria-label'),
+    over: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+  }));
+  truthy(info.intro > 100 && info.thumbs.every((x) => Math.abs(x - 1.33) < 0.03) && info.label.length > 5 && !info.over, `자리 유지 ${JSON.stringify(info)}`);
+  await waitText(page, '이미지를 불러오지 못했어요');
+  await page.getByRole('heading', { name: '거실 창 방충망 교체' }).waitFor();
+  await page.locator('.jcal').waitFor();
+}, { width: 390 });
+
+await test('추가 업체 흐름: 업체 목록 → 상세(제공 작업 = 요청서 작업) → 공동 예약 날짜 → 작업 여러 개 선택 → 요청 제출·완료 화면', async (page) => {
+  await start(page, { path: '/providers?category=c5' });
+  await page.getByRole('link', { name: /틈새지기/ }).click();
+  await page.waitForURL((u) => u.pathname === '/providers/p12');
+  await page.locator('.jcal').waitFor();
+  const tags = await page.locator('.svc-tags .svc-tag').allInnerTexts();
+  eq(tags.join('/'), '창문 틈새막이 시공/욕실 실리콘 보수/욕실 줄눈 보수/방충망 교체', '제공 작업 = 업체 등록 작업');
+  await dayBtn(page, '10-20').click();
+  await page.locator('.joint-card').first().waitFor();
+  await waitText(page, '약 22,500원'); // 총 45,000원 ÷ (확정 1세대 + 본인)
+  await reqBtn(page).click();
+  await page.waitForURL((u) => u.pathname === '/providers/p12/request' && u.searchParams.get('group') === 'gx-p12-1');
+  await waitText(page, '수리 요청서');
+  await taskChip(page, '방충망 교체').waitFor();
+  const chips = await page.getByRole('group', { name: '어떤 작업이 필요한가요?' }).getByRole('checkbox').evaluateAll((els) => els.map((el) => el.getAttribute('aria-label') ?? el.closest('label')?.textContent.trim()));
+  eq(chips.join('/'), tags.join('/'), '요청서 작업 선택 = 제공 작업(같은 데이터·순서)');
+  await pickTask(page, '방충망 교체', '안방 방충망이 찢어졌어요');
+  await pickTask(page, '창문 틈새막이 시공', '거실 창 틈으로 바람이 들어와요');
+  await page.getByLabel('상세 주소', { exact: true }).fill('301동 1204호');
+  await timeChip(page, '09:00').check();
+  await page.getByRole('button', { name: '요청 보내기' }).click();
+  await page.getByRole('heading', { name: '수리 요청을 보냈어요' }).waitFor();
+  const d = await db(page);
+  const mine = d.requests.filter((r) => r.providerId === 'p12');
+  eq(mine.length, 1, '추가 업체 요청 1건');
+  eq(JSON.stringify([mine[0].groupId, mine[0].status, mine[0].tasks.map((t) => t.title)]), JSON.stringify(['gx-p12-1', 'reviewing', ['창문 틈새막이 시공', '방충망 교체']]), '공동 예약 요청 저장(업체 작업 순서)');
+  await page.getByRole('link', { name: '요청 내용 확인하기' }).click();
+  await waitText(page, '틈새지기');
+});
+
+await test('추가 업체 흐름: 새 요청 날짜(업체 접수 기준) → 요청 제출·완료 화면, 기존 업체 기록은 그대로', async (page) => {
+  await start(page, { path: '/providers/p30' });
+  await page.locator('.jcal').waitFor();
+  truthy(await dayBtn(page, '10-25').isDisabled(), '온집부속: 일요일은 접수하지 않음');
+  await dayBtn(page, '10-26').click(); // 월요일 — 공동 예약 없음, 새 요청 가능
+  await waitText(page, '에 새 요청');
+  await waitText(page, '35,000원');
+  await reqBtn(page).click();
+  await page.waitForURL((u) => u.pathname === '/providers/p30/request' && u.searchParams.get('new') === '1' && u.searchParams.get('date') === '2026-10-26');
+  await pickTask(page, '콘센트 교체', '거실 콘센트가 그을렸어요');
+  await page.getByLabel('상세 주소', { exact: true }).fill('301동 1204호');
+  await timeChip(page, '10:00').check();
+  await page.getByRole('button', { name: '요청 보내기' }).click();
+  await page.getByRole('heading', { name: '수리 요청을 보냈어요' }).waitFor();
+  const d = await db(page);
+  const mine = d.requests.filter((r) => r.providerId === 'p30');
+  eq(JSON.stringify(mine.map((r) => [r.groupId, r.newDateWish, r.status])), JSON.stringify([[null, '2026-10-26', 'reviewing']]), '새 요청 저장');
+  truthy(['rq-1', 'rq-3', 'rq-k2'].every((id) => d.requests.some((r) => r.id === id && ['p1', 'p3'].includes(r.providerId))), '기존 업체 요청 기록 유지');
+  await page.goto(`${BASE}/bookings/bk-k2`);
+  await waitText(page, '한빛설비');
+});
+
 await test('공동 예약 데모 일정: 예전 일정으로 저장된 탭 → 예전 일정 복원·병합 없이 새 일정, 다른 저장 데이터(주소·내 정보·기록) 유지', async (page) => {
   await start(page, { path: '/' });
   const prev = await page.evaluate((k) => {
@@ -2856,7 +3088,7 @@ await test('공동 예약 데모 일정: 예전 일정으로 저장된 탭 → �
     await page.getByRole('button', { name: '이전 달' }).click();
   }
   const d = await db(page);
-  eq(d.scheduleVersion, 2, '일정 버전 갱신');
+  eq(d.scheduleVersion, 3, '일정 버전 갱신');
   eq(d.groups.filter((g) => g.id === 'g1').length, 1, '같은 그룹 중복 없음');
   truthy(!d.groups.some((g) => g.id === 'g3'), '참조 없는 예전 일정 제거');
   eq(d.customer.name, '이전상태 고객', '내 정보 유지');
@@ -4937,7 +5169,7 @@ await test('접근성: 모든 입력에 이름이 있고 키보드로 대화상�
 
 // ───────── 반응형 ─────────
 const WIDTHS = [360, 390, 430, 768, 1280];
-const ROUTES = ['/', '/address', '/providers?category=c2', '/providers/p1', '/providers/p1/request?group=g1', '/bookings?tab=requests', '/requests/bundle/b-sink', '/requests/rq-3', '/requests/rq-2/supplement',
+const ROUTES = ['/', '/address', '/providers?category=c2', '/providers?category=c5', '/providers/p1', '/providers/p11', '/providers/p24', '/providers/p1/request?group=g1', '/bookings?tab=requests', '/requests/bundle/b-sink', '/requests/rq-3', '/requests/rq-2/supplement',
   '/requests/rq-3/approval', '/requests/rq-10/recheck', '/bookings?tab=active', '/bookings?tab=past', '/bookings/bk-k2', '/bookings/bk-k4', '/bookings/bk-k5', '/bookings/bk-k16', '/bookings/bk-k2/change', '/bookings/bk-k2/cancel', '/delays/dl-k3', '/proposals/pr-k4', '/materials/mt-1',
   '/additional/aw-1', '/bookings/bk-k9', '/bookings/bk-k14', '/bookings/bk-k13/review', '/ledger', '/me', '/guide'];
 await test('브랜드: 탭 제목·파비콘·헤더 로고(싸고 홈), 화면에 이전 서비스명 없음', async (page) => {

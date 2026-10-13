@@ -18,6 +18,7 @@ import { Icon } from '../../components/Icon';
 import { AsyncView, Badge, Banner, Button, ErrorState, KV, LinkButton, PhoneButton, Section, Skeleton, Stars } from '../../components/ui';
 import { initialOf } from '../shared';
 import { JointCalendar } from './JointCalendar';
+import { ProviderIntro, ProviderPortfolio } from './ProviderShowcase';
 
 /**
  * 선택한 날짜의 공동 예약 카드. ‘신청 가능한 시각’은 그 그룹 시간대에서 요청서와 같은 기준(selectableTimes, 1시간 간격)으로 만든
@@ -172,9 +173,12 @@ function Body({ p, addressId, now }: { p: ProviderDetail; addressId: string | nu
           <p className="small muted"><Stars value={p.rating} /> {p.rating.toFixed(1)} · 리뷰 {p.reviewCount}개 · {p.area}</p>
         </div>
       </div>
-      <p>{p.intro}</p>
-      {/* 제공 작업: 요청서의 작업 선택 칩과 같은 업체 등록 작업(ID·이름·순서). 여기서는 안내용(선택·클릭 없음) */}
+      {/* 기본 정보 → 제공 작업 칩 → 업체 소개 → 작업 사례 → 방문 날짜 선택 순서 */}
+      {/* 제공 작업: 요청서의 작업 선택 칩과 같은 업체 등록 작업(ID·이름·순서). 제목 없이 칩만, 안내용(선택·클릭 없음) */}
       {p.services.length > 0 && <ul className="svc-tags" aria-label="제공 작업">{p.services.map((s) => <li key={s.id} className="svc-tag">{s.name}</li>)}</ul>}
+      {/* 소개·사례는 업체 데이터(profile·portfolio)를 공통 컴포넌트로 보여준다 */}
+      {p.profile ? <ProviderIntro intro={p.intro} profile={p.profile} /> : <p>{p.intro}</p>}
+      <ProviderPortfolio cases={p.portfolio} />
 
       {/* 방문 날짜 선택: 공동 예약 참여와 새 요청을 캘린더 하나에서 고른다(날짜 유형으로 두 흐름을 구분) */}
       <Section title="방문 날짜 선택">
@@ -230,6 +234,7 @@ function Body({ p, addressId, now }: { p: ProviderDetail; addressId: string | nu
       </Section>
 
       <Section title="리뷰">
+        {p.reviews.length > 0 && <p className="xs muted">가상 데모 리뷰예요. 실제 이용 후기가 아니에요.</p>}
         {p.reviews.length === 0 ? <p className="muted small">아직 리뷰가 없어요.</p> : (
           <ul className="card card--flush divided">
             {p.reviews.map((r) => (

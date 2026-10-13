@@ -30,6 +30,7 @@ Windows(PowerShell) 예: `$env:CHROME_PATH="C:\Program Files\Google\Chrome\Appli
 | `src/app/` | 라우터(인증 가드 없음), 저장소 주입(`context.tsx`), 가상 데모 고객 id(`account.ts`), 목록 필터 URL 관리(`listFilter.ts`), 조회·쓰기 훅 |
 | `src/components/`, `src/styles/` | 디자인 토큰과 공통 컴포넌트 |
 | `src/components/brand/` | 브랜드: 심볼·로고(`Brand.tsx`), 심볼 형태 값(`marks.ts`), 공동 방문 일러스트(`CoopVisitIllustration.tsx`) |
+| `public/demo/` | 가상 업체 소개·작업 사례용 데모 사진(AI 생성, 실제 실적 아님 — WebP 140개: 확대용 + 썸네일). 원본을 바꾸면 `node scripts/build-demo-photos.mjs <원본 폴더>`로 다시 만든다(spec 5.21) |
 | `public/favicon.svg`, `public/brand/` | 파비콘(단순형 심볼), 앱 아이콘 원본(`app-icon.svg`), 투명 배경 심볼 SVG |
 | `src/features/*` | 화면(IA의 C-01~C-25, S-01~S-05). 로그인·회원가입 화면은 없음(이전 인증 주소는 업체 찾기로 이동) |
 | `src/dev/` | 시나리오 컨트롤러(`devController.ts`)와 화면 없는 훅(`devHook.ts`) — `import.meta.env.DEV` 또는 `VITE_ENABLE_DEV_TOOLS=true`일 때만 lazy 로드 |
