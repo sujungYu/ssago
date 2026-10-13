@@ -72,6 +72,16 @@ async function test(name, fn, opts = {}) {
 }
 /** 요청 상세 예약금 결제 버튼(‘예약금 {금액} 결제하기’) */
 const PAY_BTN = /^예약금 [0-9,]+원 결제하기$/;
+/** 예약 상세 펼치기(Fold) 버튼·열기. 이미 열려 있으면 그대로 둔다 */
+function foldBtn(page, title) { return page.locator('.fold__btn').filter({ hasText: title }); }
+async function openFold(page, title) {
+  const b = foldBtn(page, title);
+  await b.waitFor();
+  if ((await b.getAttribute('aria-expanded')) !== 'true') await b.click();
+  await page.locator('#' + (await b.getAttribute('aria-controls'))).waitFor();
+}
+/** 섹션(제목 h2) 본문 텍스트 */
+async function sectionText(page, title) { return (await page.locator('section').filter({ has: page.getByRole('heading', { name: title, exact: true, level: 2 }) }).first().innerText()).replace(/\s+/g, ' '); }
 const eq = (a, b, msg) => { if (a !== b) throw new Error(`${msg}: 기대 ${JSON.stringify(b)} / 실제 ${JSON.stringify(a)}`); };
 const truthy = (v, msg) => { if (!v) throw new Error(msg); };
 
@@ -1184,9 +1194,32 @@ await test('결제: 요청 상세에서 조건 확인 → 동의 → [예약금 
   await start(page, { path: '/requests/rq-3' });
   await page.waitForURL((u) => u.pathname === '/requests/rq-3');
   const sec = page.locator('section#pay');
-  await sec.getByRole('heading', { name: '승인된 조건을 확인하고 예약금을 결제해 주세요' }).waitFor();
+  await sec.getByRole('heading', { name: '방문 일정과 금액을 확인해 주세요' }).waitFor();
   const st = await sec.innerText();
-  for (const k of ['확인이 필요해요', '업체가 제안한 방문 시각', '요청한 방문 가능한 시간', '예약금', '예약금 결제 기한', '작업 견적·예상 금액', '취소 조건', '모의 결제 · 실제 청구 없음']) truthy(st.includes(k), `결제 카드 ‘${k}’: ${st.slice(0, 300)}`);
+  const stx = st.replace(/\s+/g, ' ');
+  // 기본 화면: 방문 일정 · 예상 총금액(안내 두 줄) · 지금 결제할 예약금(안내) · 예약금 결제 기한(남은 시간 같은 줄) + 접힌 펼치기 둘
+  for (const k of ['확인이 필요해요', '방문 일정 10월 19일 (월) 10:00', '예상 총금액 약 112,500원', '작업 견적·자재비·내 예상 출장비를 포함한 금액이에요.', '자재비와 참여 세대 수에 따라 달라질 수 있어요.', '지금 결제할 예약금 50,000원', '예약금은 최종 정산 시 차감돼요.', '예약금 결제 기한 10월 14일 (수) 15:00 · 20시간 0분 남음', '견적 상세', '취소 조건', '방문 일정과 금액, 취소 조건을 확인했어요.', '모의 결제 · 실제 청구 없음']) truthy(stx.includes(k), `결제 카드 ‘${k}’: ${stx}`);
+  // 기본 화면에서 뺀 정보: 요청 당시 가능 시간·접수 마감·예상 잔액·작업별 견적·반복 안내
+  for (const gone of ['방문 가능한 시간', '13:00~16:00', '접수 마감', '잔액', '62,500원', '욕실 세면대 수전 교체', '그룹 총 출장비', '작업 견적 합계', '조건 확인에 동의하면', '도착 예정 시각']) truthy(!stx.includes(gone), `기본 화면에 없음 ‘${gone}’: ${stx}`);
+  // 예약금은 연한 블루 강조 영역, 예상 총금액과 구분
+  eq(await sec.locator('.pay-deposit').evaluate((e) => getComputedStyle(e).backgroundColor), 'rgb(237, 243, 252)', '예약금 강조 영역');
+  const ap0 = (await db(page)).approvals.find((a) => a.requestId === 'rq-3');
+  eq((await sec.locator('.pay-deposit__v').innerText()).trim(), ap0.depositAmount.toLocaleString('ko-KR') + '원', '예약금 = 실제 승인 데이터');
+  // 펼치기: 기본 접힘 → 견적 상세(작업별 견적·합계·자재·내 출장비와 세대 기준·할인 조건·예상 총금액)
+  eq((await sec.locator('.fold__btn').evaluateAll((bs) => bs.map((b) => b.textContent + ':' + b.getAttribute('aria-expanded')))).join(), '견적 상세:false,취소 조건:false', '펼치기 기본 접힘');
+  await sec.locator('.fold__btn').filter({ hasText: '견적 상세' }).click();
+  const es = (await page.locator('#pay-estimate-panel').innerText()).replace(/\s+/g, ' ');
+  for (const k of ['욕실 세면대 수전 교체', '50,000원', '작업 견적 합계 80,000원', '부품·자재 예상 20,000원', '내 예상 출장비 약 12,500원', '예상 총금액 약 112,500원', '그룹 총 출장비 50,000원 ÷ 4세대', '확정 3세대 + 나', '결제 대기 중인 자리는 세지 않아요']) truthy(es.includes(k), `견적 상세 ‘${k}’: ${es}`);
+  truthy(!es.includes('잔액'), '예상 잔액 없음');
+  await sec.locator('.fold__btn').filter({ hasText: '취소 조건' }).click();
+  const cs = (await page.locator('#pay-cancel-panel').innerText()).replace(/\s+/g, ' ');
+  for (const k of ['접수 마감 전 취소 예약금을 전액 환불해요.', '접수 마감 후 취소 내 확정 출장비를 차감하고 나머지 예약금을 환불해요.', '업체 사유 취소 차감 없이 선결제 전액을 환불해요.', '별도 주문 자재', '회수 불가능 비용', '접수 마감: 10월 18일 (일) 18:00']) truthy(cs.includes(k), `취소 조건 ‘${k}’: ${cs}`);
+  // 문구를 눌러도 체크, 체크 영역 안쪽 여백
+  const chk = sec.locator('label.pay-check');
+  truthy(parseFloat(await chk.evaluate((e) => getComputedStyle(e).paddingLeft)) >= 12 && parseFloat(await chk.evaluate((e) => getComputedStyle(e).paddingTop)) >= 12, '체크 영역 안쪽 여백');
+  await chk.locator('span').click();
+  eq(await page.getByRole('checkbox').isChecked(), true, '문구 클릭으로 선택');
+  await page.getByRole('checkbox').uncheck();
   // B(예약 확정 전): 공통 행동 카드, 진행 단계 바로 아래·일반 정보 위, 상태 배지·설명 반복 없음
   expectActCard(await actCardStyle(sec));
   eq(await page.evaluate(() => document.querySelector('main .act-card')?.id), 'pay', '상단 확인 영역');
@@ -1209,7 +1242,7 @@ await test('결제: 요청 상세에서 조건 확인 → 동의 → [예약금 
   eq(d.bookings.filter((b) => b.requestId === 'rq-3').length, 1, '예약 수');
   // 결제 성공·예약 생성 확인 → 그 예약 상세로 바로 이동
   await page.waitForURL((u) => u.pathname === `/bookings/${d.requests.find((r) => r.id === 'rq-3').bookingId}`);
-  await waitText(page, '방문 예정');
+  await waitText(page, '방문 일정');
 });
 
 await test('결제 실패: 예약 미확정 → 다시 시도하면 성공', async (page) => {
@@ -1267,12 +1300,15 @@ await test('재확인: 기존 그룹 종료 → 새 조건 동의 후 결제', a
   eq((await card.locator('.badge').allInnerTexts()).join(), '예약금 결제', '목록 대표 상태');
   eq(await todoOf(card), '예약금을 결제해 주세요', '목록 할 일');
   await page.goto(`${BASE}/requests/rq-10`);
-  await waitText(page, '바뀐 방문 조건을 확인해 주세요');
+  await waitText(page, '방문 일정과 금액을 확인해 주세요');
   eq(await page.getByRole('link', { name: '새 예약 조건 확인하기' }).count(), 0, '중간 확인 버튼 없음');
   await waitText(page, '기존 공동 예약이 종료됐어요');
   await waitText(page, '혼자 부담할 수도 있어요');
   const st = await page.locator('section#pay').innerText();
-  for (const k of ['확인이 필요해요', '이전 일정 (종료됨)', '새 방문 시각', '새 예약금', '새 접수 마감', '예약금 결제 기한', '달라졌음을 확인했고']) truthy(st.includes(k), `바뀐 조건 ‘${k}’: ${st.slice(0, 400)}`);
+  const rx = st.replace(/\s+/g, ' ');
+  // 요청 당시와 달라진 일정·예약금만 간결하게(이전 → 새), 동의 문구도 바뀐 조건 기준
+  for (const k of ['확인이 필요해요', '일정과 금액이 바뀌었어요', '이전 일정 (종료됨)', '예약금 50,000원', '새 방문 일정', '예약금 60,000원', '지금 결제할 예약금 60,000원', '예상 총금액', '예약금 결제 기한', '바뀐 방문 일정과 금액, 취소 조건을 확인했어요.']) truthy(rx.includes(k), `바뀐 조건 ‘${k}’: ${rx}`);
+  truthy(!rx.includes('새 접수 마감') && !rx.includes('방문 가능한 시간'), '기본 화면에 접수 마감·가능 시간 없음');
   // 이전 → 새 일정은 두 칸 나란히
   const cmp = await page.locator('section#pay .sched-compare__item').evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().top)));
   truthy(cmp.length === 2 && cmp[0] === cmp[1], `일정 비교 나란히 ${cmp}`);
@@ -1299,7 +1335,7 @@ await test('결제: 승인 만료·종료 요청은 결제 영역·버튼 없음
   eq((await db(page)).bookings.filter((b) => b.requestId === 'rq-3').length, 0, '만료 후 예약 없음');
   await page.goto(`${BASE}/requests/rq-10/recheck`);
   await page.waitForURL((u) => u.pathname === '/requests/rq-10' && u.hash === '#pay');
-  await waitText(page, '바뀐 방문 조건을 확인해 주세요');
+  await waitText(page, '일정과 금액이 바뀌었어요');
 });
 
 // ───────── 데모 범위: 단일 업체 요청(비교 요청 숨김) ─────────
@@ -1376,7 +1412,7 @@ if (!COMPARE) {
         const r = await page.evaluate(() => {
           const sec = document.getElementById('pay');
           const btn = [...sec.querySelectorAll('button')].find((b) => /결제하기$/.test(b.textContent));
-          const chk = sec.querySelector('label.check').getBoundingClientRect();
+          const chk = sec.querySelector('label.pay-check').getBoundingClientRect();
           const b = btn.getBoundingClientRect(); const sb = sec.getBoundingClientRect();
           const clipped = [...sec.querySelectorAll('*')].some((e) => e.scrollWidth > e.clientWidth + 1 && !['visible', 'auto', 'scroll'].includes(getComputedStyle(e).overflowX));
           return { overflow: document.documentElement.scrollWidth > innerWidth, clipped, btnH: Math.round(b.height), btnW: Math.round(b.width), secW: Math.round(sb.width), btnBelowCheck: b.top >= chk.bottom, fixed: getComputedStyle(btn.parentElement).position === 'fixed' || getComputedStyle(btn).position === 'fixed' };
@@ -1445,8 +1481,23 @@ await test('예약 목록·상세: 확정된 예약/완료·취소, 마감 후 �
   const pastBadges = await page.locator('main .booking-list .badge').evaluateAll((els) => els.map((e) => [e.textContent, getComputedStyle(e).backgroundColor]));
   truthy(pastBadges.every(([t, bg]) => (t === '예약 취소' && bg === 'rgb(238, 240, 243)') || (t === '이용 완료' && bg === 'rgb(232, 244, 236)')), `완료·취소 색: ${JSON.stringify(pastBadges)}`);
   await page.goto(`${BASE}/bookings/bk-k2`);
+  await openFold(page, '공동 예약 정보'); // 마감 후: 내 확정 출장비 + 마감 시 세대 기준 계산
   await waitText(page, '내 확정 출장비'); await waitText(page, '12,500원'); await waitText(page, '÷ 4세대');
   await waitText(page, '다른 세대의 주소·작업·사진은 보이지 않아요');
+  // 마감 전 공동 예약: ‘확정 출장비’가 아니라 현재 예상 출장비와 계산 기준
+  const open = (await db(page)).bookings.map((b) => ({ b, g: null })).length && await page.evaluate(() => { const d = window.__sagoDev.db; const b = d.bookings.find((x) => x.status === 'confirmed' && x.lockedTripFee === undefined && !d.groups.find((g) => g.id === x.groupId).closed); return b ? b.id : null; });
+  if (open) {
+    await page.goto(`${BASE}/bookings/${open}`);
+    await openFold(page, '공동 예약 정보');
+    const g = (await page.locator('#fold-group-panel').innerText()).replace(/\s+/g, ' ');
+    truthy(g.includes('현재 예상 출장비') && !g.includes('내 확정 출장비') && g.includes('접수 상태 접수 중') && g.includes('지금 확정된 세대 기준 예상'), `마감 전 예상 금액: ${g}`);
+  } else {
+    // 시드에 마감 전 예약이 없으면 한 예약의 그룹을 접수 중으로 되돌려 확인한다
+    await patchDb(page, (d) => { const b = d.bookings.find((x) => x.id === 'bk-k2'); const g = d.groups.find((x) => x.id === b.groupId); g.closed = false; }, '/bookings/bk-k2');
+    await openFold(page, '공동 예약 정보');
+    const g = (await page.locator('#fold-group-panel').innerText()).replace(/\s+/g, ' ');
+    truthy(g.includes('현재 예상 출장비') && !g.includes('내 확정 출장비') && g.includes('접수 상태 접수 중'), `마감 전 예상 금액: ${g}`);
+  }
   const html = await page.content();
   truthy(!/anchorKey|radius:|complex:/.test(html), '내부 기준 키 노출');
 });
@@ -1461,7 +1512,7 @@ const payBtn = (page, re) => costCard(page).getByRole('button', { name: re });
 const hasRow = (t, label, amount) => new RegExp(label + '[\\s\\S]{0,90}?' + amount).test(t);
 const loadBooking = async (page, id) => { await page.goto(`${BASE}/bookings/${id}`); await costCard(page).waitFor(); await page.locator('#settlement .cost__balance').waitFor(); };
 
-await test('예약 상세 구성: (일정 변경) → 예약 정보(업체·작업·일정·주소·공동 예약·펼치기 통합) → (최종 금액 등록 후) 금액·정산 → 예약 목록으로, 이전 영역·링크 없음, 요청 당시 내용 펼치기', async (page) => {
+await test('예약 상세 구성: (확인 카드) → 예약 정보 / 방문 주소 / 작업 내용 세 카드 → (최종 금액 등록 후) 금액·정산 → 예약 목록으로, 반복 상태 배지 없음, 펼치기 기본 닫힘(일정 변경 내역·요청 당시 내용 없음)', async (page) => {
   await start(page, { path: '/bookings/bk-k9' });
   await costCard(page).waitFor();
   // 최종 금액 확인 대기(E): 기존 금액·정산 카드가 상단 확인 영역으로(별도 중복 카드 없음)
@@ -1471,20 +1522,69 @@ await test('예약 상세 구성: (일정 변경) → 예약 정보(업체·작�
   await page.goto(`${BASE}/bookings/bk-k12`);
   await costCard(page).waitFor();
   const h12 = await page.locator('main h2').allInnerTexts();
-  truthy(h12.indexOf('예약 정보') < h12.indexOf('금액·정산') && !h12.includes('최종 금액을 확인해 주세요'), `정산 진행 중 순서 ${h12}`);
+  truthy(h12.indexOf('예약 정보') < h12.indexOf('방문 주소') && h12.indexOf('방문 주소') < h12.indexOf('작업 내용') && h12.indexOf('작업 내용') < h12.indexOf('금액·정산') && !h12.includes('최종 금액을 확인해 주세요'), `정산 진행 중 순서 ${h12}`);
+  // 결제 내역은 한 곳에서만: 금액·정산 카드가 있으면 예약 정보에는 결제 내역 펼치기가 없다
+  eq(await foldBtn(page, '결제 내역').count(), 0, '금액·정산 카드가 있으면 예약 정보 결제 내역 없음');
+  eq(await costCard(page).locator('summary').filter({ hasText: '결제 내역' }).count(), 1, '금액·정산 카드의 결제 내역');
   await page.goto(`${BASE}/bookings/bk-k4`);
   await page.getByRole('heading', { name: '예약 정보', exact: true }).waitFor();
   const heads = await page.locator('main h2').allInnerTexts();
   for (const gone of ['방문 일정·진행', '공동 예약', '예약 금액·결제', '내 작업·방문 주소', '작업·방문 주소', '자재·추가 작업', '예약 관리', '일정 변경']) truthy(!heads.includes(gone), `이전 영역 남음: ${gone}`);
-  truthy(heads.indexOf('새 방문 일정을 확인해 주세요') === 0 && heads.indexOf('예약 정보') > 0, `일정 변경 카드가 맨 위: ${heads}`);
-  const info = (await page.locator('section').filter({ has: page.getByRole('heading', { name: '예약 정보', exact: true }) }).innerText()).replace(/\s+/g, ' ');
-  for (const s of ['깔끔마감', '깔끔마감에 전화', '욕실 실리콘 보수', '방문 일정 방문 일정 조율 중', '진행 상태 일정 조율 중', '햇살로', '연락처', '공동 예약 참여 세대', '접수 상태', '예약 세부 정보', '요청 당시 내용']) truthy(info.includes(s), `예약 정보 ‘${s}’: ${info}`);
+  eq(heads.join('|'), '새 방문 일정을 확인해 주세요|예약 정보|방문 주소|작업 내용', `확인 카드 → 예약 정보 → 방문 주소 → 작업 내용 순서: ${heads}`);
+  // 세 영역은 각각 제목 + 흰 둥근 카드(같은 너비·회색 테두리)
+  const cardsStyle = await page.evaluate(() => ['booking-info', 'work', 'visit-address'].map((id) => { const e = document.getElementById(id); const cs = getComputedStyle(e); return [cs.backgroundColor, cs.borderTopColor, parseFloat(cs.borderTopLeftRadius) >= 12, Math.round(e.getBoundingClientRect().width)].join(); }));
+  truthy(new Set(cardsStyle).size === 1 && cardsStyle[0].startsWith('rgb(255, 255, 255),rgb(228, 230, 234),true'), `세 카드 같은 스타일·너비: ${cardsStyle}`);
+  const info = await sectionText(page, '예약 정보');
+  for (const s of ['깔끔마감', '깔끔마감에 전화', '방문 일정 방문 일정 조율 중', '공동 예약 정보', '결제 내역']) truthy(info.includes(s), `예약 정보 ‘${s}’: ${info}`);
+  truthy(!info.includes('일정 변경 내역'), `일정 변경 내역 펼치기 없음: ${info}`);
+  for (const gone of ['진행 상태', '일정 조율 중 일정', '작업 전', '응답 전', '욕실 실리콘 보수', '햇살로', '결제한 금액', '10월 14일']) truthy(!info.includes(gone), `예약 정보에 없음 ‘${gone}’: ${info}`);
   truthy(!info.includes('제안된 새 일정') && !info.includes('10월 19일 (월) 10:00'), '진행 중 제안 비교는 상단 카드에서만');
+  eq(await page.locator('#booking-info .badge, #work .badge, #visit-address .badge').count(), 0, '세 카드에 상태 배지 없음');
+  const work = await sectionText(page, '작업 내용');
+  truthy(work.includes('욕실 실리콘 보수') && work.includes('곰팡이 제거 후 재시공') && !work.includes('요청 당시 내용') && !work.includes('원본 요청 기록 보기') && !work.includes('요청 방식') && !work.includes('요청일') && !work.includes('방문 가능한 시간') && !work.includes('자재·추가 작업 상세'), `작업 내용(작업명·설명만, 요청 당시 내용·원본 링크·요청 정보 없음, 자재·추가 작업 없으면 펼치기 생략): ${work}`);
+  const addr = await sectionText(page, '방문 주소');
+  truthy(addr.includes('햇살로') && addr.includes('301동') && addr.includes('연락받을 분') && /010-\*{4}-\d{4}/.test(addr) && addr.includes('나와 이 업체만 볼 수 있어요') && !addr.includes('원') && !addr.includes('방문 일정'), `방문 주소: ${addr}`);
+  // 펼치기: 기본 닫힘, aria-expanded·연결 영역, 여러 개 동시에 열림
+  const folds = await page.locator('.fold__btn').evaluateAll((bs) => bs.map((b) => [b.textContent, b.getAttribute('aria-expanded'), !!document.getElementById(b.getAttribute('aria-controls')), document.getElementById(b.getAttribute('aria-controls')).getAttribute('aria-labelledby') === b.id, document.getElementById(b.getAttribute('aria-controls')).hidden].join()));
+  eq(folds.join('|'), '공동 예약 정보,false,true,true,true|결제 내역,false,true,true,true', '펼치기 기본 닫힘·연결(일정 변경 내역·요청 당시 내용 없음)');
+  // 키보드: 포커스 → Enter로 열기, Space로 닫기, 포커스 표시
+  await foldBtn(page, '공동 예약 정보').focus();
+  await page.keyboard.press('Enter');
+  eq(await foldBtn(page, '공동 예약 정보').getAttribute('aria-expanded'), 'true', 'Enter로 열림');
+  await page.keyboard.press('Tab');
+  eq(await page.evaluate(() => document.activeElement?.textContent), '결제 내역', 'Tab으로 다음 펼치기');
+  truthy(await page.evaluate(() => getComputedStyle(document.activeElement).outlineStyle !== 'none'), '포커스 표시');
+  await page.keyboard.press('Space');
+  eq((await page.locator('.fold__btn[aria-expanded="true"]').allInnerTexts()).join(), '공동 예약 정보,결제 내역', '여러 펼치기 동시에 열림');
+  const grp = (await page.locator('#fold-group-panel').innerText()).replace(/\s+/g, ' ');
+  for (const s of ['참여 확정 세대 3세대', '접수 상태 마감됨', '접수 마감 10월 13일 (화) 18:00', '내 확정 출장비 16,666원', '그룹 총 출장비 50,000원', '÷ 3세대', '다른 세대의 주소·작업·사진은 보이지 않아요']) truthy(grp.includes(s), `공동 예약 정보 ‘${s}’: ${grp}`);
+  const pays = (await page.locator('#fold-payments-panel').innerText()).replace(/\s+/g, ' ');
+  truthy(pays.includes('예약금') && pays.includes('결제 완료') && pays.includes('50,000원') && pays.includes('10월 9일') && (pays.match(/50,000원/g) ?? []).length === 1, `결제 내역(예약금 한 번, 상태·날짜): ${pays}`);
+  // 정보가 다시 조회돼도 열어둔 영역은 닫히지 않는다
+  await page.evaluate(() => window.__sagoDev.setSettings({}));
+  await page.waitForTimeout(300);
+  eq((await page.locator('.fold__btn[aria-expanded="true"]').allInnerTexts()).join(), '공동 예약 정보,결제 내역', '갱신 후에도 열림 유지');
+  // 일정 변경 내역 펼치기는 없지만 기록·기존 날짜 데이터는 그대로
+  eq(await page.locator('#fold-schedule, #fold-schedule-panel, #fold-origin, #fold-origin-panel').count(), 0, '제거한 펼치기 없음');
+  eq((await db(page)).bookings.find((x) => x.id === 'bk-k4').visitDate, '2026-10-14', '기존 방문 날짜 데이터 보존');
+  truthy((await db(page)).proposals.some((x) => x.bookingId === 'bk-k4'), '일정 변경 제안 기록 보존');
   const main = await page.locator('main').innerText();
   for (const gone of ['최초 요청 내용 보기', '최종 내역 보기', '확정된 예약으로']) truthy(!main.includes(gone), `링크 남음: ${gone}`);
-  // 요청 당시 내용(원본 기록) 펼치기
-  await page.locator('summary').filter({ hasText: '요청 당시 내용' }).click();
-  await waitText(page, '곰팡이 제거 후 재시공');
+  // 작업명·설명은 작업 카드에서 한 번만, 원본 요청 링크 없음(원본 요청 데이터는 보존)
+  eq((main.match(/욕실 실리콘 보수/g) ?? []).length, 1, '작업명 한 번만');
+  eq((main.match(/곰팡이 제거 후 재시공/g) ?? []).length, 1, '작업 설명 한 번만');
+  eq(await page.getByRole('link', { name: '원본 요청 기록 보기' }).count(), 0, '원본 요청 기록 링크 없음');
+  eq(await page.locator('#work img').count(), 0, '첨부하지 않은 사진을 이미지로 만들지 않음');
+  // 모바일·데스크톱: 펼친 상태에서 긴 주소·금액이 잘리거나 가로로 넘치지 않음
+  for (const w of [360, 1280]) {
+    await page.setViewportSize({ width: w, height: 900 });
+    const o = await page.evaluate(() => ({ page: document.documentElement.scrollWidth > innerWidth, out: [...document.querySelectorAll('#booking-info *, #work *, #visit-address *')].filter((e) => { const c = e.closest('.card').getBoundingClientRect(); const r = e.getBoundingClientRect(); return r.width > 0 && r.right > c.right + 0.5; }).length }));
+    truthy(!o.page && o.out === 0, `${w}px 넘침 없음 ${JSON.stringify(o)}`);
+    if (w === 360) await page.screenshot({ path: join(ROOT, 'e2e/screens/360_booking_detail_sections.png'), fullPage: true });
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  const bk4 = (await db(page)).bookings.find((x) => x.id === 'bk-k4');
+  truthy((await db(page)).requests.some((r) => r.id === bk4.requestId && r.tasks.length > 0), '원본 요청 데이터 보존');
   // 하단: 예약 목록으로(마지막), 일정 변경·취소 유지
   const last = await page.evaluate(() => [...document.querySelectorAll('main .stack > *')].at(-1).textContent);
   truthy(last.includes('예약 목록으로'), `마지막은 예약 목록으로: ${last}`);
@@ -1492,7 +1592,7 @@ await test('예약 상세 구성: (일정 변경) → 예약 정보(업체·작�
   eq(await page.getByRole('link', { name: /업체 변경 제안|일정 변경을 제안했어요/ }).count(), 0, '별도 변경 확인 화면으로 가는 링크 없음');
 });
 
-await test('금액·정산 표시 기준: 방문 예정·작업 중·후속 작업은 카드·예상 정산액·확인 버튼 없음(빈 여백 없음), 결제 기록은 예약 세부 정보에, 동의 금액 유지, 날짜·작업 상태만으로 표시하지 않음, 0원 등록과 미등록 구분', async (page) => {
+await test('금액·정산 표시 기준: 방문 예정·작업 중·후속 작업은 카드·예상 정산액·확인 버튼 없음(빈 여백 없음), 결제 기록은 예약 정보의 결제 내역에, 동의 금액 유지, 날짜·작업 상태만으로 표시하지 않음, 0원 등록과 미등록 구분', async (page) => {
   await start(page, { path: '/bookings/bk-k4' });
   await page.getByRole('heading', { name: '예약 정보', exact: true }).waitFor();
   for (const id of ['bk-k4', 'bk-k6', 'bk-k7']) {
@@ -1502,14 +1602,13 @@ await test('금액·정산 표시 기준: 방문 예정·작업 중·후속 작�
     eq(await page.locator('#settlement').count(), 0, `${id} 금액·정산 카드 없음`);
     truthy(!main.includes('예상 추가 결제액') && !main.includes('결제할 금액') && !main.includes('금액·정산'), `${id} 예상 정산액·제목 없음`);
     eq(await page.getByRole('checkbox').count(), 0, `${id} 확인 체크 없음`);
-    // 숨긴 영역 여백 없음: 작업 섹션 다음은 (리뷰 또는) 하단 버튼
+    // 숨긴 영역 여백 없음: 마지막 정보 카드(작업 내용) 섹션 다음은 (리뷰 또는) 하단 버튼
     const next = await page.evaluate(() => { const s = document.getElementById('work').closest('section'); const n = s.nextElementSibling; return { cls: n?.className ?? '', gap: Math.round(n.getBoundingClientRect().top - s.getBoundingClientRect().bottom) }; });
-    truthy(next.cls.includes('detail-actions') && next.gap === 24, `${id} 작업 영역 다음 바로 하단 버튼(24px) ${JSON.stringify(next)}`);
-    // 예약 세부 정보: 결제한 예약금·결제 기록
-    const det = page.locator('details').filter({ has: page.locator('summary', { hasText: '예약 세부 정보' }) });
-    if (!(await det.evaluate((e) => e.open))) await det.locator('summary').click();
-    const t = (await det.innerText()).replace(/\s+/g, ' ');
-    truthy(/결제한 예약금 [\d,]+원/.test(t) && t.includes('예약금') && t.includes('결제 완료'), `${id} 예약 세부 정보 결제 기록: ${t}`);
+    truthy(next.cls.includes('detail-actions') && next.gap === 24, `${id} 작업 내용 다음 바로 하단 버튼(24px) ${JSON.stringify(next)}`);
+    // 예약 정보 > 결제 내역: 예약금 기록(처리 상태·날짜), ‘결제한 금액’ 요약 반복 없음
+    await openFold(page, '결제 내역');
+    const t = (await page.locator('#fold-payments-panel').innerText()).replace(/\s+/g, ' ');
+    truthy(t.includes('예약금') && t.includes('결제 완료') && !t.includes('결제한 예약금') && !(await page.locator('main').innerText()).includes('결제한 금액'), `${id} 결제 내역: ${t}`);
   }
   // 추가 작업 동의 금액은 상단 확인 카드·작업 카드에 유지
   await page.goto(`${BASE}/bookings/bk-k6`);
@@ -1643,10 +1742,11 @@ await test('금액·정산 상태별: 협의 중(bk-k12)·정산 완료(결제·
   await patchDb(page, (d) => { d.statements.find((s) => s.bookingId === 'bk-k9').actualWork[1].done = false; }, '/bookings/bk-k9');
   await costCard(page).waitFor();
   const work = (await page.locator('#work').innerText()).replace(/\s+/g, ' ');
-  truthy(work.includes('욕실 세면대 수전 교체 완료') && work.includes('배수 트랩 교체 미완료'), `작업별 상태: ${work}`);
+  // 작업별 배지 대신 실제 작업 완료 요약 한 줄(데이터는 유지), 정산 판단용 요약은 금액·정산 카드에도
+  truthy(work.includes('업체가 등록한 실제 작업 2건 중 1건 완료') && work.includes('미완료: 배수 트랩 교체') && !work.includes('수전 교체 완료'), `실제 작업 완료 요약: ${work}`);
+  eq(await page.locator('#work .badge').count(), 0, '작업 내용에 상태 배지 없음');
   await costCard(page).getByText('실제 작업 2건 중 1건 완료').waitFor(); // 확인 영역 작업 요약
-  const info = await page.locator('section').filter({ has: page.getByRole('heading', { name: '예약 정보', exact: true }) }).innerText();
-  truthy(info.includes('욕실 세면대 수전 교체') && info.includes('배수 트랩 교체'), '예약 정보에 작업 전체');
+  truthy(work.includes('욕실 세면대 수전 교체') && work.includes('배수 트랩 교체'), '작업 내용에 작업 전체');
 });
 
 await test('이전 최종 금액 확인 주소: 예약 상세 금액·정산으로 한 번 이동(반복 없음), 뒤로가기 정상 · 예약 목록으로(탭·필터 복원)', async (page) => {
@@ -1779,7 +1879,7 @@ await test('지연: 무료 변경 요청 → 변경 수수료 없음 · 합의 �
   await page.getByRole('button', { name: '16:00~19:00' }).click();
   await page.getByRole('button', { name: '변경 요청 보내기' }).click();
   await page.waitForURL((u) => u.pathname === '/bookings/bk-k3' && u.hash === '#schedule-change');
-  await waitText(page, '일정 변경 요청 · 업체 응답 대기');
+  await waitText(page, '일정 변경을 요청했어요');
   const d = await db(page);
   const k3 = d.bookings.find((b) => b.id === 'bk-k3');
   eq(`${k3.visitDate} ${k3.visitTime}`, '2026-10-13 14:00', '합의 전 예약 방문 시각 유지');
@@ -1792,19 +1892,23 @@ const schedText = async (page) => (await sched(page).innerText()).replace(/\s+/g
 const infoText = async (page) => (await page.locator('section').filter({ has: page.getByRole('heading', { name: '예약 정보', exact: true }) }).innerText()).replace(/\s+/g, ' ');
 const listCard = (page, id) => page.locator(`a[href="/bookings/${id}"]`);
 
-await test('일정 변경 B(기존 방문 불가): 상단 카드 하나(방문 불가·새 일정·사유·비용·가능 시간 밖), 거절 없음, 목록·상세·진행 표시 같은 상태, 업체 사유 무료 취소 안내 → 새 일정 수락으로 확정', async (page) => {
+await test('일정 변경 B(기존 방문 불가): 상단 카드 하나(방문 불가·새 일정·사유·비용, 중복 안내 없음), 거절 없음, 목록·상세·진행 표시 같은 상태, 업체 사유 무료 취소 안내 → 새 일정 수락으로 확정', async (page) => {
   await start(page, { path: '/bookings/bk-k4' });
   await sched(page).waitFor();
   const t = await schedText(page);
-  for (const s of ['확인이 필요해요', '새 방문 일정을 확인해 주세요', '기존 방문 일정', '10월 14일 (수) 14:00', '방문 불가', '제안된 새 일정', '기존 일정 방문 업체가 방문할 수 없어요', '10월 19일 (월) 10:00', '이전 작업이 길어져', '변경 비용 없음 · 확정 출장비 유지', '방문 가능한 시각(13:00~16:00) 밖의 제안', '수락 후 새 일정이 확정돼요.']) truthy(t.includes(s), `카드 ‘${s}’: ${t}`);
+  for (const s of ['확인이 필요해요', '새 방문 일정을 확인해 주세요', '기존 방문 일정', '10월 14일 (수) 14:00', '방문 불가', '제안된 새 일정', '10월 19일 (월) 10:00', '이전 작업이 길어져', '변경 비용 없음 · 확정 출장비 유지']) truthy(t.includes(s), `카드 ‘${s}’: ${t}`);
+  for (const s of ['업체가 방문할 수 없어요', '밖의 제안이에요', '수락 후 새 일정이 확정돼요.']) truthy(!t.includes(s), `중복 안내 없음 ‘${s}’: ${t}`);
+  // 뺀 문구 자리에 빈 문단·여백이 남지 않는다: 카드 본문 마지막 요소는 정보 행(KV), 버튼까지 간격은 카드 기본 간격
+  const tail = await sched(page).evaluate((c) => ({ emptyP: [...c.querySelectorAll('p')].filter((x) => !x.textContent.trim()).length, rows: [...c.querySelectorAll('.kv__k')].map((x) => x.textContent) }));
+  truthy(tail.emptyP === 0 && tail.rows.join('/') === '변경 사유/비용', `빈 문단 없음·정보 행은 사유·비용 ${JSON.stringify(tail)}`);
   truthy(await sched(page).getByRole('button', { name: '새 일정 수락' }).isVisible() && await sched(page).getByRole('button', { name: '다른 일정 요청' }).isVisible(), '수락·다른 일정 요청');
   eq(await sched(page).getByRole('button', { name: '새 일정 거절' }).count(), 0, '방문 불가면 거절(=기존 유지) 없음');
   const main = await page.locator('main').innerText();
   truthy(!main.includes('업체가 일정 변경을 제안했어요') && !main.includes('변경 제안 · 확인 대기'), '상단 이동 안내·중간 카드 중복 없음');
   const info = await infoText(page);
-  truthy(info.includes('방문 일정 방문 일정 조율 중') && info.includes('진행 상태 일정 조율 중') && info.includes('기존 방문 일정(방문 불가) 10월 14일 (수) 14:00') && !info.includes('방문 예정') && !info.includes('제안된 새 일정') && !info.includes('이전 작업이 길어져'), `예약 정보는 방문 불가 상태: ${info}`);
+  truthy(info.includes('방문 일정 방문 일정 조율 중') && !info.includes('10월 14일') && !info.includes('방문 예정') && !info.includes('제안된 새 일정') && !info.includes('이전 작업이 길어져'), `예약 정보는 방문 일정 조율 중(기존 날짜 없음): ${info}`);
   truthy(!(await page.locator('nav.steps').innerText()).includes('방문할 수 없어'), '진행 표시에 같은 설명 반복 없음');
-  eq((t.match(/확정돼요/g) ?? []).length, 1, '확정 안내 한 번만');
+  eq((t.match(/확정돼요/g) ?? []).length, 0, '확정 안내 문구 없음(버튼으로 충분)');
   await waitText(page, '업체 사유로 무료 취소할 수 있어요.');
   // 목록도 같은 기준
   await page.goto(`${BASE}/bookings?tab=active`);
@@ -1823,9 +1927,9 @@ await test('일정 변경 B(기존 방문 불가): 상단 카드 하나(방문 �
   eq(`${b.visitDate} ${b.visitTime} ${b.workStatus}`, '2026-10-19 10:00 scheduled', '새 일정 확정·방문 예정');
   truthy(b.lockedTripFee !== undefined && b.scheduleChanges.length === 1, '확정 출장비 유지·변경 기록 한 번');
   const info2 = await infoText(page);
-  truthy(info2.includes('방문 예정') && info2.includes('10월 19일 (월) 10:00') && !info2.includes('방문 불가'), `수락 후 예약 정보: ${info2}`);
-  await page.locator('summary').filter({ hasText: '일정 변경 내역' }).click();
-  await waitText(page, '업체 변경 제안 · 수락함');
+  truthy(info2.includes('방문 일정 10월 19일 (월) 10:00') && !info2.includes('조율 중') && !info2.includes('방문 불가'), `수락 후 예약 정보(확정 날짜·시각): ${info2}`);
+  eq(await page.getByText('일정 변경 내역').count(), 0, '일정 변경 내역 펼치기 없음');
+  truthy((await db(page)).proposals.some((x) => x.bookingId === b.id && x.status === 'accepted'), '수락 기록 보존');
   eq(await page.getByText('업체 사유로 무료 취소할 수 있어요.').count(), 0, '확정 후 무료 취소 안내 없음');
 });
 
@@ -1881,13 +1985,12 @@ await test('일정 변경 A(기존 일정에도 방문 가능): 안내·새 일�
   await sched(page).waitFor();
   const t = await schedText(page);
   truthy(t.includes('새 방문 일정을 확인해 주세요') && t.includes('새 일정을 수락하기 전까지 기존 일정이 유지돼요.') && !t.includes('방문 불가'), `A 카드: ${t}`);
-  truthy((await infoText(page)).includes('방문 예정'), 'A는 기존 일정 방문 예정 유지');
+  truthy((await infoText(page)).includes('방문 일정 10월 19일 (월) 14:00'), 'A는 기존 일정 그대로 표시');
   await sched(page).getByRole('button', { name: '새 일정 거절' }).click();
   await sched(page).waitFor({ state: 'detached' });
   let b = (await db(page)).bookings.find((x) => x.id === 'bk-k1');
   eq(`${b.visitDate} ${b.visitTime}`, '2026-10-19 14:00', '거절 → 기존 일정 유지');
-  await page.locator('summary').filter({ hasText: '일정 변경 내역' }).click();
-  await waitText(page, '업체 변경 제안 · 거절함');
+  truthy((await db(page)).proposals.some((x) => x.bookingId === 'bk-k1' && x.status === 'rejected'), '거절 기록 보존(화면 펼치기 없음)');
   // 다시 제안(A) → 수락
   await dev(page, 'proposeProviderChange', 'bk-k1', '2026-10-21', '11:00', 'yes');
   await page.goto(`${BASE}/bookings/bk-k1`);
@@ -1998,8 +2101,11 @@ await test('확인 카드 C(추가 작업): 실제 내용·금액·일정 영향
   await card.waitFor({ state: 'detached' });
   const d = await db(page);
   eq(d.additionalWorks.find((w) => w.id === 'aw-1').status, 'agreed', '동의 반영');
-  // 기록은 예약 정보 목록에 남는다(동의함)
-  truthy((await infoText(page)).includes('추가 작업 · 스위치 박스 1개 교체 및 배선 정리') && (await infoText(page)).includes('동의함'), '기록 유지');
+  // 기록은 작업 내용 > 자재·추가 작업 상세에 남는다(동의함), 응답 버튼은 다시 나오지 않는다
+  await openFold(page, '자재·추가 작업 상세');
+  const rec = (await page.locator('#fold-extra-panel').innerText()).replace(/\s+/g, ' ');
+  truthy(rec.includes('추가 작업 · 스위치 박스 1개 교체 및 배선 정리') && rec.includes('추가 금액 25,000원') && rec.includes('일정 영향 추가 방문 없음') && rec.includes('처리 동의함'), `기록 유지: ${rec}`);
+  eq(await page.locator('#fold-extra-panel button, #fold-extra-panel a').count(), 0, '기록에는 동의·결제 버튼 없음');
   // 목록: 확인 필요 라벨 정리
   await page.goto(BASE + '/bookings?tab=active');
   eq((await badgesOf(page, 'bk-k6')).join(), '작업 중', '대표 상태 유지');
@@ -2031,7 +2137,11 @@ await test('확인 카드 D(자재): 사양·금액·납기·취소 조건 → �
   await page.goto(BASE + '/bookings/bk-k5');
   await page.getByRole('heading', { name: '예약 정보', exact: true }).waitFor();
   eq(await page.locator('section[id^="material-"]').count(), 0, '선결제 후 카드 없음');
-  truthy((await infoText(page)).includes('결제 완료'), '결제 상태는 예약 정보에');
+  await openFold(page, '결제 내역');
+  truthy((await page.locator('#fold-payments-panel').innerText()).includes('자재비 선결제') && (await page.locator('#fold-payments-panel').innerText()).includes('결제 완료'), '자재 선결제 기록은 결제 내역에');
+  await openFold(page, '자재·추가 작업 상세');
+  const mrec = (await page.locator('#fold-extra-panel').innerText()).replace(/\s+/g, ' ');
+  truthy(mrec.includes(m.name) && mrec.includes(m.spec) && mrec.includes('선결제 결제 완료') && mrec.includes('업체 주문 주문 전') && mrec.includes('취소 조건'), `자재 기록: ${mrec}`);
   await page.goto(BASE + '/bookings?tab=active');
   eq((await badgesOf(page, 'bk-k5')).join(), '방문 예정', '대표 상태 유지');
   eq(await todoOf(page.locator('a[href="/bookings/bk-k5"]')), '', '선결제 후 할 일 문구 사라짐');
@@ -2088,13 +2198,13 @@ for (const w of [360, 1280]) {
 
 await test('방문 시각: 요청(가능 시간) → 승인(제안 시각) → 결제 → 내 예약 목록·상세·알림이 같은 시각', async (page) => {
   await start(page, { path: '/requests/rq-4' });
-  await waitText(page, '업체가 제안한 방문 시각');
+  await waitText(page, '방문 일정과 금액을 확인해 주세요');
   let main = await page.locator('main').innerText();
-  truthy(main.includes('10월 20일 (화) 14:00'), '결제 전 제안 시각');
-  truthy(main.includes('13:00~16:00'), '고객 가능 시간 표시');
-  truthy(main.includes('결제하기 전에는 예약이 확정되지 않아요'), '승인 ≠ 예약 확정');
+  truthy((await page.locator('#pay').innerText()).replace(/\s+/g, ' ').includes('방문 일정 10월 20일 (화) 14:00'), '결제 전 제안 시각(결제 카드)');
+  truthy(main.includes('13:00~16:00'), '고객 가능 시간은 보낸 요청 내용에 표시');
+  eq((await db(page)).bookings.filter((b) => b.requestId === 'rq-4').length, 0, '승인 ≠ 예약 확정(결제 전 예약 없음)');
   await page.goto(`${BASE}/requests/rq-4/approval`);
-  await waitText(page, '작업 소요 시간은 수리 내용에 따라 달라집니다.');
+  await waitText(page, '방문 일정과 금액을 확인해 주세요');
   truthy((await page.locator('main').innerText()).includes('10월 20일 (화) 14:00'), '승인 확인 화면 제안 시각');
   await page.getByRole('checkbox').check();
   await page.getByRole('button', { name: PAY_BTN }).click();
@@ -2104,7 +2214,7 @@ await test('방문 시각: 요청(가능 시간) → 승인(제안 시각) → �
   eq(bk.visitTime, '14:00', '결제 후 확정 시각');
   truthy(d.notices[0].title.includes('방문 예정 10월 20일 (화) 14:00'), `알림: ${d.notices[0].title}`);
   await page.goto(`${BASE}/bookings/${bk.id}`);
-  await waitText(page, '방문 예정');
+  await waitText(page, '방문 일정');
   main = await page.locator('main').innerText();
   truthy(main.includes('10월 20일 (화) 14:00'), '예약 상세 방문 시각');
   await page.goto(`${BASE}/bookings?tab=active`);
@@ -3749,9 +3859,9 @@ await testCompare('내 예약 통합: 결제 실패·확인 중은 보낸 요청
   await page.getByRole('button', { name: '결제 결과 확인하기' }).click();
   await page.waitForURL((u) => u.pathname.startsWith('/bookings/bk-'));
   const bkPath = new URL(page.url()).pathname;
-  // 요청 당시 내용은 예약 상세 안 펼치기로(비교 요청이었음을 함께 표시)
-  await page.locator('summary').filter({ hasText: '요청 당시 내용' }).click();
-  await waitText(page, '업체 2곳에 보냄');
+  // 예약 상세에는 요청 당시 내용 펼치기가 없다(작업 내용은 작업 카드에서 한 번만)
+  await page.locator('#work').waitFor();
+  eq(await page.getByText('요청 당시 내용').count(), 0, '요청 당시 내용 펼치기 없음');
   await page.getByRole('link', { name: '예약 목록으로' }).click();
   await page.waitForURL((u) => u.pathname === '/bookings' && u.search.includes('tab=active'));
   const active = (await resCount(page), await hrefs(page));
@@ -4608,7 +4718,7 @@ await test('로그인 없는 데모: 첫 접속은 바로 업체 찾기(로그�
 
 await test('로그인 없는 데모: 내부 화면 직접 접근·새로고침 정상(내 예약 세 탭·내 정보·상세, 이전 내 요청 주소)', async (page) => {
   await start(page, { path: '/' });
-  for (const [p, text] of [['/bookings?tab=requests', '예약금 결제'], ['/bookings?tab=active', '방문 예정'], ['/bookings?tab=past', '이용 완료'], ['/me', '내역·안내'], ['/bookings/bk-k2', '예약 세부 정보'], ['/requests/rq-3', '업체가 제안한 방문 시각']]) {
+  for (const [p, text] of [['/bookings?tab=requests', '예약금 결제'], ['/bookings?tab=active', '방문 예정'], ['/bookings?tab=past', '이용 완료'], ['/me', '내역·안내'], ['/bookings/bk-k2', '공동 예약 정보'], ['/requests/rq-3', '업체가 제안한 방문 시각']]) {
     await page.goto(`${BASE}${p}`);
     await waitText(page, text);
     eq(pathOf(page) + (p.includes('?') ? new URL(page.url()).search : ''), p, `${p} 직접 접근`);

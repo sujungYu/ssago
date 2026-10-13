@@ -589,3 +589,43 @@ a.list-row:hover { background: #fafbfd; }
  */
 .card-todo { display: flex; align-items: baseline; gap: var(--sp-2); margin-top: var(--sp-1); padding-top: var(--sp-3); border-top: 1px solid var(--c-line); color: var(--c-text); font-size: var(--fs-md); font-weight: 600; line-height: 1.45; overflow-wrap: anywhere; word-break: keep-all; }
 .card-todo__dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--c-orange); transform: translateY(-2px); }
+/*
+ * 예약 상세 펼치기(spec 5.19): 카드 아래쪽에 얇은 구분선으로 나눈 줄. 제목(블루 700) + 오른쪽 화살표(열리면 위로), 기본 닫힘.
+ * 내용은 안쪽 카드 없이 이름·값 정렬과 얇은 구분선, 긴 값은 줄바꿈.
+ */
+.folds { margin-top: var(--sp-1); }
+.fold { border-top: 1px solid var(--c-line); }
+.fold__head { margin: 0; font-size: inherit; }
+.fold__btn { all: unset; box-sizing: border-box; display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 48px; font-weight: 700; color: var(--c-primary); cursor: pointer; border-radius: var(--r-sm); }
+.fold__btn svg { flex: none; transition: transform .15s; transform: rotate(90deg); }
+.fold--open .fold__btn svg { transform: rotate(-90deg); }
+.fold__btn:focus-visible { outline: 3px solid var(--c-focus); outline-offset: 2px; }
+.fold__panel { padding-bottom: var(--sp-4); display: flex; flex-direction: column; gap: var(--sp-3); }
+.fold__panel[hidden] { display: none; }
+.fold__panel .kv__v { max-width: 60%; overflow-wrap: anywhere; word-break: keep-all; }
+.fold__item { display: flex; flex-direction: column; gap: var(--sp-2); min-width: 0; }
+.fold__item + .fold__item { padding-top: var(--sp-3); border-top: 1px solid var(--c-line); }
+.fold__item-title { font-weight: 700; overflow-wrap: anywhere; word-break: keep-all; }
+.work-list > li + li { padding-top: var(--sp-3); border-top: 1px solid var(--c-line); }
+@media (prefers-reduced-motion: reduce) { .fold__btn svg { transition: none; } }
+/*
+ * 예약금 결제 확인 카드(spec 5.20): 기본 정보(방문 일정·예상 총금액·예약금·결제 기한)만, 예약금은 연한 블루 강조 영역.
+ * 이름 왼쪽 · 값 오른쪽, 긴 값은 줄바꿈. 확인 체크는 안쪽 여백이 있는 줄(문구 전체가 누르는 영역).
+ */
+.pay-sum { margin: 0; display: flex; flex-direction: column; gap: var(--sp-2); }
+.pay-sum__row { display: flex; justify-content: space-between; align-items: baseline; gap: var(--sp-3); }
+.pay-sum__row dt { color: var(--c-text-2); flex: none; }
+.pay-sum__row dd { margin: 0; text-align: right; min-width: 0; overflow-wrap: anywhere; word-break: keep-all; font-weight: 600; }
+.pay-note { margin-top: calc(-1 * var(--sp-1)); }
+.pay-deposit { display: flex; justify-content: space-between; align-items: center; gap: var(--sp-3); flex-wrap: wrap; padding: var(--sp-4); border-radius: var(--r-md); background: var(--c-info-bg); margin-top: var(--sp-1); }
+.pay-deposit__k { font-weight: 700; color: var(--c-text); }
+.pay-deposit__v { font-size: var(--fs-2xl); font-weight: 800; color: var(--c-primary); margin-left: auto; }
+.pay-tasks { display: flex; flex-direction: column; gap: var(--sp-2); }
+.pay-terms { display: flex; flex-direction: column; gap: var(--sp-2); font-size: var(--fs-sm); }
+.pay-terms li { overflow-wrap: anywhere; word-break: keep-all; }
+.pay-terms li > .strong { display: block; }
+.pay-check { display: flex; align-items: flex-start; gap: var(--sp-3); padding: 14px var(--sp-4); border: 1px solid var(--c-line-strong); border-radius: var(--r-md); cursor: pointer; }
+.pay-check input { width: 22px; height: 22px; margin: 1px 0 0; accent-color: var(--c-primary); flex: none; }
+.pay-check > span { min-width: 0; overflow-wrap: anywhere; word-break: keep-all; font-weight: 600; }
+.pay-check:focus-within { outline: 3px solid var(--c-focus); outline-offset: 2px; }
+.pay-card .act-card__body { padding-bottom: var(--sp-2); }

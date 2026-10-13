@@ -4,12 +4,12 @@ import { useRepo } from '../../app/context';
 import { useAction, useAttemptKey } from '../../app/hooks';
 import { formatWon } from '../../domain/money';
 import { addHours, formatDate, seoulYmd } from '../../domain/time';
-import { NEW_DATE_WINDOWS, formatSlot, isWithinSlots, selectableTimes } from '../../domain/visitTime';
+import { NEW_DATE_WINDOWS, formatSlot, selectableTimes } from '../../domain/visitTime';
 import { canRejectKeepingOld, canRequestOther } from '../../domain/scheduleChange';
 import { Icon } from '../../components/Icon';
 import { ActionCard, Banner, Button, KV, MockPayNotice, PhoneButton } from '../../components/ui';
 import type { BookingDetail } from '../../data/repositories/types';
-import { VisitText, slotsText } from '../shared';
+import { VisitText } from '../shared';
 
 /**
  * 예약 상세 상단 ‘일정 변경’ 카드(spec 5.15). 응답이 필요한 변경 제안·요청을 이 카드 하나에서 보여주고 바로 응답한다(별도 확인 화면 없음).
@@ -44,7 +44,6 @@ export function ScheduleChangeCard({ d }: { d: BookingDetail }) {
   const root = p?.replyTo ? d.proposals.find((x) => x.id === p.replyTo) : p?.origin === 'provider' ? p : d.proposals.filter((x) => x.origin === 'provider').at(-1);
   const unavailable = s.oldVisitUnavailable;
   const providerCause = p?.origin === 'provider' || !!p?.replyTo || p?.free === 'provider' || unavailable;
-  const outside = !!p?.newVisit.time && b.customerSlots.length > 0 && !isWithinSlots(p.newVisit.time, b.customerSlots);
   const shortfall = p && p.origin === 'customer' && !p.replyTo ? p.cost.additionalDeposit : 0;
 
   // 제목: 응답이 필요한 제안이면 ‘새 방문 일정을 확인해 주세요’. 응답을 기다리는 상태만 다르게(머리 문구도 대기 상태로)
@@ -56,9 +55,9 @@ export function ScheduleChangeCard({ d }: { d: BookingDetail }) {
   // 기존 일정 옆 작은 표시: 방문 불가 / 방문 가능 여부 확인 필요(방문 가능한 제안에는 표시하지 않음 — 데이터 기준, 사유로 추측하지 않음)
   const oldMark = unavailable ? <span className="sched__mark sched__mark--no">방문 불가</span>
     : s.oldVisit === 'unknown' ? <span className="sched__mark">방문 가능 여부 확인 필요</span> : null;
-  // 안내는 한 번만
+  // 안내는 한 번만. 기존 일정 방문 불가 제안은 일정 비교·‘방문 불가’ 표시·버튼으로 충분해 따로 안내하지 않는다(수락 전에는 확정되지 않는 기준은 그대로)
   const guide = needsResponse
-    ? (canRequestOther(p!) ? '수락 후 새 일정이 확정돼요.' : '새 일정을 수락하기 전까지 기존 일정이 유지돼요.')
+    ? (canRequestOther(p!) ? null : '새 일정을 수락하기 전까지 기존 일정이 유지돼요.')
     : s.kind === 'negotiating' ? '업체가 일정을 다시 제안하면 여기서 수락할 수 있어요.'
     : s.kind === 'customer_requested' ? '업체가 동의하기 전까지 기존 일정이 유지돼요.'
     : '진행 중인 일정 제안이 없어요. 업체에 연락해 새 일정을 정하거나 무료 취소할 수 있어요.';
@@ -152,15 +151,15 @@ export function ScheduleChangeCard({ d }: { d: BookingDetail }) {
       </div>
       <KV rows={[
         ...(root ? [{ k: '변경 사유', v: <span className="sched__reason">{root.reason}</span> }] : []),
-        { k: '기존 일정 방문', v: unavailable ? '업체가 방문할 수 없어요' : s.oldVisit === 'unknown' ? '가능 여부 확인 필요' : '가능 · 수락 전까지 기존 일정 유지' },
+        // 방문 불가는 기존 일정 옆 ‘방문 불가’ 표시로만 알린다(같은 내용의 행을 반복하지 않음)
+        ...(unavailable ? [] : [{ k: '기존 일정 방문', v: s.oldVisit === 'unknown' ? '가능 여부 확인 필요' : '가능 · 수락 전까지 기존 일정 유지' }]),
         {
           k: '비용',
           v: <span>{providerCause ? '변경 비용 없음 · 확정 출장비 유지'
             : p ? <>변경 비용 {formatWon(p.cost.tripFeeCharged)} · 추가 결제 {formatWon(p.cost.additionalDeposit)}<span className="xs muted" style={{ display: 'block' }}>{p.cost.note}</span></> : '-'}</span>,
         },
       ]} />
-      {outside && <p className="xs muted">처음 고른 방문 가능한 시각({slotsText(b.customerSlots)}) 밖의 제안이에요.</p>}
-      <p className="small">{guide}</p>
+      {guide && <p className="small">{guide}</p>}
     </ActionCard>
   );
 }

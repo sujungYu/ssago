@@ -54,6 +54,24 @@ export function ActionCard({ id, title, head = '확인이 필요해요', childre
   );
 }
 
+/**
+ * 펼치기(spec 5.19): 기본 닫힘, 제목 오른쪽 화살표, 버튼에 aria-expanded·aria-controls, 내용은 제목과 연결된 영역.
+ * 열림 상태는 컴포넌트 상태라 데이터가 다시 조회돼도 사용자가 열어둔 영역이 닫히지 않는다. 여러 개를 동시에 열 수 있다.
+ */
+export function Fold({ id, title, children }: { id: string; title: string; children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className={`fold${open ? ' fold--open' : ''}`} data-fold={id}>
+      <h3 className="fold__head">
+        <button type="button" className="fold__btn" id={`${id}-btn`} aria-expanded={open} aria-controls={`${id}-panel`} onClick={() => setOpen((o) => !o)}>
+          <span>{title}</span><Icon name="chevron" size={16} />
+        </button>
+      </h3>
+      <div className="fold__panel" id={`${id}-panel`} role="region" aria-labelledby={`${id}-btn`} hidden={!open}>{children}</div>
+    </div>
+  );
+}
+
 export function Banner({ tone = 'info', title, children, icon }: { tone?: 'info' | 'warn' | 'danger' | 'success'; title?: string; children?: ReactNode; icon?: string }) {
   const ic = icon ?? (tone === 'danger' || tone === 'warn' ? 'warn' : tone === 'success' ? 'check' : 'info');
   return (
