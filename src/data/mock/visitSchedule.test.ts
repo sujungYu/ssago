@@ -84,18 +84,29 @@ describe('업체 일정 변경 제안', () => {
       reason: '이전 작업이 길어져 같은 날 방문이 어려워졌어요.', consentedAt: r.now(),
     }]);
   });
-  it('거절하면 자동 변경·자동 취소 없이 예약 유지 → 업체 사유 무료 취소를 고객이 직접 선택할 수 있다', async () => {
-    const r = repo();
-    const res = await r.respondToProposal('pr-k4', 'reject', 'rej-1');
+  it('A(기존 일정에도 방문 가능) 거절: 자동 변경·자동 취소 없이 기존 일정 유지 → 업체 사유 무료 취소를 고객이 직접 선택할 수 있다', async () => {
+    const r = repo(); const ctl = new DevController(r);
+    expect(ctl.proposeProviderChange('bk-k1', '2026-10-21', '10:00', 'yes').ok).toBe(true);
+    const p = r.__db().proposals.at(-1)!;
+    expect((await r.getBooking('bk-k1')).schedule.kind).toBe('provider_proposed');
+    const res = await r.respondToProposal(p.id, 'reject', 'rej-1');
     expect(res.refund).toBeUndefined();
-    const b = (await r.getBooking('bk-k4')).booking;
-    expect([b.status, b.visitDate, b.visitTime]).toEqual(['confirmed', '2026-10-14', '14:00']);
-    expect(r.__db().refunds.filter((x) => x.bookingId === 'bk-k4')).toHaveLength(0);
+    const d = await r.getBooking('bk-k1');
+    expect([d.booking.status, d.booking.visitDate, d.booking.visitTime, d.schedule.kind]).toEqual(['confirmed', '2026-10-19', '14:00', 'normal']);
+    const ctx = await r.getCancelContext('bk-k1');
+    expect([ctx.cause, ctx.causeLabel]).toEqual(['policy_free', expect.stringMatching(/거절/)]);
+  });
+  it('B(기존 일정 방문 불가): 거절(=기존 일정 유지)은 불가, 업체 사유 무료 취소로 선결제 전액 환불', async () => {
+    const r = repo();
+    expect(await code(r.respondToProposal('pr-k4', 'reject', 'rej-b'))).toBe('invalid');
+    const d = await r.getBooking('bk-k4');
+    expect([d.schedule.kind, d.schedule.oldVisitUnavailable, d.schedule.label]).toEqual(['provider_proposed', true, '기존 일정 방문 불가 · 새 일정 확인 필요']);
     const ctx = await r.getCancelContext('bk-k4');
     expect(ctx.cause).toBe('policy_free');
-    expect(ctx.causeLabel).toMatch(/거절/);
+    expect(ctx.causeLabel).toContain('기존 일정에 방문할 수 없어요');
+    expect(ctx.preview.refundTotal).toBe(ctx.preview.prepaidTotal); // 공제 없이 전액
     const done = await r.cancelBooking({ bookingId: 'bk-k4', expectedRefund: ctx.preview.refundTotal, idempotencyKey: 'cx-1' });
-    expect(done.refund.amount).toBe(ctx.preview.refundTotal);
+    expect([done.refund.amount, done.refund.status]).toEqual([ctx.preview.prepaidTotal, 'requested']);
   });
   it('같은 날 시각 변경(14:00 → 15:00)도 수락해야만 반영된다', async () => {
     const r = repo(); const ctl = new DevController(r);

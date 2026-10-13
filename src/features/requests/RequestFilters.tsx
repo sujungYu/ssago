@@ -1,3 +1,4 @@
+import { COMPARE_REQUESTS_ENABLED } from '../../domain/demoScope';
 import { useState } from 'react';
 import { CapsuleButton, OptionPicker, PeriodPicker } from '../../components/filters';
 import {
@@ -20,7 +21,7 @@ export function RequestFilterBar({ filter, onApply, count }: { filter: RequestFi
         <CapsuleButton label="요청 상태" defaultValue="전체" value={statusSummary(filter)} onClick={(el) => setOpen({ kind: 'status', anchor: el })} />
         <CapsuleButton label="접수일" defaultValue="전체 기간" value={periodButtonLabel(filter)} onClick={(el) => setOpen({ kind: 'period', anchor: el })} />
       </div>
-      <p className="filter-bar__count small" aria-live="polite">{count === undefined ? ' ' : <>요청 묶음 <b>{count}</b>건</>}</p>
+      <p className="filter-bar__count small" aria-live="polite">{count === undefined ? ' ' : <>{COMPARE_REQUESTS_ENABLED ? '요청 묶음' : '보낸 요청'} <b>{count}</b>건</>}</p>
       {open?.kind === 'status' && (
         <OptionPicker title="요청 상태" name="status-group" anchor={open.anchor} onClose={() => setOpen(null)}
           options={STATUS_GROUP_OPTIONS.map((o) => (o.value === 'ended' ? { ...o, hint: ENDED_HINT } : o))}

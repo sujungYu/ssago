@@ -1,4 +1,6 @@
-import { Link, useParams } from 'react-router-dom';
+import { COMPARE_REQUESTS_ENABLED } from '../../domain/demoScope';
+import { useEffect } from 'react';
+import { Link, Navigate, useLocation, useParams } from 'react-router-dom';
 import { Page } from '../../app/Page';
 import { useRepo } from '../../app/context';
 import { useAsync } from '../../app/hooks';
@@ -7,13 +9,15 @@ import { ProgressSteps } from '../../components/ProgressSteps';
 import { formatDate, formatDateTime } from '../../domain/time';
 import { formatWon } from '../../domain/money';
 import { Icon } from '../../components/Icon';
-import { AsyncView, Badge, Banner, KV, LinkButton, PhoneButton, Section } from '../../components/ui';
+import { AsyncView, Badge, Banner, EmptyState, KV, LinkButton, LoadingBlock, PhoneButton, Section } from '../../components/ui';
+import { ScheduleChangeCard } from './ScheduleChangeCard';
 import type { BookingDetail } from '../../data/repositories/types';
 import { ContactText, PAYMENT_STATUS, VisitAddressText, VisitText, bookingBadge, slotsText } from '../shared';
-import { BookingCostCard } from './BookingCostCard';
+import { BookingCostCard, PaymentRecords, costOf, settlementVisible } from './BookingCostCard';
+import { TRIP_LABEL } from '../../domain/bookingCost';
 import { DURATION_NOTE, formatVisit } from '../../domain/visitTime';
 import { visitLabel } from './BookingsPage';
-import { LIST_LINK_LABEL, bookingTabOf, listPath } from '../../domain/reservationTabs';
+import { bookingTabOf, listPath } from '../../domain/reservationTabs';
 
 function ActionRow({ to, title, desc, tone = 'action' }: { to: string; title: string; desc?: string; tone?: 'action' | 'warn' }) {
   return (
@@ -25,199 +29,290 @@ function ActionRow({ to, title, desc, tone = 'action' }: { to: string; title: st
   );
 }
 
+/** 지금 확인할 내용: 지연·자재·추가 작업·후기(일정 변경은 상단 ‘일정 변경’ 카드에서 바로 응답). 최종 금액 확인·협의는 아래 ‘금액·정산’ 카드에서 바로 한다(별도 화면 이동 없음) */
 function Attention({ d }: { d: BookingDetail }) {
   const b = d.booking;
   const rows: React.ReactNode[] = [];
   if (b.status === 'confirmed') {
     if (d.delay) rows.push(<ActionRow key="dl" tone="warn" to={`/delays/${d.delay.id}`} title="방문이 지연되고 있어요" desc="기다리기, 무료 변경, 무료 취소 중에서 선택해 주세요" />);
-    for (const p of d.proposals.filter((x) => x.status === 'proposed')) rows.push(<ActionRow key={p.id} to={`/proposals/${p.id}`} title={p.origin === 'provider' ? '업체가 일정 변경을 제안했어요' : '업체가 변경에 동의했어요 · 최종 확인이 필요해요'} desc={`${formatVisit(p.oldVisit.date, p.oldVisit.time)} → ${formatVisit(p.newVisit.date, p.newVisit.time)}`} />);
-    for (const p of d.proposals.filter((x) => x.status === 'requested')) rows.push(<ActionRow key={p.id} to={`/proposals/${p.id}`} title="변경 요청 · 업체 응답을 기다리고 있어요" desc="합의 전까지 기존 일정이 유지돼요" />);
     for (const m of d.materials.filter((x) => x.paymentStatus === 'none')) rows.push(<ActionRow key={m.id} to={`/materials/${m.id}`} title="자재 주문 조건을 확인해 주세요" desc={`${m.name} · ${formatWon(m.price)}`} />);
     for (const m of d.materials.filter((x) => x.paymentStatus === 'processing' || x.paymentStatus === 'unknown')) rows.push(<ActionRow key={m.id} tone="warn" to={`/materials/${m.id}`} title="자재비 결제 결과를 확인 중이에요" desc="다시 결제하지 말고 결과를 확인해 주세요" />);
     for (const w of d.additionalWorks.filter((x) => x.status === 'proposed')) rows.push(<ActionRow key={w.id} to={`/additional/${w.id}`} title="추가 작업 동의가 필요해요" desc={`${w.scope} · ${formatWon(w.amount)}`} />);
-    if (d.statement?.status === 'awaiting_customer') rows.push(<ActionRow key="st" to={`/bookings/${b.id}/final`} title="최종 금액을 확인해 주세요" desc="실제 작업 내용과 정산 금액을 확인해요" />);
-    if (d.statement?.status === 'disputed') rows.push(<ActionRow key="sd" tone="warn" to={`/bookings/${b.id}/final`} title="금액을 협의하고 있어요" desc="합의 전에는 청구되거나 확정되지 않아요" />);
     if (d.statement?.status === 'settled' && !d.review) rows.push(<ActionRow key="rv" to={`/bookings/${b.id}/review`} title="이용 후기를 남길 수 있어요" />);
   }
   if (!rows.length) return null;
   return <Section title="지금 확인할 내용"><ul className="card card--flush divided">{rows.map((r, i) => <li key={i}>{r}</li>)}</ul></Section>;
 }
 
+
+/** 작업별 실제 상태: 업체가 등록한 최종 작업 내역이 있으면 그 완료 여부, 없으면 예약의 진행 상태 */
+function taskState(d: BookingDetail, title: string): { label: string; tone: 'success' | 'warn' | 'info' | 'neutral' } | null {
+  const w = d.statement?.actualWork.find((x) => x.title === title);
+  if (w) return w.done ? { label: '완료', tone: 'success' } : { label: '미완료', tone: 'warn' };
+  if (d.booking.status === 'cancelled') return null;
+  return ({ scheduled: { label: '작업 전', tone: 'neutral' }, in_progress: { label: '작업 중', tone: 'info' }, followup_waiting: { label: '후속 작업 대기', tone: 'info' } } as const)[d.booking.workStatus as 'scheduled'] ?? null;
+}
+
+const PROPOSAL_STATUS = { requested: '업체 응답 대기', proposed: '확인 필요', accepted: '수락함', rejected: '거절함', withdrawn: '철회함' } as const;
+
 function Body({ d }: { d: BookingDetail }) {
+  const repo = useRepo();
   const b = d.booking;
   const cancelled = b.status === 'cancelled';
   const tf = d.tripFee;
+  const sch = d.schedule;
   const history = b.scheduleChanges ?? [];
   const openProposal = d.proposals.some((p) => p.status === 'requested' || p.status === 'proposed');
-  const canChange = b.status === 'confirmed' && b.workStatus === 'scheduled' && !openProposal;
+  const canChange = b.status === 'confirmed' && b.workStatus === 'scheduled' && !openProposal && !sch.oldVisitUnavailable;
   const canCancel = b.status === 'confirmed' && b.workStatus === 'scheduled';
-  const delayed = !!d.delay;
+  const beforeVisit = b.status === 'confirmed' && b.workStatus === 'scheduled';
+  // 업체 사유 무료 취소(기존 일정 방문 불가·업체 제안 등): 취소 버튼 근처에 짧게 안내
+  const providerFreeCancel = canCancel && !!d.freeCancel && (sch.kind !== 'normal' || /업체/.test(d.freeCancel.reason));
+  // 금액·정산 카드: 최종 금액 등록 후(확인·협의·처리 중·정산 완료)와 기록이 있는 취소 예약만(공통 기준). 그 전에는 숨기고 결제 기록은 예약 세부 정보에서
+  const showCost = settlementVisible(d);
+  const c = costOf(d);
+  // 요청 당시 내용(원본 기록 — 수정하거나 현재 작업으로 덮어쓰지 않는다)
+  const origin = useAsync(() => (d.origin ? repo.getRequest(d.origin.requestId) : Promise.resolve(null)), [repo, d.origin?.requestId]);
+  // 실제 작업 목록: 최종 내역이 있으면 업체가 등록한 실제 작업, 없으면 예약 작업
+  const works = d.statement ? d.statement.actualWork.map((w) => ({ key: w.title, title: w.title, description: b.tasks.find((t) => t.title === w.title)?.description ?? '' }))
+    : b.tasks.map((t) => ({ key: t.id, title: t.title, description: t.description }));
+  const extraWorks = d.statement ? b.tasks.filter((t) => !d.statement!.actualWork.some((w) => w.title === t.title)) : [];
+  // 완료된(응답이 끝난) 제안·요청 기록(응답 버튼 없이 ‘일정 변경 내역’에서만)
+  const doneProposals = d.proposals.filter((p) => !(p.status === 'requested' || p.status === 'proposed'));
+
   return (
     <>
-      <div className="stack--sm stack">
-        <div className="row row--between row--wrap">
-          <h2 style={{ fontSize: 'var(--fs-xl)' }}>{d.provider.name}</h2>
-          {bookingBadge(b)}
-        </div>
-        <p className="muted small">{b.tasks.map((t) => t.title).join(' · ')}</p>
-      </div>
-
       {cancelled && (
         <Banner tone="info" title="취소된 예약이에요">
           {b.cancelCause === 'provider' ? '업체 사유 취소라 공제 없이 해당 선결제가 전액 환불 대상이에요.' : b.cancelCause === 'policy_free' ? '정책상 무료 취소가 적용됐어요.' : '고객 사유로 취소됐어요.'}
         </Banner>
       )}
-      {d.freeCancel && <Banner tone="warn" title="무료 변경·취소가 적용돼요">{d.freeCancel.reason}</Banner>}
+      {/* 일정 변경과 무관한 무료 변경·취소 사유(지연·자재 납기 등)만 상단에. 일정 변경 사유는 아래 변경 카드·취소 버튼 근처에서 */}
+      {d.freeCancel && sch.kind === 'normal' && !providerFreeCancel && <Banner tone="warn" title="무료 변경·취소가 적용돼요">{d.freeCancel.reason}</Banner>}
+
+      {/* 일정 변경: 응답이 필요한 제안·요청은 이 카드 하나에서 바로 처리 */}
+      <ScheduleChangeCard d={d} />
 
       <Attention d={d} />
 
-      <Section title="방문 일정·진행">
-        <div className="card stack">
-          <KV rows={[
-            { k: visitLabel(b), v: <span><VisitText date={b.visitDate} time={b.visitTime} strong />{delayed && <> <Badge tone="warn">지연 안내</Badge></>}</span> },
-            // 지연 안내의 변경 도착 예상은 예약 방문 시각을 덮어쓰지 않고 따로 보여준다
-            ...(d.delay ? [{ k: '변경 도착 예상', v: <span className="nowrap">{formatDateTime(d.delay.newEta)}</span> }] : []),
-            // 변경 제안은 고객이 수락하기 전까지 예약에 반영하지 않고 따로 보여준다
-            ...d.proposals.filter((p) => p.status === 'proposed' && p.newVisit.time).map((p) => (
-              { key: p.id, k: '변경 제안 · 확인 대기', v: <span><VisitText date={p.newVisit.date} time={p.newVisit.time} /><br /><span className="xs muted">수락하기 전까지 위 방문 일정이 유지돼요</span></span> }
-            )),
-            ...(b.customerSlots.length ? [{ k: '요청 시 방문 가능한 시간', v: <span className="muted">{slotsText(b.customerSlots)}</span> }] : []),
-            { k: '진행 상태', v: bookingBadge(b) },
-            ...(b.followUp ? [{ k: '후속 방문', v: <span>{formatDate(b.followUp.date)}<br />{b.followUp.window}</span> }] : []),
-          ]} />
-          {b.followUp && <p className="small muted">{b.followUp.note}</p>}
-          <p className="xs muted">방문 시각은 업체의 도착 예정 시각이에요. {DURATION_NOTE}</p>
-          <PhoneButton phone={d.provider.phone} name={d.provider.name} />
-        </div>
-      </Section>
-
-      {!cancelled && (
-        <Section title="공동 예약">
-          <div className="card stack">
-            <KV rows={[
-              { k: '접수 마감', v: <span className="nowrap">{formatDateTime(d.group.closeAt)}</span> },
-              { k: '참여 확정 세대', v: `${d.group.confirmedHouseholds}세대` },
-              { k: '접수 상태', v: d.groupEnded ? '종료됨' : d.groupClosed ? '마감됨' : '접수 중' },
-            ]} />
-            {tf.kind === 'confirmed' && tf.households !== null && tf.households !== d.group.confirmedHouseholds && (
-              <p className="xs muted">마감 시 확정 세대는 {tf.households}세대였어요. 출장비는 마감 시 기준으로 확정돼요.</p>
-            )}
-            {d.groupEnded && <Banner tone="warn" title="이 공동 예약은 종료됐어요" />}
-            <p className="xs muted">다른 세대의 주소·작업·사진은 보이지 않아요. 출장비는 아래 ‘예약 금액·결제’에서 확인해요.</p>
+      {/* 예약 정보(통합): 업체·전화 / 작업·상태 / 방문 일정 / 주소·연락처 / 공동 예약 / 세부 정보·변경 내역·요청 당시 내용 */}
+      <Section title="예약 정보">
+        <div className="card stack booking-info">
+          <div className="row row--between row--wrap" style={{ gap: 'var(--sp-2)' }}>
+            <p className="strong" style={{ fontSize: 'var(--fs-lg)' }}>{d.provider.name}</p>
+            <PhoneButton phone={d.provider.phone} name={d.provider.name} />
           </div>
-        </Section>
-      )}
-
-      <Section title="예약 금액·결제">
-        <BookingCostCard d={d} />
-      </Section>
-
-      <Section title="내 작업·방문 주소">
-        <div className="card stack">
-          {b.tasks.map((t) => <div key={t.id}><p className="strong">{t.title}</p>{t.description && <p className="small muted">{t.description}</p>}</div>)}
           <hr className="hr" />
-          <p className="small"><VisitAddressText va={d.visitAddress} /></p>
-          {/* 예약 확정 당시 이름·연락처(요청에서 복사한 스냅숏, 내 정보 수정과 무관) */}
-          {b.contact && <p className="small"><span className="muted">연락처</span> <ContactText c={b.contact} /></p>}
-          <p className="xs muted">정확한 주소와 연락처는 나와 이 업체만 볼 수 있어요.</p>
-          {/* 최초 요청 내용과 업체 응답 기록(원본은 지우지 않는다). 비교 요청이면 다른 업체 응답·종료 사유도 볼 수 있다 */}
-          {d.origin && (
-            <p className="small row row--wrap" style={{ gap: 'var(--sp-3)' }}>
-              <Link to={`/requests/${d.origin.requestId}`}>최초 요청 내용 보기</Link>
-              {d.origin.bundleSize > 1 && <Link to={`/requests/bundle/${d.origin.bundleId}`}>비교 요청 보기 · 업체 {d.origin.bundleSize}곳</Link>}
-            </p>
-          )}
-        </div>
-      </Section>
 
-      {(d.materials.length > 0 || d.additionalWorks.length > 0) && (
-        <Section title="자재·추가 작업">
-          <ul className="card card--flush divided">
-            {d.materials.map((m) => (
-              <li key={m.id}>
-                <Link to={`/materials/${m.id}`} className="list-row">
-                  <div className="list-row__main">
-                    <span className="list-row__title">{m.name}</span>
-                    <span className="small muted">{m.spec} · {m.quantity}개 · 납기 {formatDate(m.deliveryDate)}</span>
-                    <span className="small muted">결제 {m.paymentStatus === 'none' ? '전' : PAYMENT_STATUS[m.paymentStatus].label} · 주문 {m.orderStatus === 'ordered' ? '완료' : '전'}</span>
-                  </div>
-                  {m.paymentStatus === 'none' ? <Badge tone="action">동의 필요</Badge> : <Icon name="chevron" size={18} />}
-                </Link>
-              </li>
-            ))}
-            {d.additionalWorks.map((w) => (
-              <li key={w.id}>
-                <Link to={`/additional/${w.id}`} className="list-row">
-                  <div className="list-row__main"><span className="list-row__title">추가 작업 · {w.scope}</span></div>
-                  <Badge tone={w.status === 'agreed' ? 'success' : w.status === 'declined' ? 'neutral' : 'action'}>{w.status === 'agreed' ? '동의함' : w.status === 'declined' ? '동의하지 않음' : '동의 필요'}</Badge>
-                </Link>
-              </li>
-            ))}
-          </ul>
-          <p className="xs muted">금액은 ‘예약 금액·결제’에 합산돼요(동의·결제한 건만). 규격·납기·취소 조건은 각 항목에서 확인해요.</p>
-        </Section>
-      )}
-
-      {(d.proposals.length > 0 || history.length > 0) && (
-        <Section title="일정 변경">
-          <ul className="card card--flush divided">
-            {d.proposals.map((p) => (
-              <li key={p.id}>
-                <Link to={`/proposals/${p.id}`} className="list-row">
-                  <div className="list-row__main">
-                    <span className="list-row__title">{p.origin === 'provider' ? '업체 변경 제안' : '내 변경 요청'}</span>
-                    <span className="small muted">{formatVisit(p.oldVisit.date, p.oldVisit.time)} → {p.newVisit.time ? formatVisit(p.newVisit.date, p.newVisit.time) : `${formatDate(p.newVisit.date)} · 업체 제안 대기`}</span>
-                  </div>
-                  <Badge tone={p.status === 'accepted' ? 'success' : p.status === 'proposed' ? 'action' : p.status === 'requested' ? 'info' : 'neutral'}>
-                    {({ requested: '응답 대기', proposed: '확인 필요', accepted: '수락됨', rejected: '거절됨', withdrawn: '철회됨' } as const)[p.status]}
-                  </Badge>
-                </Link>
-              </li>
-            ))}
-          </ul>
-          {history.length > 0 && (
-            <div className="card stack--sm stack">
-              <h3 className="small">일정 변경 기록</h3>
-              <ul className="stack--sm stack">
-                {history.map((c) => (
-                  <li key={c.proposalId} className="small">
-                    <span className="nowrap">{formatVisit(c.from.date, c.from.time)}</span> → <span className="nowrap strong">{formatVisit(c.to.date, c.to.time)}</span>
-                    <br /><span className="xs muted">사유: {c.reason} · 고객 동의 {formatDateTime(c.consentedAt)}</span>
+          <div className="stack" id="work" tabIndex={-1}>
+            <ul className="stack">
+              {works.map((w) => {
+                const s = taskState(d, w.title);
+                return (
+                  <li key={w.key} className="stack--sm stack">
+                    <div className="row row--between row--top" style={{ gap: 'var(--sp-2)' }}>
+                      <p className="strong work-title">{w.title}</p>
+                      {s && <Badge tone={s.tone}>{s.label}</Badge>}
+                    </div>
+                    {w.description && <p className="small muted">{w.description}</p>}
+                  </li>
+                );
+              })}
+              {extraWorks.map((t) => <li key={t.id} className="small muted">{t.title} · 업체 작업 내역에 없음</li>)}
+            </ul>
+            {(d.materials.length > 0 || d.additionalWorks.length > 0) && (
+              <ul className="card card--flush divided">
+                {d.materials.map((m) => (
+                  <li key={m.id}>
+                    <Link to={`/materials/${m.id}`} className="list-row">
+                      <div className="list-row__main">
+                        <span className="list-row__title">자재 · {m.name}</span>
+                        <span className="small muted">{m.spec} · {m.quantity}개 · 납기 {formatDate(m.deliveryDate)}</span>
+                        <span className="small muted">결제 {m.paymentStatus === 'none' ? '전' : PAYMENT_STATUS[m.paymentStatus].label} · 주문 {m.orderStatus === 'ordered' ? '완료' : '전'}</span>
+                      </div>
+                      {m.paymentStatus === 'none' ? <Badge tone="action">동의 필요</Badge> : <Icon name="chevron" size={18} />}
+                    </Link>
+                  </li>
+                ))}
+                {d.additionalWorks.map((w) => (
+                  <li key={w.id}>
+                    <Link to={`/additional/${w.id}`} className="list-row">
+                      <div className="list-row__main"><span className="list-row__title">추가 작업 · {w.scope}</span></div>
+                      <Badge tone={w.status === 'agreed' ? 'success' : w.status === 'declined' ? 'neutral' : 'action'}>{w.status === 'agreed' ? '동의함' : w.status === 'declined' ? '동의하지 않음' : '동의 필요'}</Badge>
+                    </Link>
                   </li>
                 ))}
               </ul>
-            </div>
+            )}
+          </div>
+          <hr className="hr" />
+
+          {/* 현재 방문 일정 또는 방문 불가·협의 상태(진행 중인 제안의 비교·응답은 상단 카드에서만) */}
+          <KV rows={[
+            // 기존 방문 불가·새 일정 미확정이면 날짜 대신 ‘일정 협의 중’만(기존 날짜는 예약 세부 정보·변경 내역에 기록으로). 비교·사유·응답은 상단 카드에서만
+            sch.oldVisitUnavailable
+              ? { k: '방문 일정', v: bookingBadge(b, sch) }
+              : { k: visitLabel(b, sch), v: <span><VisitText date={b.visitDate} time={b.visitTime} strong />{d.delay && <> <Badge tone="warn">지연 안내</Badge></>}</span> },
+            // 지연 안내의 변경 도착 예상은 예약 방문 시각을 덮어쓰지 않고 따로 보여준다
+            ...(d.delay ? [{ k: '변경 도착 예상', v: <span className="nowrap">{formatDateTime(d.delay.newEta)}</span> }] : []),
+            ...(sch.kind !== 'normal' && !sch.oldVisitUnavailable && sch.label ? [{ k: '일정 변경', v: <span className="small">{sch.label}</span> }] : []),
+            ...(sch.oldVisitUnavailable ? [] : [{ k: '진행 상태', v: bookingBadge(b, sch) }]),
+            ...(b.followUp ? [{ k: '후속 방문', v: <span>{formatDate(b.followUp.date)}<br />{b.followUp.window}</span> }] : []),
+          ]} />
+          {b.followUp && <p className="small muted">{b.followUp.note}</p>}
+          <hr className="hr" />
+
+          <div className="stack--sm stack">
+            <p className="small"><VisitAddressText va={d.visitAddress} /></p>
+            {/* 예약 확정 당시 이름·연락처(요청에서 복사한 스냅숏, 내 정보 수정과 무관) */}
+            {b.contact && <p className="small"><span className="muted">연락처</span> <ContactText c={b.contact} /></p>}
+            <p className="xs muted">정확한 주소와 연락처는 나와 이 업체만 볼 수 있어요.</p>
+          </div>
+
+          {!cancelled && (
+            <>
+              <hr className="hr" />
+              <KV rows={[
+                { k: '공동 예약 참여 세대', v: `${d.group.confirmedHouseholds}세대` },
+                { k: '접수 상태', v: d.groupEnded ? '종료됨' : d.groupClosed ? '마감됨' : '접수 중' },
+              ]} />
+              {d.groupEnded && <Banner tone="warn" title="이 공동 예약은 종료됐어요" />}
+            </>
           )}
+
+          {/* 보조 정보: 방문 전에는 펼친 채로 보여준다 */}
+          <details className="disclosure" open={beforeVisit}>
+            <summary>예약 세부 정보<Icon name="chevron" size={16} /></summary>
+            <KV rows={[
+              ...(sch.oldVisitUnavailable ? [{ k: '기존 방문 일정(방문 불가)', v: <VisitText date={b.visitDate} time={b.visitTime} /> }] : []),
+              ...(b.customerSlots.length ? [{ k: '요청 시 방문 가능한 시간', v: slotsText(b.customerSlots) }] : []),
+              ...(!cancelled ? [{ k: '공동 예약 접수 마감', v: <span className="nowrap">{formatDateTime(d.group.closeAt)}</span> }] : []),
+            ]} />
+            {!cancelled && tf.kind === 'confirmed' && tf.households !== null && tf.households !== d.group.confirmedHouseholds && (
+              <p className="xs muted">마감 시 확정 세대는 {tf.households}세대였어요. 출장비는 마감 시 기준으로 확정돼요.</p>
+            )}
+            <p className="xs muted">방문 시각은 업체의 도착 예정 시각이에요. {DURATION_NOTE} 다른 세대의 주소·작업·사진은 보이지 않아요.</p>
+            {!showCost && (
+              <div className="stack--sm stack booking-paid">
+                <h3 className="small">결제한 금액</h3>
+                <KV rows={[
+                  ...c.payments.map((p) => ({ key: p.key, k: p.label, v: <span className="money">{formatWon(p.amount)}</span> })),
+                  ...(c.used.deducted ? [{ k: '공제·충당된 금액', v: <span className="money">{formatWon(c.used.deducted)}</span> }] : []),
+                  ...(c.used.refunded ? [{ k: '환불 요청한 금액', v: <span className="money">{formatWon(c.used.refunded)}</span> }] : []),
+                  { k: TRIP_LABEL[tf.kind], v: tf.amount === null ? <span className="cost__missing">확인 필요</span> : <span className="money">{formatWon(tf.amount)}</span> },
+                ]} />
+                {tf.groupTotal !== null && tf.households ? <p className="xs muted">출장비 = 그룹 총 출장비 {formatWon(tf.groupTotal)} ÷ {tf.households}세대{tf.kind === 'expected' ? '(현재 확정 세대, 마감 때 확정)' : '(마감 시 확정)'}</p> : null}
+                <PaymentRecords d={d} />
+                <p className="xs muted">작업이 끝나 업체가 최종 금액을 등록하면 정산 금액을 확인할 수 있어요.</p>
+              </div>
+            )}
+          </details>
+          {(doneProposals.length > 0 || history.length > 0) && (
+            <details className="disclosure">
+              <summary>일정 변경 내역<Icon name="chevron" size={16} /></summary>
+              <ul className="stack--sm stack">
+                {doneProposals.map((p) => (
+                  <li key={p.id} className="small">
+                    <span className="strong">{p.origin === 'provider' ? '업체 변경 제안' : p.replyTo ? '내 희망 일정 요청' : '내 변경 요청'}</span> · {PROPOSAL_STATUS[p.status]}{p.customerReply === 'other_requested' ? ' · 다른 일정 요청' : ''}
+                    <br /><span className="xs muted">{formatVisit(p.oldVisit.date, p.oldVisit.time)} → {p.newVisit.time ? formatVisit(p.newVisit.date, p.newVisit.time) : `${formatDate(p.newVisit.date)} ${p.newVisit.wishSlot ?? ''}`.trim()}{p.respondedAt ? ` · 응답 ${formatDateTime(p.respondedAt)}` : ''}</span>
+                  </li>
+                ))}
+                {history.map((h) => (
+                  <li key={`ch-${h.proposalId}`} className="small">
+                    <span className="strong">확정</span> · <span className="nowrap">{formatVisit(h.from.date, h.from.time)}</span> → <span className="nowrap strong">{formatVisit(h.to.date, h.to.time)}</span>
+                    <br /><span className="xs muted">사유: {h.reason} · 고객 동의 {formatDateTime(h.consentedAt)}</span>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
+          {d.origin && (
+            <details className="disclosure">
+              <summary>요청 당시 내용<Icon name="chevron" size={16} /></summary>
+              {origin.data ? (
+                <div className="stack">
+                  {origin.data.request.tasks.map((t) => (
+                    <div key={t.id} className="stack--sm stack">
+                      <p className="strong small">{t.title}</p>
+                      {t.description && <p className="small">{t.description}</p>}
+                      {t.photoNames.length > 0 && <div className="chips">{t.photoNames.map((n) => <span key={n} className="photo-chip"><Icon name="camera" size={14} />{n}</span>)}</div>}
+                    </div>
+                  ))}
+                  <KV rows={[
+                    { k: '요청일', v: formatDate(origin.data.request.createdAt.slice(0, 10)) },
+                    { k: '방문 가능한 시간', v: slotsText(origin.data.request.slots) },
+                    ...(COMPARE_REQUESTS_ENABLED && d.origin.bundleSize > 1 ? [{ k: '비교 요청', v: `업체 ${d.origin.bundleSize}곳에 보냄` }] : []),
+                  ]} />
+                </div>
+              ) : origin.error ? <p className="small muted">요청 당시 내용을 불러오지 못했어요.</p> : <p className="small muted">불러오는 중이에요</p>}
+            </details>
+          )}
+        </div>
+      </Section>
+
+      {/* 금액·정산(최종 금액 등록 후·기록이 있는 취소 예약만. 숨기면 영역·여백을 남기지 않는다) */}
+      {showCost && (
+        <Section title="금액·정산">
+          <BookingCostCard d={d} />
         </Section>
       )}
 
-      {(canChange || canCancel || d.review || (d.statement?.status === 'settled' && !d.review)) && (
-        <Section title="예약 관리">
-          <div className="stack--sm stack">
-            {canChange && <LinkButton to={`/bookings/${b.id}/change`} variant="secondary" block>날짜·시간 변경 요청</LinkButton>}
-            {canCancel && <LinkButton to={`/bookings/${b.id}/cancel`} variant="danger" block>예약 취소하기</LinkButton>}
-            {d.statement?.status === 'settled' && !d.review && <LinkButton to={`/bookings/${b.id}/review`} variant="primary" block>리뷰 작성하기</LinkButton>}
-            {d.review && <div className="card stack--sm stack"><p className="strong">내가 쓴 리뷰 <span className="stars" aria-label={`${d.review.rating}점`}>{'★'.repeat(d.review.rating)}</span></p><p className="small">{d.review.body}</p></div>}
-            {openProposal && !canChange && b.status === 'confirmed' && <p className="xs muted">진행 중인 변경 요청이 있어 새 변경은 할 수 없어요.</p>}
-          </div>
-        </Section>
-      )}
+      {d.review && <div className="card stack--sm stack"><p className="strong">내가 쓴 리뷰 <span className="stars" aria-label={`${d.review.rating}점`}>{'★'.repeat(d.review.rating)}</span></p><p className="small">{d.review.body}</p></div>}
+
+      {/* 하단 버튼: 상태별 관리 행동 + 예약 목록으로(진행 중 → 확정된 예약, 이용 완료·취소 → 완료·취소) */}
+      <div className="detail-actions">
+        {canChange && <LinkButton to={`/bookings/${b.id}/change`} variant="secondary" block>날짜·시간 변경 요청</LinkButton>}
+        {d.statement?.status === 'settled' && !d.review && <LinkButton to={`/bookings/${b.id}/review`} variant="primary" block>리뷰 작성하기</LinkButton>}
+        {openProposal && !canChange && b.status === 'confirmed' && <p className="xs muted">진행 중인 일정 변경이 있어 새 변경 요청은 할 수 없어요.</p>}
+        <div className={`detail-actions__pair${canCancel ? '' : ' detail-actions__pair--single'}`}>
+          <LinkButton to={listPath(bookingTabOf(b))} variant="secondary" block>예약 목록으로</LinkButton>
+          {canCancel && <LinkButton to={`/bookings/${b.id}/cancel`} variant="danger" block>예약 취소하기</LinkButton>}
+        </div>
+        {providerFreeCancel && <p className="xs muted cancel-note">업체 사유로 무료 취소할 수 있어요. 공제 없이 선결제 전액이 환불돼요.</p>}
+      </div>
     </>
+  );
+}
+
+/** 이전 최종 금액 확인 주소(/bookings/:id/final) → 예약 상세의 금액·정산 영역(한 번만 바꿔 이동, 반복 없음) */
+export function FinalStatementRedirect() {
+  const { id = '' } = useParams();
+  return <Navigate to={{ pathname: `/bookings/${encodeURIComponent(id)}`, hash: 'settlement' }} replace />;
+}
+
+/** 이전 일정 변경 확인 주소(/proposals/:id) → 그 예약 상세의 일정 변경 영역(한 번만 바꿔 이동). 없는 제안이면 안내와 내 예약 경로 */
+export function ProposalRedirect() {
+  const { id = '' } = useParams();
+  const repo = useRepo();
+  const q = useAsync(() => repo.getProposal(id), [repo, id]);
+  if (q.data) return <Navigate to={{ pathname: `/bookings/${encodeURIComponent(q.data.booking.id)}`, hash: 'schedule-change' }} replace />;
+  return (
+    <Page title="일정 변경" back="/bookings">
+      {q.error ? (
+        <EmptyState icon="calendar" title="일정 변경 내역을 찾을 수 없어요" action={<LinkButton to={listPath('active')} variant="primary">확정된 예약 보기</LinkButton>}>
+          주소가 잘못됐거나 확인할 수 없는 내역이에요.
+        </EmptyState>
+      ) : <LoadingBlock />}
+    </Page>
   );
 }
 
 export function BookingDetailPage() {
   const { id = '' } = useParams();
   const repo = useRepo();
+  const loc = useLocation();
   const q = useAsync(() => repo.getBooking(id), [repo, id]);
+  const ready = !!q.data;
+  // #settlement·#schedule-change(알림·이전 주소)로 들어오면 그 영역으로 한 번 스크롤·포커스한다(영역이 없으면 위에서 시작)
+  useEffect(() => {
+    if (!ready || (loc.hash !== '#settlement' && loc.hash !== '#schedule-change')) return;
+    const el = document.getElementById(loc.hash.slice(1));
+    if (el) { el.scrollIntoView({ block: 'start' }); el.focus({ preventScroll: true }); }
+  }, [ready, loc.hash, loc.key]);
   return (
-    <Page title="예약 상세" back={q.data ? listPath(bookingTabOf(q.data.booking)) : '/bookings'} progress={q.data && <ProgressSteps progress={progressOfBooking(q.data.booking)} />}>
-      <AsyncView state={q}>{(d) => (
-        <>
-          <Body d={d} />
-          <p className="xs muted"><Link to={listPath(bookingTabOf(d.booking))}>{LIST_LINK_LABEL[bookingTabOf(d.booking)]}</Link></p>
-        </>
-      )}</AsyncView>
+    <Page title="예약 상세" back={q.data ? listPath(bookingTabOf(q.data.booking)) : '/bookings'}
+      progress={q.data && <ProgressSteps progress={progressOfBooking(q.data.booking)} />}>
+      <AsyncView state={q}>{(d) => <Body d={d} />}</AsyncView>
     </Page>
   );
 }

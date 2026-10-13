@@ -20,7 +20,7 @@ function nextLinks(d: TransactionDetail): { primary?: { to: string; label: strin
       if (ok && !d.bookingId) return { secondary: { to: listPath('requests'), label: '보낸 요청 목록' } };
       // 결제 성공 + 예약 생성: 생성된 예약 상세 / 확정된 예약 목록. 실패·확인 중: 승인 내용 / 보낸 요청 목록
       return ok && d.bookingId ? { primary: { to: `/bookings/${d.bookingId}`, label: '예약 확인하기' }, secondary: { to: listPath('active'), label: '확정된 예약 목록' } }
-        : { primary: { to: d.requestId ? `/requests/${d.requestId}/approval` : listPath('requests'), label: '승인 내용으로 돌아가기' }, secondary: { to: listPath('requests'), label: '보낸 요청 목록' } };
+        : { primary: { to: d.requestId ? `/requests/${d.requestId}#pay` : listPath('requests'), label: '요청 상세에서 다시 확인하기' }, secondary: { to: listPath('requests'), label: '보낸 요청 목록' } };
     case 'material_prepay':
       return { primary: { to: d.bookingId ? `/bookings/${d.bookingId}` : '/bookings', label: '예약 상세 보기' } };
     case 'change_shortfall':

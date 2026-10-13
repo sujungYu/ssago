@@ -1,3 +1,4 @@
+import { COMPARE_REQUESTS_ENABLED } from '../../domain/demoScope';
 import { describe, expect, it } from 'vitest';
 import { MockRepository } from './mockRepository';
 import { DevController } from '../../dev/devController';
@@ -90,7 +91,17 @@ describe('내 예약 탭 노출(중복 없음)', () => {
     expect(sent).not.toContain('rq-8');
     expect((await r.queryRequests({})).hasAnyRequest).toBe(true);
   });
-  it('결제 실패·결과 확인 중은 보낸 요청 유지, 결제 성공이면 묶음째 빠지고 그 예약만 확정된 예약에', async () => {
+  it.skipIf(COMPARE_REQUESTS_ENABLED)('데모(개별 요청): 결제 성공한 요청만 예약으로 옮기고, 같은 묶음의 다른 업체 요청은 종료하지 않고 보낸 요청에 남는다(묶음·출처 기록 보존)', async () => {
+    const r = repo();
+    await pay(r, 'rq-3', 'k-ok');
+    const bk = (await r.getRequest('rq-3')).request.bookingId!;
+    expect(await sentRequestIds(r)).not.toContain('rq-3');
+    expect(await sentRequestIds(r)).toContain('rq-4');
+    expect((await r.getRequest('rq-4')).request.status).toBe('approved_pending_payment');
+    expect(await bookingIds(r, 'active')).toContain(bk);
+    expect((await r.getBooking(bk)).origin).toEqual({ requestId: 'rq-3', bundleId: 'b-sink', bundleSize: 2 });
+  });
+  it.skipIf(!COMPARE_REQUESTS_ENABLED)('결제 실패·결과 확인 중은 보낸 요청 유지, 결제 성공이면 묶음째 빠지고 그 예약만 확정된 예약에', async () => {
     const r = repo();
     const dev = new DevController(r);
     dev.setSettings({ payOutcome: 'fail' });
@@ -117,7 +128,7 @@ describe('내 예약 탭 노출(중복 없음)', () => {
     expect(bundle.items.map((i) => [i.request.id, i.request.status])).toEqual(expect.arrayContaining([['rq-3', 'booked'], ['rq-4', 'closed_other_booking']]));
     expect((await r2.getBooking(bk)).origin).toEqual({ requestId: 'rq-3', bundleId: 'b-sink', bundleSize: 2 });
   });
-  it('확정 후 취소 → 완료·취소에만, 비교 요청 묶음은 보낸 요청으로 돌아오지 않고 다른 업체 요청도 다시 열리지 않는다', async () => {
+  it.skipIf(!COMPARE_REQUESTS_ENABLED)('확정 후 취소 → 완료·취소에만, 비교 요청 묶음은 보낸 요청으로 돌아오지 않고 다른 업체 요청도 다시 열리지 않는다', async () => {
     const r = repo();
     await pay(r, 'rq-3', 'k-ok');
     const bk = (await r.getRequest('rq-3')).request.bookingId!;

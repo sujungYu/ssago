@@ -1,22 +1,22 @@
-import { useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { DepositPaySection } from '../payment/ApprovalPage';
+import { COMPARE_REQUESTS_ENABLED } from '../../domain/demoScope';
+import { useEffect, useState } from 'react';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Page } from '../../app/Page';
 import { useRepo } from '../../app/context';
 import { useAction, useAsync } from '../../app/hooks';
 import { REQUEST_STATUS } from '../../domain/rules';
-import { formatDate, formatDateTime, formatRemaining } from '../../domain/time';
-import { formatWon } from '../../domain/money';
+import { formatDate, formatDateTime } from '../../domain/time';
 import { Icon } from '../../components/Icon';
 import { AsyncView, Banner, Button, Dialog, KV, LinkButton, PhoneButton, Section } from '../../components/ui';
 import type { RequestDetail } from '../../data/repositories/types';
 import { RequestBadge } from './RequestsPage';
 import { progressOfRequest, unlessComplete } from '../../domain/progressStep';
 import { ProgressSteps } from '../../components/ProgressSteps';
-import { ContactText, VisitAddressText, VisitText, slotsText } from '../shared';
-import { DURATION_NOTE } from '../../domain/visitTime';
+import { ContactText, VisitAddressText, slotsText } from '../shared';
 import { isConvertedToBooking, listPath } from '../../domain/reservationTabs';
 
-function Body({ d, now }: { d: RequestDetail; now: string }) {
+function Body({ d }: { d: RequestDetail }) {
   const repo = useRepo();
   const nav = useNavigate();
   const action = useAction();
@@ -27,21 +27,33 @@ function Body({ d, now }: { d: RequestDetail; now: string }) {
   // 철회 가능한 상태(기존 정책 그대로): 결제 전 진행 중 요청만. 예약 확정·종료된 요청에는 철회 버튼이 없다(확정 예약 취소는 예약 상세에서).
   const canWithdraw = ['reviewing', 'needs_info', 'approved_pending_payment'].includes(r.status) && !isConvertedToBooking(r);
   // 비교 요청(같은 묶음에 업체 2곳 이상)이면 철회 확인에 ‘다른 업체에 보낸 요청은 유지돼요.’를 덧붙인다
-  const bundle = useAsync(() => (canWithdraw ? repo.getBundle(r.bundleId) : Promise.resolve(null)), [repo, r.bundleId, canWithdraw]);
+  // 비교 요청을 쓰지 않는 데모에서는 묶음을 조회하지 않는다(개별 업체 요청)
+  const bundle = useAsync(() => (canWithdraw && COMPARE_REQUESTS_ENABLED ? repo.getBundle(r.bundleId) : Promise.resolve(null)), [repo, r.bundleId, canWithdraw]);
   const isCompare = !!bundle.data && new Set(bundle.data.items.map((i) => i.provider.id)).size > 1;
 
   return (
     <>
-      {/* 업체 검토 중은 상단 진행 단계(‘업체 검토·견적’ + 같은 설명)와 겹치므로 상태 배지·설명을 따로 두지 않는다. 다른 상태는 그대로 */}
-      {r.status !== 'reviewing' && (
+      {/* 업체 검토 중은 상단 진행 단계와 겹치고, 추가 정보 필요는 아래 ‘보완 필요’ 카드가 대신하므로 상태 배지·설명을 따로 두지 않는다. 다른 상태는 그대로 */}
+      {r.status !== 'reviewing' && r.status !== 'needs_info' && (
         <div className="stack--sm stack">
           <div className="row row--wrap"><RequestBadge status={r.status} recheck={!!ap?.recheck && r.status === 'approved_pending_payment'} /></div>
           <p className="small muted">{meta.hint}</p>
         </div>
       )}
 
-      {r.status === 'needs_info' && r.infoRequest && (
-        <Banner tone="warn" title="업체가 확인하고 싶은 내용이 있어요">{r.infoRequest.message}</Banner>
+      {/* 보완 요청(추가 정보 필요)일 때만: 배지 · 제목 · 업체명과 실제 요청 내용 · 보완 버튼을 한 카드에(하단 같은 버튼 없음) */}
+      {r.status === 'needs_info' && (
+        <section className="card stack--sm stack info-req" aria-labelledby="info-req-title">
+          <div><span className="badge badge--orange">보완 필요</span></div>
+          <h2 id="info-req-title" className="info-req__title">요청서를 보완해 주세요</h2>
+          <p className="small muted">{d.provider.name}의 요청{r.infoRequest ? ` · ${formatDateTime(r.infoRequest.requestedAt)}` : ''}</p>
+          {r.infoRequest
+            ? <p className="info-req__msg">{r.infoRequest.message}</p>
+            : <p className="info-req__msg muted">요청 내용을 불러오지 못했어요. 업체에 전화로 확인해 주세요.</p>}
+          <div className="info-req__actions">
+            <LinkButton to={`/requests/${r.id}/supplement`} variant="primary">요청서 보완하기</LinkButton>
+          </div>
+        </section>
       )}
       {r.status === 'reviewing' && r.infoRequest?.response && <Banner tone="info" title="보완한 내용을 업체가 확인하고 있어요">{r.infoRequest.response.message}</Banner>}
       {r.status === 'rejected' && <Banner tone="danger" title="업체가 거절했어요">{r.rejectionReason ?? '사유가 전달되지 않았어요.'} 취소수수료는 없어요. 다른 업체에 요청할 수 있어요.</Banner>}
@@ -49,21 +61,8 @@ function Body({ d, now }: { d: RequestDetail; now: string }) {
       {r.status === 'closed_other_booking' && <Banner tone="info" title="같은 작업으로 다른 업체 예약이 확정됐어요">이 요청은 취소수수료 없이 종료됐어요.</Banner>}
       {r.status === 'withdrawn' && <Banner tone="info" title="직접 철회한 요청이에요">취소수수료는 없어요.</Banner>}
 
-      {r.status === 'approved_pending_payment' && ap && (
-        <div className="card stack">
-          <h3>업체가 승인했어요</h3>
-          <KV rows={[
-            ap.recheck
-              ? { k: '업체가 제안한 방문 시각', v: <VisitText date={ap.recheck.newVisitDate} time={ap.recheck.newVisitTime} strong /> }
-              : { k: '업체가 제안한 방문 시각', v: <VisitText date={ap.visitDate} time={ap.visitTime} strong /> },
-            { k: '방문 가능한 시간', v: slotsText(r.slots) },
-            { k: '결제 기한', v: <span className="nowrap">{formatDateTime(ap.paymentDeadline)}</span> },
-            { k: '남은 시간', v: formatRemaining(now, ap.paymentDeadline) },
-            { k: '예약금', v: <span className="money strong">{formatWon(ap.recheck?.newDepositAmount ?? ap.depositAmount)}</span> },
-          ]} />
-          <p className="xs muted">승인만으로는 예약이 확정되지 않아요. 결제 기한 안에 예약금을 결제하면 업체가 제안한 방문 시각으로 확정돼요. 방문 시각은 도착 예정 시각이며, {DURATION_NOTE}</p>
-        </div>
-      )}
+      {/* 승인·결제 대기: 조건 확인·동의와 예약금 결제를 이 화면에서(별도 승인 조건 화면 없음) */}
+      {r.status === 'approved_pending_payment' && ap && <DepositPaySection requestId={r.id} />}
       {r.status === 'booked' && (
         <div className="card stack--sm stack done-summary" role="status">
           <p className="strong"><span className="done-summary__mark" aria-hidden>✓</span> 예약 완료 · 요청 과정이 끝났어요</p>
@@ -124,12 +123,6 @@ function Body({ d, now }: { d: RequestDetail; now: string }) {
           예약으로 이어진 요청은 보낸 요청 목록에 없으므로 목록 버튼 대신 위 ‘예약 보기’로 이동한다. */}
       {!isConvertedToBooking(r) && (
         <div className="detail-actions">
-          {r.status === 'needs_info' && <LinkButton to={`/requests/${r.id}/supplement`} variant="primary" block>요청서 보완하기</LinkButton>}
-          {r.status === 'approved_pending_payment' && (
-            <LinkButton to={ap?.recheck ? `/requests/${r.id}/recheck` : `/requests/${r.id}/approval`} variant="primary" block>
-              {ap?.recheck ? '새 예약 조건 확인하기' : '승인 조건 확인하고 결제하기'}
-            </LinkButton>
-          )}
           <div className={`detail-actions__pair${canWithdraw ? '' : ' detail-actions__pair--single'}`}>
             <LinkButton to={listPath('requests')} variant="secondary" block>보낸 요청 목록으로</LinkButton>
             {canWithdraw && <Button variant="danger" block onClick={() => setConfirm(true)}>이 업체 요청 철회하기</Button>}
@@ -164,9 +157,20 @@ export function RequestDetailPage() {
   const { id = '' } = useParams();
   const repo = useRepo();
   const q = useAsync(() => repo.getRequest(id), [repo, id]);
+  const loc = useLocation();
+  const ready = !!q.data;
+  // 결제 대기 중 예약금 결제가 처리 중·결과 확인 중이면 진행 단계 설명도 ‘결과 확인 중’으로(이전 승인 조건 화면과 같은 기준)
+  const pending = q.data?.request.status === 'approved_pending_payment';
+  const inFlight = useAsync(() => (pending ? repo.getApproval(id).then((v) => !!v.inFlightPayment, () => false) : Promise.resolve(false)), [repo, id, pending]);
+  // #pay(알림·이전 승인 조건 주소)로 들어오면 예약금 결제 영역이 그려진 뒤 한 번 스크롤·포커스한다
+  useEffect(() => {
+    if (!ready || loc.hash !== '#pay') return;
+    const t = window.setTimeout(() => { const el = document.getElementById('pay'); if (el) { el.scrollIntoView({ block: 'start' }); el.focus({ preventScroll: true }); } }, 400);
+    return () => window.clearTimeout(t);
+  }, [ready, loc.hash, loc.key]);
   return (
-    <Page title="요청 상세" back={backOf(q.data)} progress={q.data && <ProgressSteps progress={unlessComplete(progressOfRequest(q.data.request.status))} />}>
-      <AsyncView state={q}>{(d) => <Body d={d} now={repo.now()} />}</AsyncView>
+    <Page title="요청 상세" back={backOf(q.data)} progress={q.data && <ProgressSteps progress={unlessComplete(progressOfRequest(q.data.request.status, { inFlight: !!inFlight.data }))} />}>
+      <AsyncView state={q}>{(d) => <Body d={d} />}</AsyncView>
     </Page>
   );
 }

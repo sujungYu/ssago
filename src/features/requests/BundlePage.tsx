@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import { Page } from '../../app/Page';
 import { useAppState, useRepo } from '../../app/context';
 import { useAsync } from '../../app/hooks';
@@ -13,7 +13,7 @@ import {
 } from '../../domain/bundleFilter';
 import type { RequestDetail } from '../../data/repositories/types';
 import type { RequestStatus } from '../../domain/types';
-import { AsyncView, Banner, Button, KV, LinkButton, Section } from '../../components/ui';
+import { AsyncView, Banner, Button, KV, LinkButton, LoadingBlock, Section } from '../../components/ui';
 import { CapsuleButton, OptionPicker } from '../../components/filters';
 import { RequestBadge } from './RequestsPage';
 import { VisitText } from '../shared';
@@ -49,13 +49,13 @@ function ResponseCard({ d, now }: { d: RequestDetail; now: string }) {
         <KV rows={[
           { k: '방문 예정', v: <VisitText date={visitDate} time={visitTime} /> },
           { k: '예상 총금액', v: est.total === null ? <span className="strong">금액 확인 필요</span> : <span className="money strong">약 {formatWon(est.total)}</span> },
-          { k: '결제 기한', v: <span className="nowrap" title={formatDateTime(ap.paymentDeadline)}>{formatRemaining(now, ap.paymentDeadline)}</span> },
+          { k: '예약금 결제 기한', v: <span className="nowrap" title={formatDateTime(ap.paymentDeadline)}>{formatRemaining(now, ap.paymentDeadline)}</span> },
         ]} />
         <p className="xs muted resp-card__note">
           {ap.recheck ? '새 그룹 조건이라 출장비를 혼자 부담할 수도 있어요.' : '출장비는 마감 때 확정된 세대 수로 정해져요.'}
           {est.discountNote && ' 업체 할인 조건은 상세에서 확인해요.'}
         </p>
-        <LinkButton to={ap.recheck ? `/requests/${r.id}/recheck` : `/requests/${r.id}/approval`} variant="primary" block>상세 조건 보기</LinkButton>
+        <LinkButton to={`/requests/${r.id}#pay`} variant="primary" block>상세 조건 보기</LinkButton>
       </article>
     );
   }
@@ -150,4 +150,17 @@ export function BundlePage() {
       </AsyncView>
     </Page>
   );
+}
+
+/**
+ * 비교 요청을 쓰지 않는 데모(COMPARE_REQUESTS_ENABLED = false)의 이전 비교 요청 주소(/requests/bundle/:id):
+ * 업체 요청이 하나면 그 요청 상세로, 여러 업체면 보낸 요청 목록(개별 요청으로 보임)으로 한 번 바꿔 이동한다. 없는 묶음도 목록으로.
+ */
+export function BundleRedirect() {
+  const { bundleId = '' } = useParams();
+  const repo = useRepo();
+  const q = useAsync(() => repo.getBundle(bundleId), [repo, bundleId]);
+  if (q.error) return <Navigate to={listPath('requests')} replace />;
+  if (q.data) return <Navigate to={q.data.items.length === 1 ? `/requests/${q.data.items[0].request.id}` : listPath('requests')} replace />;
+  return <Page title="보낸 요청" back={listPath('requests')}><LoadingBlock /></Page>;
 }

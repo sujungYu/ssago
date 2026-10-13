@@ -277,7 +277,8 @@ function addDeduction(bookingId: string, kind: Deduction['kind'], amount: Won, l
 function addStatement(bookingId: string, status: FinalStatement['status'], items: StatementItem[], extra: Partial<FinalStatement> = {}) {
   statements.push({
     id: `st-${bookingId}`, bookingId, version: 1, status, items,
-    actualWork: [{ title: '요청한 작업 전체', done: true }], ...extra,
+    // 실제 작업 내역은 예약 작업별로 업체가 등록한 완료 여부(요청 작업 전체를 한 줄로 완료 처리하지 않는다)
+    actualWork: bookings.find((b) => b.id === bookingId)!.tasks.map((t) => ({ title: t.title, done: true })), ...extra,
   });
 }
 
@@ -350,6 +351,8 @@ const db: MockDb = {
   proposals: [
     {
       id: 'pr-k4', bookingId: 'bk-k4', origin: 'provider', status: 'proposed', free: 'provider',
+      // 이전 작업 지연으로 기존 일정(10/14 14:00)에는 방문할 수 없다고 업체가 지정(사유 문장으로 추측하지 않음)
+      oldVisitAvailable: 'no',
       // 고객 가능 시간(13:00~16:00) 밖의 새 시각 — 기존 범위는 고치지 않고, 이 제안에 고객이 동의해야만 바뀐다
       oldVisit: { date: ymd('10-14'), time: '14:00' }, newVisit: { date: ymd('10-19'), time: '10:00', groupId: 'gn-p5' },
       reason: '이전 작업이 길어져 같은 날 방문이 어려워졌어요.',

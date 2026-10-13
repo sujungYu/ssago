@@ -36,7 +36,7 @@ export function ReviewPage() {
           <form className="stack stack--lg" noValidate onSubmit={(e) => {
             e.preventDefault(); setTouched(true);
             if (!rating || !body.trim()) return;
-            void action.run(async () => { await repo.createReview({ bookingId: id, rating, body: body.trim(), photoNames: photos, idempotencyKey: key.get() }); nav(`/bookings/${id}`, { state: { flash: '리뷰를 등록했어요.' } }); });
+            void action.run(async () => { await repo.createReview({ bookingId: id, rating, body: body.trim(), photoNames: photos, idempotencyKey: key.get() }); nav(`/bookings/${id}`, { replace: true, state: { flash: '리뷰를 등록했어요.' } }); });
           }}>
             <p><b>{c.providerName}</b> 이용은 어떠셨나요?</p>
             <fieldset className="stack--sm stack" style={{ border: 0, margin: 0, padding: 0 }}>

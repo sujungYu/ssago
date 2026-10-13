@@ -27,7 +27,8 @@ describe('내 예약 조회(queryBookings)', () => {
   });
   it('처리·철회된 제안은 확인 필요에서 빠진다', async () => {
     const r = repo();
-    await r.respondToProposal('pr-k4', 'reject', 'rej-f');
+    // 기존 방문 불가 제안에 다른 일정을 요청하면 업체 응답 대기(고객 행동 아님)
+    await r.requestOtherSchedule({ proposalId: 'pr-k4', date: '2026-10-22', time: '10:00', idempotencyKey: 'oth-f' });
     expect(ids(await r.queryBookings({ tab: 'active', actionRequiredOnly: true }))).not.toContain('bk-k4');
     // 고객이 낸 변경 요청(업체 응답 대기)·철회는 고객 행동이 아님
     const p = await r.requestChange({ bookingId: 'bk-k1', kind: 'time', newSlot: '16:00–19:00', reason: '일정', idempotencyKey: 'chg-f' });

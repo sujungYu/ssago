@@ -1,3 +1,5 @@
+import { COMPARE_REQUESTS_ENABLED } from '../../domain/demoScope';
+import { requestInRequestsTab } from '../../domain/reservationTabs';
 import { describe, expect, it } from 'vitest';
 import { MockRepository } from './mockRepository';
 import { RepoError } from '../../domain/errors';
@@ -90,8 +92,8 @@ describe('결제·예약 확정', () => {
     const b = await r.simulateDepositPayment({ requestId: 'rq-3', approvalVersion: ap.approval.version, idempotencyKey: 'pay-1' });
     expect(b.tx.id).toBe(a.tx.id);
     expect(r.__db().transactions.filter((t) => t.requestId === 'rq-3' && t.kind === 'deposit')).toHaveLength(1);
-    // 같은 비교 묶음의 다른 업체 요청은 종료
-    expect((await r.getRequest('rq-4')).request.status).toBe('closed_other_booking');
+    // 같은 비교 묶음의 다른 업체 요청: 비교 요청을 쓰면 종료, 데모(개별 요청)에서는 그대로
+    expect((await r.getRequest('rq-4')).request.status).toBe(COMPARE_REQUESTS_ENABLED ? 'closed_other_booking' : 'approved_pending_payment');
   });
   it('결제 실패 → 예약 미확정, 재시도 가능', async () => {
     const r = repo(); r.__db().settings.payOutcome = 'fail';
@@ -214,7 +216,7 @@ describe('계정별 목업 상태', () => {
 });
 
 describe('보낸 요청 필터 조회', () => {
-  it('전체 기간·전체 상태는 예약으로 이어지지 않은 묶음 전부(전체 목록에서 예약된 묶음만 뺌)', async () => {
+  it.skipIf(!COMPARE_REQUESTS_ENABLED)('전체 기간·전체 상태는 예약으로 이어지지 않은 묶음 전부(전체 목록에서 예약된 묶음만 뺌)', async () => {
     const r = repo();
     const [all, res] = await Promise.all([r.listRequests(), r.queryRequests({})]);
     expect(res.hasAnyRequest).toBe(true);
@@ -223,7 +225,22 @@ describe('보낸 요청 필터 조회', () => {
     expect(unbooked.length).toBeLessThan(all.length);
     expect(res.bundles.every((b) => b.hiddenItemCount === 0)).toBe(true);
   });
-  it('비교 묶음은 조건에 맞는 업체 요청만 보여주고, 묶음 상세에는 모두 남는다', async () => {
+  it.skipIf(COMPARE_REQUESTS_ENABLED)('데모(개별 요청): 보낸 요청은 업체별 요청 하나씩, 건수 = 요청 수, 비교 결과(다른 업체 예약으로 종료)는 빼고 묶음 데이터는 보존', async () => {
+    const r = repo();
+    const res = await r.queryRequests({});
+    expect(res.bundles.every((b) => b.items.length === 1 && b.hiddenItemCount === 0)).toBe(true);
+    const ids = res.bundles.map((b) => b.items[0].request.id);
+    expect(ids).toEqual(expect.arrayContaining(['rq-3', 'rq-4']));
+    expect(ids).not.toContain('rq-8');
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids.sort()).toEqual(r.__db().requests.filter(requestInRequestsTab).map((x) => x.id).sort());
+    await r.withdrawRequest('rq-4');
+    const w = await r.queryRequests({ statuses: ['withdrawn'] });
+    expect(w.bundles.map((b) => b.items[0].request.id)).toContain('rq-4');
+    expect(w.bundles.flatMap((b) => b.items).some((i) => i.request.id === 'rq-3')).toBe(false);
+    expect((await r.getBundle('b-sink')).items).toHaveLength(2); // 원본 묶음 데이터 보존
+  });
+  it.skipIf(!COMPARE_REQUESTS_ENABLED)('비교 묶음은 조건에 맞는 업체 요청만 보여주고, 묶음 상세에는 모두 남는다', async () => {
     const r = repo();
     // b-sink: rq-3·rq-4 모두 승인 완료·결제 대기. 한쪽을 철회해 상태를 나눈다.
     await r.withdrawRequest('rq-4');

@@ -7,9 +7,12 @@ import { detailError, toVisitAddress } from '../../domain/address';
 import { maskPhone, normalizeContact } from '../../domain/profile';
 import type { TripFeeBasis } from '../../domain/bookingCost';
 import { filterBookings, tabOf, type BookingListQuery, type PendingAction } from '../../domain/bookingFilter';
-import { bundleInRequestsTab } from '../../domain/reservationTabs';
+import { bundleInRequestsTab, requestInRequestsTab } from '../../domain/reservationTabs';
+import { COMPARE_REQUESTS_ENABLED } from '../../domain/demoScope';
 import { resolveSelectedTasks } from '../../domain/taskSelection';
-import { NEW_DATE_WINDOWS, isValidRequestTimes } from '../../domain/visitTime';
+import { NEW_DATE_WINDOWS, isValidRequestTimes, isValidVisitTime } from '../../domain/visitTime';
+import { canRequestOther, isLatestOpen, scheduleStateOf } from '../../domain/scheduleChange';
+import { seoulYmd } from '../../domain/time';
 import type {
   AdditionalWork, Booking, Category, ChangeProposal, CustomerContact, CustomerProfile, DelayNotice, FinalStatement, Address,
   ProviderDetail, ProviderSummary, RepairRequest, Review, Transaction, Won, GroupRecord, SavedVisitAddress, IsoDate, PublicGroup,
@@ -304,7 +307,11 @@ export class MockRepository implements Repository {
     // 목업은 전체를 메모리에서 거른다. 서버 구현은 같은 조건을 조회 쿼리에 넣는다.
     return this.read(() => {
       // 보낸 요청 탭: 예약으로 이어진 요청이 있는 묶음은 통째로 뺀다(그 예약은 예약 탭에만 보인다). 원본 요청은 지우지 않는다.
-      const all = this.bundleList().filter((b) => bundleInRequestsTab(b.items.map((i) => i.request)));
+      const all = COMPARE_REQUESTS_ENABLED
+        ? this.bundleList().filter((b) => bundleInRequestsTab(b.items.map((i) => i.request)))
+        // 비교 요청을 쓰지 않는 데모: 업체별 개별 요청 하나씩(묶음 데이터는 보존, 목록·건수만 개별 요청 기준)
+        : [...this.db.requests].filter(requestInRequestsTab).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+          .map((r) => ({ bundleId: r.bundleId, taskTitles: r.tasks.map((t) => t.title), items: [this.reqListItem(r)], updatedAt: r.updatedAt }));
       return { bundles: filterRequestBundles(all, query), hasAnyRequest: all.length > 0 };
     });
   }
@@ -461,7 +468,11 @@ export class MockRepository implements Repository {
       return rf ? (rf.status === 'completed' ? '환불 처리가 완료됐어요' : '환불 처리 중이에요') : null;
     }
     if (db.delays.some((d) => d.bookingId === b.id && d.status === 'open')) return '방문이 지연되고 있어요 · 대응을 선택해 주세요';
-    if (db.proposals.some((p) => p.bookingId === b.id && p.status === 'proposed')) return '일정 변경 제안을 확인해 주세요';
+    // 일정 변경: 목록·상세 공통 기준(scheduleStateOf)
+    const sch = scheduleStateOf(b, db.proposals);
+    if (sch.kind === 'provider_proposed') return sch.oldVisitUnavailable ? '방문 일정 변경이 필요해요 · 새 일정을 확인해 주세요' : '일정 변경 제안을 확인해 주세요';
+    if (sch.kind === 'customer_request_agreed') return '일정 변경 동의 · 새 일정을 확인해 주세요';
+    if (sch.kind === 'negotiating' || sch.kind === 'unavailable_open') return sch.label;
     if (db.transactions.some((t) => t.bookingId === b.id && (t.status === 'processing' || t.status === 'unknown'))) return '결제 결과를 확인 중이에요';
     if (db.materials.some((m) => m.bookingId === b.id && m.paymentStatus === 'none')) return '자재 조건을 확인하고 동의해 주세요';
     if (db.additionalWorks.some((w) => w.bookingId === b.id && w.status === 'proposed')) return '추가 작업 동의가 필요해요';
@@ -492,6 +503,7 @@ export class MockRepository implements Repository {
       return {
         booking: b, providerName: this.provider(b.providerId).name, attention: this.attention(b), pendingActions: this.pendingActionsOf(b),
         groupClosed: this.group(b.groupId).closed, tripFee: { kind: tf.kind, amount: tf.amount },
+        schedule: scheduleStateOf(b, this.db.proposals),
       };
     });
   }
@@ -531,6 +543,7 @@ export class MockRepository implements Repository {
         prepaid: prepaidOf(this.db, b.id),
         delay: this.db.delays.find((d) => d.bookingId === b.id && d.status === 'open'),
         proposals: this.db.proposals.filter((x) => x.bookingId === b.id),
+        schedule: scheduleStateOf(b, this.db.proposals),
         materials: this.db.materials.filter((m) => m.bookingId === b.id),
         additionalWorks: this.db.additionalWorks.filter((w) => w.bookingId === b.id),
         statement: this.db.statements.find((s) => s.bookingId === b.id),
@@ -621,8 +634,13 @@ export class MockRepository implements Repository {
         return { proposal: p, tx: t, booking: this.booking(p.bookingId) };
       }
       if (p.status !== 'proposed') throw new RepoError('change_stale');
+      if (!isLatestOpen(p, this.db.proposals)) throw new RepoError('change_stale'); // 이전 제안에는 응답할 수 없다
       const b = this.booking(p.bookingId);
+      if (b.status !== 'confirmed') throw new RepoError('request_ended');
       if (decision === 'reject') {
+        // 기존 일정에 방문할 수 없는(또는 확인이 필요한) 제안은 ‘거절 = 기존 일정 유지’가 될 수 없다 → 수락하거나 다른 일정을 요청한다
+        if (canRequestOther(p)) throw new RepoError('invalid');
+        p.respondedAt = this.db.now;
         // 거절하면 기존 예약(날짜·방문 시각)을 그대로 둔다. 자동 변경·자동 취소하지 않는다.
         // 업체 사유 제안을 거절한 경우 고객은 다른 일정을 협의하거나 업체 사유 무료 취소를 직접 선택한다(freeCancelReasonOf).
         this.db.keyed[idempotencyKey] = id;
@@ -644,6 +662,35 @@ export class MockRepository implements Repository {
       this.db.keyed[idempotencyKey] = id;
       finalizeProposalAccept(this.db, p);
       return { proposal: p, booking: b };
+    });
+  }
+
+  /**
+   * 기존 일정에 방문할 수 없는 업체 제안(또는 그 협의의 재제안)에 ‘다른 일정 요청’으로 답한다.
+   * 이 제안은 수락하지 않고 끝내고(고객 응답 기록), 고객 희망 일정(날짜 + 정확한 시각)을 담은 변경 요청을 만든다. 업체가 다시 제안하고
+   * 고객이 수락해야만 새 일정이 확정된다. 업체 사유라 변경 비용 없이 기존 확정 출장비를 유지한다(free = provider). 기존 예약·작업·주소·선결제는 그대로.
+   */
+  requestOtherSchedule(input: { proposalId: string; date: string; time: string; note?: string; idempotencyKey: string }): Promise<ChangeProposal> {
+    return this.write(() => {
+      const prior = this.db.keyed[input.idempotencyKey];
+      if (prior) return byId(this.db.proposals, prior)!;
+      const p = byId(this.db.proposals, input.proposalId);
+      if (!p) throw new RepoError('not_found');
+      if (!canRequestOther(p) || !isLatestOpen(p, this.db.proposals)) throw new RepoError('change_stale');
+      const b = this.booking(p.bookingId);
+      if (b.status !== 'confirmed') throw new RepoError('request_ended');
+      if (!input.date || input.date <= seoulYmd(this.db.now) || !isValidVisitTime(input.time)) throw new RepoError('invalid');
+      p.status = 'rejected'; p.customerReply = 'other_requested'; p.respondedAt = this.db.now;
+      const req: ChangeProposal = {
+        id: nid(this.db, 'pr'), bookingId: b.id, origin: 'customer', status: 'requested', free: 'provider', replyTo: p.replyTo ?? p.id,
+        oldVisit: { date: b.visitDate, time: b.visitTime }, newVisit: { date: input.date, wishSlot: input.time },
+        reason: input.note?.trim() ? `기존 일정에 방문할 수 없어 다른 일정을 요청했어요. ${input.note.trim()}` : '기존 일정에 방문할 수 없어 다른 일정을 요청했어요.',
+        cost: { tripFeeCharged: 0, additionalDeposit: 0, note: '업체 사유 변경이라 변경 비용이 없고, 확정 출장비가 그대로 유지돼요.' },
+        createdAt: this.db.now,
+      };
+      this.db.proposals.push(req);
+      this.db.keyed[input.idempotencyKey] = req.id;
+      return req;
     });
   }
 

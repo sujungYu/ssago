@@ -6,6 +6,7 @@
  * 모든 상태 변경 메서드는 idempotencyKey를 받는다. 목업은 같은 키의 재호출에 기존 결과를 돌려주고,
  * 실제 구현은 서버에서 멱등성·권한·조건 버전·기한을 검증해야 한다. (에러 정책서 3, 5)
  */
+import type { ScheduleState } from '../../domain/scheduleChange';
 import type { SelectedTaskInput } from '../../domain/taskSelection';
 import type { RequestListQuery } from '../../domain/requestFilter';
 export type { RequestListQuery } from '../../domain/requestFilter';
@@ -135,6 +136,8 @@ export interface BookingListItem {
   groupClosed: boolean;
   /** 마감 전 예상 / 마감 후 확정 출장비 */
   tripFee: { kind: 'expected' | 'confirmed' | 'locked'; amount: Won | null };
+  /** 일정 변경 상태(목록·상세 공통 기준) */
+  schedule: ScheduleState;
 }
 
 export interface BookingQueryResult {
@@ -178,6 +181,8 @@ export interface BookingDetail {
   review?: Review;
   /** 무료 취소가 적용되는 사유(지연 대기, 업체 사유 변경 제안 등) */
   freeCancel: { reason: string } | null;
+  /** 일정 변경 상태(목록·상세 공통 기준, scheduleStateOf) */
+  schedule: ScheduleState;
   now: IsoDateTime;
 }
 
@@ -326,6 +331,8 @@ export interface Repository {
   requestChange(input: ChangeRequestInput): Promise<ChangeProposal>;
   getProposal(id: string): Promise<ProposalView>;
   respondToProposal(id: string, decision: 'accept' | 'reject', idempotencyKey: string): Promise<ProposalResult>;
+  /** 기존 방문 불가 업체 제안(또는 협의 중 재제안)에 다른 일정(날짜 + 정확한 시각, 희망 일정)을 요청한다 */
+  requestOtherSchedule(input: { proposalId: string; date: string; time: string; note?: string; idempotencyKey: string }): Promise<ChangeProposal>;
   withdrawProposal(id: string): Promise<ChangeProposal>;
   getCancelContext(bookingId: string): Promise<CancelContext>;
   cancelBooking(input: { bookingId: string; expectedRefund: Won; idempotencyKey: string }): Promise<{ booking: Booking; refund: Refund }>;

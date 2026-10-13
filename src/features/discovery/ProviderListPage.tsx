@@ -28,7 +28,8 @@ export function ProviderListPage() {
   const { addressId, address } = useExploreAddress();
   const cats = useAsync(() => repo.listCategories(), [repo]);
   const list = useAsync(() => repo.listProviders({ categoryId, addressId }), [repo, categoryId, addressId]);
-  const catName = cats.data?.find((c) => c.id === categoryId)?.name ?? '업체 목록';
+  // 카테고리 이름을 불러오는 동안은 제목을 비워 두고(null), 실패하거나 없는 카테고리일 때만 기본 문구를 쓴다
+  const catName = cats.data?.find((c) => c.id === categoryId)?.name ?? (cats.loading ? null : '업체 목록');
   const addressUnknown = addressId !== null && !!address.error; // 주소를 확인하지 못함
   const addressLoading = addressId !== null && !address.data && !address.error;
   const changeTo = `/address?back=${encodeURIComponent(`/providers?category=${categoryId}`)}`;

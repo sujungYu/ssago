@@ -8,6 +8,8 @@
   display: flex; align-items: center; gap: var(--sp-1);
 }
 .app-header__title { flex: 1; min-width: 0; font-size: var(--fs-lg); font-weight: 700; padding: 0 var(--sp-2); }
+/* 조회 결과로 정하는 제목을 불러오는 동안의 자리 표시 */
+.app-header__title-skeleton { display: block; max-width: 160px; }
 .app-header__brand { display: inline-flex; align-items: center; min-height: 44px; padding: 0 var(--sp-2); border-radius: var(--r-sm); color: var(--c-primary); text-decoration: none; flex: none; }
 .icon-btn { width: 44px; height: 44px; border: 0; background: transparent; border-radius: var(--r-sm); display: grid; place-items: center; color: var(--c-text); text-decoration: none; }
 .icon-btn:hover { background: var(--c-neutral-bg); }
@@ -513,3 +515,32 @@ a.list-row:hover { background: #fafbfd; }
 .dialog--confirm .dialog__body { margin: calc(-1 * var(--focus-ring-space)) calc(-1 * var(--sp-6)); padding: var(--focus-ring-space) var(--sp-6); }
 .dialog__actions--pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-3); margin-top: var(--sp-2); }
 .dialog__actions--pair .btn { min-height: 44px; padding: 0 var(--sp-3); }
+/* 예약 상세 금액·정산 카드(spec 5.13): 지금 처리할 차액을 가장 크게. 금액 상세의 개별 내역은 들여 쓴 작은 행 */
+.cost__title { font-size: var(--fs-lg); }
+.cost .cost__balance { padding: var(--sp-4); }
+.cost .cost__balance-k { font-size: var(--fs-md); }
+.cost .cost__balance-v { font-size: var(--fs-2xl); }
+.cost__balance--zero .cost__balance-v { color: var(--c-text); }
+.cost__row--sub .cost__k { padding-left: var(--sp-3); font-size: var(--fs-sm); }
+.cost__row--sub .cost__v { font-size: var(--fs-sm); font-weight: 500; }
+.cost__confirm { padding-top: var(--sp-1); }
+.cost:focus { outline: none; }
+.cost:focus-visible { outline: 3px solid var(--c-focus); outline-offset: 2px; }
+.work-title, .booking-info__tasks { min-width: 0; overflow-wrap: anywhere; word-break: keep-all; }
+/* 예약 상세 상단 일정 변경 카드(spec 5.15): 보완 필요 카드와 같은 일반 카드(흰 바탕·중립 테두리). 날짜 비교·사유는 값 영역 안에서 줄바꿈 */
+.sched__mark { display: inline-block; padding: 1px 8px; border-radius: var(--r-pill); font-size: var(--fs-xs); font-weight: 700; line-height: 1.5; background: var(--c-neutral-bg); color: var(--c-text-2); white-space: nowrap; vertical-align: 1px; }
+.sched__mark--no { background: var(--c-danger-bg); color: var(--c-danger); }
+.sched .detail-actions__pair { padding-top: var(--sp-1); }
+.sched .kv__v { max-width: 66%; min-width: 0; }
+.sched__v { overflow-wrap: anywhere; word-break: keep-all; }
+.sched__reason { font-weight: 500; }
+.sched__other { padding-top: var(--sp-3); border-top: 1px solid var(--c-line); }
+#schedule-change:focus { outline: none; }
+#schedule-change:focus-visible .sched { outline: 3px solid var(--c-focus); outline-offset: 2px; }
+.cancel-note { text-align: center; }
+/* 요청 상세 ‘보완 필요’ 카드: 일반 카드(흰 바탕·중립 테두리) + 작은 주황 배지. 요청 내용은 본문 그대로(줄바꿈 유지), 버튼은 내용 바로 아래 */
+.badge--orange { background: #fff1e6; color: #b5490c; }
+.info-req__title { font-size: var(--fs-lg); line-height: 1.4; }
+.info-req__msg { white-space: pre-wrap; overflow-wrap: anywhere; word-break: keep-all; }
+.info-req__actions { padding-top: var(--sp-2); }
+@media (max-width: 479px) { .info-req__actions .btn { width: 100%; } }

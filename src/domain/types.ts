@@ -317,6 +317,17 @@ export interface ChangeProposal {
   /** 비용 영향은 요청·제안 시점에 화면에 먼저 보여준다 */
   cost: { tripFeeCharged: Won; additionalDeposit: Won; note: string };
   createdAt: IsoDateTime;
+  /**
+   * 업체 제안: 업체가 기존 일정에도 방문할 수 있는지(업체가 제안할 때 지정). 없으면 ‘확인 필요’ — 사유 문장으로 추측하지 않는다.
+   * 'no'면 기존 일정으로는 진행할 수 없어 고객은 새 일정 수락 또는 다른 일정 요청만 할 수 있다.
+   */
+  oldVisitAvailable?: 'yes' | 'no';
+  /** 고객 응답 기록: 기존 방문이 불가능한 업체 제안에 ‘다른 일정 요청’으로 답했다(이 제안은 수락되지 않고 끝남) */
+  customerReply?: 'other_requested';
+  /** 고객의 다른 일정 요청이 어느 업체 제안에 대한 답인지(협의 이어짐) */
+  replyTo?: string;
+  /** 응답 시각(수락·거절·다른 일정 요청) */
+  respondedAt?: IsoDateTime;
 }
 
 export type DelayChoice = 'wait' | 'free_change' | 'free_cancel';

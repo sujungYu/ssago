@@ -52,7 +52,7 @@ export const STATUS_GROUP_STATUSES: Record<Exclude<StatusGroup, 'all'>, RequestS
 
 export const STATUS_GROUP_OPTIONS: { value: StatusGroup; label: string }[] = [
   { value: 'all', label: '전체' },
-  { value: 'payment_pending', label: '결제 대기' },
+  { value: 'payment_pending', label: '예약금 결제 대기' },
   { value: 'needs_info', label: '추가 정보 필요' },
   { value: 'reviewing', label: '업체 검토 중' },
   { value: 'ended', label: '종료' },

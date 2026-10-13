@@ -231,7 +231,7 @@ export function ProviderDetailPage() {
   const { addressId } = useAppState();
   const q = useAsync(() => repo.getProvider(id, addressId), [repo, id, addressId]);
   return (
-    <Page title={q.data?.name ?? '업체 상세'} back="history">
+    <Page title={q.data?.name ?? (q.loading ? null : '업체 상세')} back="history">
       <AsyncView state={q}>{(p) => <Body p={p} addressId={addressId} now={repo.now()} />}</AsyncView>
     </Page>
   );

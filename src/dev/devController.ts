@@ -96,7 +96,7 @@ export class DevController {
     g.pendingSeats += 1;
     r.status = 'approved_pending_payment';
     r.updatedAt = this.db.now;
-    notify(this.db, '업체가 요청을 승인했어요. 조건을 확인해 주세요.', `/requests/${r.id}/approval`, { type: 'request', id: r.id, state: stateOfRequest(r) });
+    notify(this.db, '업체가 요청을 승인했어요. 조건을 확인해 주세요.', `/requests/${r.id}#pay`, { type: 'request', id: r.id, state: stateOfRequest(r) });
     return this.done(ok(`${r.id}를 승인했어요(결제 대기).`));
   }
   requestInfo(requestId: string): EventResult {
@@ -167,20 +167,23 @@ export class DevController {
     notify(this.db, '방문이 지연되고 있어요. 대응을 선택해 주세요.', `/delays/${id}`, { type: 'delay', id, state: 'open' });
     return this.done(ok('지연 안내를 만들었어요.'));
   }
-  /** 업체 일정 변경 제안(모의). 새 방문 시각은 고객 가능 시간 밖이어도 되며 고객이 수락해야만 반영된다. */
-  proposeProviderChange(bookingId: string, newDate: string, visitTime: string): EventResult {
+  /**
+   * 업체 일정 변경 제안(모의 — 파트너 관리 화면 대신). 새 방문 시각은 고객 가능 시간 밖이어도 되며 고객이 수락해야만 반영된다.
+   * oldVisitAvailable: 업체가 기존 일정에도 방문할 수 있는지('yes' | 'no'). 지정하지 않으면 ‘확인 필요’로 남는다(사유로 추측하지 않음).
+   */
+  proposeProviderChange(bookingId: string, newDate: string, visitTime: string, oldVisitAvailable?: 'yes' | 'no'): EventResult {
     const b = byId(this.db.bookings, bookingId);
     if (!b || b.status !== 'confirmed') return no('확정 예약만 가능해요.');
     if (!isValidVisitTime(visitTime)) return no('새 방문 시각(HH:MM)을 입력하세요.');
     if (this.db.proposals.some((p) => p.bookingId === b.id && (p.status === 'requested' || p.status === 'proposed'))) return no('확인 대기 중인 변경이 이미 있어요.');
     const id = nid(this.db, 'pr');
     this.db.proposals.push({
-      id, bookingId: b.id, origin: 'provider', status: 'proposed', free: 'provider',
+      id, bookingId: b.id, origin: 'provider', status: 'proposed', free: 'provider', oldVisitAvailable,
       oldVisit: { date: b.visitDate, time: b.visitTime }, newVisit: { date: newDate || b.visitDate, time: visitTime },
-      reason: '이전 작업이 길어져 같은 날 방문이 어려워졌어요.',
+      reason: oldVisitAvailable === 'yes' ? '다른 시간에 방문하면 작업 준비가 수월해요. 기존 일정에도 방문할 수 있어요.' : '이전 작업이 길어져 같은 날 방문이 어려워졌어요.',
       cost: { tripFeeCharged: 0, additionalDeposit: 0, note: '업체 사유 변경이라 변경 수수료가 없어요. 확정 출장비는 그대로 유지돼요.' }, createdAt: this.db.now,
     });
-    notify(this.db, '업체가 일정 변경을 제안했어요.', `/proposals/${id}`, { type: 'proposal', id, state: 'proposed' });
+    notify(this.db, '업체가 일정 변경을 제안했어요.', `/bookings/${b.id}#schedule-change`, { type: 'proposal', id, state: 'proposed' });
     return this.done(ok('업체 변경 제안을 만들었어요.'));
   }
   /** 고객 변경 요청에 업체가 동의(모의). 업체가 새 방문 시각을 정해 제안하고, 고객이 최종 수락한다. */
@@ -190,7 +193,7 @@ export class DevController {
     if (!isValidVisitTime(visitTime)) return no('업체가 제안할 새 방문 시각(HH:MM)을 입력하세요.');
     p.newVisit.time = visitTime;
     p.status = 'proposed';
-    notify(this.db, '업체가 일정 변경에 동의했어요. 내용을 확인해 주세요.', `/proposals/${p.id}`, { type: 'proposal', id: p.id, state: 'proposed' });
+    notify(this.db, '업체가 일정 변경에 동의했어요. 내용을 확인해 주세요.', `/bookings/${p.bookingId}#schedule-change`, { type: 'proposal', id: p.id, state: 'proposed' });
     return this.done(ok('업체가 변경 요청에 동의했어요(고객 최종 확인 대기).'));
   }
   offerMaterial(bookingId: string): EventResult {
@@ -249,7 +252,7 @@ export class DevController {
     ];
     this.db.statements.push({ id: nid(this.db, 'st'), bookingId: b.id, version: 1, status: 'awaiting_customer', actualWork: b.tasks.map((t) => ({ title: t.title, done: true })), items });
     b.workStatus = 'final_confirm_waiting';
-    notify(this.db, '작업이 끝나 최종 금액을 확인할 수 있어요.', `/bookings/${b.id}/final`, { type: 'statement', id: b.id, state: 'awaiting_customer' });
+    notify(this.db, '작업이 끝나 최종 금액을 확인할 수 있어요.', `/bookings/${b.id}#settlement`, { type: 'statement', id: b.id, state: 'awaiting_customer' });
     return this.done(ok('작업 완료·최종 금액을 등록했어요.'));
   }
 

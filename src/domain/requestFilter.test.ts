@@ -98,7 +98,7 @@ describe('상태 그룹 필터(단일 선택)', () => {
     const all = Object.values(STATUS_GROUP_STATUSES).flat();
     expect([...all].sort()).toEqual(Object.keys(REQUEST_STATUS).filter((k) => k !== 'booked').sort());
     expect(new Set(all).size).toBe(all.length);
-    expect(STATUS_GROUP_OPTIONS.map((o) => o.label)).toEqual(['전체', '결제 대기', '추가 정보 필요', '업체 검토 중', '종료']);
+    expect(STATUS_GROUP_OPTIONS.map((o) => o.label)).toEqual(['전체', '예약금 결제 대기', '추가 정보 필요', '업체 검토 중', '종료']);
   });
   it('접수일 단독 · 상태 단독 · 두 조건 AND(묶음 안 업체별 접수일이 달라도 업체별 요청 기준)', () => {
     // 최근 7일(10-07~10-13): b-new 안에서 rq-1(10-12)만, rq-2(10-05)는 숨김
@@ -117,7 +117,7 @@ describe('상태 그룹 필터(단일 선택)', () => {
   });
   it('버튼 표시: 기본값이면 이름, 적용되면 선택값(직접 선택은 YYYY.MM.DD)', () => {
     expect([statusSummary(f({})), periodButtonLabel(f({}))]).toEqual([null, null]);
-    expect(statusSummary(f({ status: 'payment_pending' }))).toBe('결제 대기');
+    expect(statusSummary(f({ status: 'payment_pending' }))).toBe('예약금 결제 대기');
     expect(periodButtonLabel(f({ period: '30d' }))).toBe('최근 30일');
     expect(periodSummary(f({ period: 'custom', from: '2026-10-01', to: '2026-10-08' }))).toBe('2026.10.01 ~ 2026.10.08');
   });

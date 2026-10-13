@@ -56,7 +56,7 @@ export type Tone = 'neutral' | 'info' | 'action' | 'success' | 'warn' | 'danger'
 export const REQUEST_STATUS: Record<RequestStatus, { label: string; tone: Tone; hint: string }> = {
   reviewing: { label: '업체 검토 중', tone: 'info', hint: '업체가 요청을 검토하고 있어요. 아직 예약이 확정된 것은 아니에요.' },
   needs_info: { label: '추가 정보 필요', tone: 'action', hint: '업체가 확인하고 싶은 내용이 있어요. 요청서를 보완해 주세요.' },
-  approved_pending_payment: { label: '업체 승인 완료 · 결제 대기', tone: 'action', hint: '승인 조건을 확인하고 예약금을 결제하면 예약이 확정돼요.' },
+  approved_pending_payment: { label: '예약금 결제 대기', tone: 'action', hint: '업체가 요청을 승인했어요. 예약금을 결제하면 예약이 확정돼요.' },
   rejected: { label: '업체 거절', tone: 'danger', hint: '업체가 이번 요청을 수행하기 어렵다고 답했어요.' },
   withdrawn: { label: '철회', tone: 'neutral', hint: '직접 철회한 요청이에요. 취소수수료는 없어요.' },
   approval_expired: { label: '승인 만료', tone: 'warn', hint: '결제 기한이 지나 예약이 확정되지 않았어요. 취소수수료는 없어요.' },

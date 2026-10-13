@@ -30,7 +30,7 @@ export function SupplementPage() {
             if (!msg.trim() && !photos.length) return;
             void action.run(async () => {
               await repo.supplementRequest(id, { message: msg.trim(), photoNames: photos, idempotencyKey: key.get() });
-              nav(`/requests/${id}`, { state: { flash: '보완한 내용을 보냈어요. 업체가 다시 검토해요.' } });
+              nav(`/requests/${id}`, { replace: true, state: { flash: '보완한 내용을 보냈어요. 업체가 다시 검토해요.' } });
             });
           }}>
             <Banner tone="warn" title={`${d.provider.name}의 요청`}>{d.request.infoRequest.message}</Banner>

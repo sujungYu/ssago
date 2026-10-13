@@ -18,12 +18,12 @@
 | C-13 | 내 예약 > 확정된 예약 · 완료·취소 | `/bookings?tab=active` · `/bookings?tab=past` | bookings/BookingsPage |
 | C-14 | 예약 상세 | `/bookings/:id` | BookingDetailPage |
 | C-15 | 날짜·시간 변경 요청 | `/bookings/:id/change` | changes/ChangeRequestPage |
-| C-16 | 변경 제안 확인 | `/proposals/:id` | ProposalPage |
+| C-16 | 변경 제안 확인(예약 상세 상단 ‘일정 변경’ 카드에 통합) | `/bookings/:id#schedule-change` (이전 `/proposals/:id`는 이동) | bookings/ScheduleChangeCard(BookingDetailPage), ProposalRedirect |
 | C-17 | 취소·환불 금액 확인 | `/bookings/:id/cancel` | CancelPage |
 | C-18 | 지연 안내·대응 | `/delays/:id` | DelayPage |
 | C-19 | 자재 조건·진행 | `/materials/:id` | work/MaterialPage |
 | C-20 | 추가 작업 확인 | `/additional/:id` | AdditionalPage |
-| C-21 | 최종 금액 확인 | `/bookings/:id/final` | FinalStatementPage |
+| C-21 | 최종 금액 확인(예약 상세 ‘금액·정산’에 통합) | `/bookings/:id#settlement` (이전 `/bookings/:id/final`은 이동) | bookings/BookingCostCard(BookingDetailPage), FinalStatementRedirect |
 | C-22 | 결제·환불 상세 | `/ledger/:id` | history/LedgerPages |
 | C-23 | 리뷰 작성 | `/bookings/:id/review` | ReviewPage |
 | C-24 | 내 정보 | `/me` | MePage |

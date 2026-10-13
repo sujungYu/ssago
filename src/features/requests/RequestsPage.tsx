@@ -38,7 +38,7 @@ export function SentRequestList({ bundles, busy }: { bundles: FilteredBundleList
         const to = single ? `/requests/${b.items[0].request.id}` : `/requests/bundle/${b.bundleId}`;
         const ended = b.hiddenItemCount === 0 && b.items.every((i) => isEnded(i.request.status));
         return (
-          <li key={b.bundleId}>
+          <li key={b.items.length === 1 && b.hiddenItemCount === 0 ? b.items[0].request.id : b.bundleId}>
             <Link to={to} className="card stack--sm stack" style={{ textDecoration: 'none', color: 'inherit' }}>
               <div className="row row--between">
                 <p className="strong">{b.taskTitles.join(' · ')}</p>
@@ -51,7 +51,7 @@ export function SentRequestList({ bundles, busy }: { bundles: FilteredBundleList
                   <li key={i.request.id} className="row row--between row--wrap" style={{ gap: 'var(--sp-2)' }}>
                     <span className="small">{i.provider.name}{i.visitDate && <span className="muted"> · 방문일 {formatDate(i.visitDate)}</span>}</span>
                     <RequestBadge status={i.request.status} />
-                    {i.paymentDeadline && <span className="xs muted" style={{ flexBasis: '100%' }}>결제 기한 {formatRemaining(repo.now(), i.paymentDeadline)}</span>}
+                    {i.paymentDeadline && <span className="xs muted" style={{ flexBasis: '100%' }}>예약금 결제 기한 {formatRemaining(repo.now(), i.paymentDeadline)}</span>}
                     {i.depositAttempt && <span className="xs strong" style={{ flexBasis: '100%', color: i.depositAttempt === 'failed' ? 'var(--c-danger)' : 'var(--c-primary)' }}>{i.depositAttempt === 'failed' ? '예약금 결제 실패 · 기한 안에 다시 결제할 수 있어요' : '예약금 결제 결과 확인 중 · 다시 결제하지 마세요'}</span>}
                     {/* 종료된 요청: 종료 사유(업체 거절은 업체가 남긴 사유, 그 밖에는 상태 안내) */}
                     {isEnded(i.request.status) && <span className="xs muted" style={{ flexBasis: '100%' }}>{i.request.status === 'rejected' && i.request.rejectionReason ? `거절 사유: ${i.request.rejectionReason}` : REQUEST_STATUS[i.request.status].hint}</span>}

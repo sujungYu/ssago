@@ -16,8 +16,13 @@ export const WORK_STATUS: Record<Booking['workStatus'], { label: string; tone: T
   stopped_settlement_waiting: { label: '정산 대기', tone: 'warn' },
 };
 
-export function bookingBadge(b: Pick<Booking, 'status' | 'workStatus' | 'cancelCause'>) {
+/**
+ * 예약 상태 배지. 작업 진행 상태(workStatus)를 보여주되, 업체가 기존 일정에 방문할 수 없어 새 일정을 정하는 중이면(scheduleStateOf)
+ * ‘방문 예정’ 대신 ‘일정 협의 중’으로 보여준다(목록·상세 공통). 작업 상태 값은 바꾸지 않는다.
+ */
+export function bookingBadge(b: Pick<Booking, 'status' | 'workStatus' | 'cancelCause'>, schedule?: { oldVisitUnavailable: boolean }) {
   if (b.status === 'cancelled') return <Badge tone="neutral">취소됨</Badge>;
+  if (schedule?.oldVisitUnavailable && b.status === 'confirmed' && b.workStatus === 'scheduled') return <Badge tone="warn">일정 협의 중</Badge>;
   if (b.status === 'terms_recheck') return <Badge tone="warn">조건 재확인 필요</Badge>;
   const s = WORK_STATUS[b.workStatus];
   return <Badge tone={s.tone}>{s.label}</Badge>;

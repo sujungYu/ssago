@@ -1,3 +1,4 @@
+import { COMPARE_REQUESTS_ENABLED } from '../../domain/demoScope';
 import { useEffect, useRef } from 'react';
 import { Link, Navigate, useLocation, useParams } from 'react-router-dom';
 import { Page } from '../../app/Page';
@@ -52,7 +53,8 @@ function Sent({ d, b, addressSaved }: { d: RequestDetail; b: BundleDetail; addre
   const titleRef = useRef<HTMLHeadingElement>(null);
   const r = d.request;
   // 업체별 하나(같은 묶음 안 같은 업체 요청은 한 번만 센다)
-  const providers = [...new Map(b.items.map((i) => [i.provider.id, i.provider.name])).values()];
+  // 비교 요청을 쓰지 않는 데모에서는 이 요청의 업체만(개별 요청)
+  const providers = COMPARE_REQUESTS_ENABLED ? [...new Map(b.items.map((i) => [i.provider.id, i.provider.name])).values()] : [d.provider.name];
   const s = summarizeSentRequest(r.tasks.map((t) => t.title), providers);
   const detailTo = s.compare ? `/requests/bundle/${b.bundleId}` : `/requests/${r.id}`;
   const fresh = r.status === 'reviewing' && !r.bookingId && !r.infoRequest;

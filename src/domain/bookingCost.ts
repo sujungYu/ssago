@@ -66,6 +66,10 @@ export interface CostSummary {
   /** 업체 할인 조건(금액 미정이라 총액에 반영하지 않음) */
   discountNote?: string;
   total: { label: string; amount: Amount } | null;
+  /** 금액 상세용 묶음: 수리비(작업비 + 부품·자재비 + 별도 자재·추가 작업·할인)와 내 출장비. 같은 항목을 두 번 더하지 않는다 */
+  repair: Amount;
+  repairLines: CostLine[];
+  trip: { label: string; amount: Amount };
   /** 결제 성공한 선결제 항목(0원 제외) */
   payments: PaymentLine[];
   paidIn: Won;
@@ -108,7 +112,7 @@ export function summarizeBookingCost(i: CostInput): CostSummary {
 
   if (i.cancelled) {
     return {
-      ...base, stage: 'cancelled', lines: [], total: null,
+      ...base, stage: 'cancelled', lines: [], total: null, repair: null, repairLines: [], trip: { label: TRIP_LABEL[i.tripFee.kind], amount: i.tripFee.amount },
       balance: { kind: p.refunded > 0 ? 'refund' : 'zero', label: '취소 환불 요청 금액', amount: p.refunded },
       note: '취소 환불은 ‘처리 요청’과 카드·계좌에 실제 반영되는 시점이 달라요.',
     };
@@ -119,20 +123,22 @@ export function summarizeBookingCost(i: CostInput): CostSummary {
     const st = i.statement;
     const s = computeSettlement(st.items, p.available);
     const lines = st.items.map((it, n) => ({ key: `st-${n}`, label: it.label, amount: it.amount }));
+    const repairLines = st.items.map((it, n) => ({ it, n })).filter(({ it }) => it.kind !== 'trip_fee').map(({ it, n }) => ({ key: `st-${n}`, label: it.label, amount: it.amount }));
+    const split = { repair: repairLines.reduce((a, l) => a + (l.amount ?? 0), 0), repairLines, trip: { label: '내 확정 출장비', amount: st.items.filter((it) => it.kind === 'trip_fee').reduce((a, it) => a + it.amount, 0) } };
     if (st.status === 'settled') {
       return {
-        ...base, stage: 'settled', lines, total: { label: '최종 금액', amount: s.finalTotal },
-        balance: balanceOf(s.delta, { pay: '정산 완료 · 추가 결제한 금액', zero: '정산 완료 · 추가 결제·환불 없음', refund: '정산 완료 · 환불 금액', unknown: '' }),
+        ...base, ...split, stage: 'settled', lines, total: { label: '최종 금액', amount: s.finalTotal },
+        balance: balanceOf(s.delta, { pay: '추가 결제한 금액', zero: '추가 결제·환불 없음', refund: '환불 금액', unknown: '' }),
         note: '합의한 최종 내역으로 정산이 끝났어요.',
       };
     }
     const disputed = st.status === 'disputed';
     return {
-      ...base, stage: disputed ? 'final_disputed' : 'final_awaiting', lines,
+      ...base, ...split, stage: disputed ? 'final_disputed' : 'final_awaiting', lines,
       total: { label: disputed ? '업체가 등록한 최종 금액(협의 중)' : '업체가 등록한 최종 금액(확인 전)', amount: sumItems(st.items) },
       balance: balanceOf(s.delta, disputed
         ? { pay: '합의 전 · 예상 추가 결제액', zero: '합의 전 · 예상 추가 결제 없음', refund: '합의 전 · 예상 환불액', unknown: '' }
-        : { pay: '확인하면 추가 결제할 금액', zero: '추가 결제·환불 없음', refund: '확인하면 환불받을 금액', unknown: '' }),
+        : { pay: '결제할 금액', zero: '추가 결제 없음', refund: '환불 예정 금액', unknown: '' }),
       note: disputed ? '금액을 협의하는 동안에는 청구하거나 확정하지 않아요.' : '내용을 확인하고 동의해야 정산이 진행돼요. 지금 자동으로 결제·환불되지 않아요.',
     };
   }
@@ -148,12 +154,27 @@ export function summarizeBookingCost(i: CostInput): CostSummary {
     { key: 'trip', label: TRIP_LABEL[i.tripFee.kind], amount: i.tripFee.amount, hint: i.tripFee.amount === null ? '아직 산정되지 않았어요' : undefined },
   ];
   const total = sumKnown(lines.map((l) => l.amount));
+  const repairLines = lines.filter((l) => l.key !== 'trip');
   return {
     ...base, stage: 'estimate', lines, discountNote: i.discountNote,
+    repair: sumKnown(repairLines.map((l) => l.amount)), repairLines, trip: { label: TRIP_LABEL[i.tripFee.kind], amount: i.tripFee.amount },
     total: { label: '예상 총금액', amount: total },
     balance: balanceOf(total === null ? null : total - p.available, {
       pay: '예상 추가 결제액', zero: '예상 추가 결제 없음', refund: '예상 환불액', unknown: '예상 추가 결제액',
     }),
     note: FINAL_NOTE,
   };
+}
+
+/**
+ * 예약 상세 ‘금액·정산’ 카드 표시 기준(spec 5.14). 화면의 실제 상태와 최종 금액 등록 여부로만 판단한다.
+ * - 업체가 최종 금액(최종 내역)을 등록했으면 표시: 확인 필요·금액 협의 중(정산 대기)·결제 처리 중·정산 완료 모두. 금액이 0원이어도 ‘등록됨’이다.
+ * - 취소된 예약은 결제·공제·환불 기록이 있을 때만 표시(환불·공제 금액과 처리 상태).
+ * - 그 밖(방문 예정·작업 중·후속 작업 등 최종 금액 등록 전)은 숨긴다 — 예상 정산액·확인·결제 버튼 없음.
+ *   방문일이 지났거나 작업이 끝났다는 이유만으로 표시하지 않는다(최종 내역이 있어야 한다). 새 업무 상태·자동 전환 없음.
+ */
+export function showSettlementCard(i: { cancelled: boolean; hasStatement: boolean; moneyRecords: number }): boolean {
+  if (i.hasStatement) return true;
+  if (i.cancelled) return i.moneyRecords > 0;
+  return false;
 }

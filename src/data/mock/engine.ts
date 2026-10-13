@@ -1,7 +1,9 @@
+import { COMPARE_REQUESTS_ENABLED } from '../../domain/demoScope';
 /**
  * 목업 상태 변경 규칙. repository(사용자 동작)와 개발용 시나리오 도구(업체·시간 이벤트)가 함께 사용한다.
  * 가격 계산과 상태 규칙은 domain/에 두고, 여기서는 저장 상태를 일관되게 갱신하는 일만 한다.
  */
+import { scheduleStateOf } from '../../domain/scheduleChange';
 import { formatVisit } from '../../domain/visitTime';
 import { availablePrepaid, previewCancellation, previewDateChange, type CancelPreview } from '../../domain/pricing';
 import type {
@@ -64,11 +66,13 @@ export function freeCancelReasonOf(db: MockDb, booking: Booking): string | null 
   const delay = db.delays.find((d) => d.bookingId === booking.id && d.status === 'open');
   // 몇 분 지연부터 무료 변경·취소를 줄지는 미정이다. 목업은 업체가 지연을 알린 예약에 선택지를 보여줄 뿐 분 단위 기준을 적용하지 않는다.
   if (delay) return '업체가 방문 지연을 알렸어요. 무료 취소를 선택할 수 있어요.';
+  // 업체가 기존 일정에 방문할 수 없으면(새 일정 확인·협의 중 포함) 업체 사유 무료 취소(선결제 전액 환불)
+  if (scheduleStateOf(booking, db.proposals).oldVisitUnavailable) return '업체가 기존 일정에 방문할 수 없어요. 업체 사유로 무료 취소할 수 있어요.';
   const prop = db.proposals.find((p) => p.bookingId === booking.id && p.origin === 'provider' && p.status === 'proposed');
   if (prop) return '업체 사유 일정 변경 제안이 있어요. 무료 취소가 적용돼요.';
-  // 업체 사유 변경 제안을 거절해도 예약은 자동 취소되지 않는다. 고객이 원하면 업체 사유 무료 취소를 선택할 수 있다.
+  // 업체 사유 변경 제안을 거절해도 예약은 자동 취소되지 않는다. 고객이 원하면 업체 사유 무료 취소를 선택할 수 있다(그 제안이 지금 일정 대상일 때).
   const lastProvider = db.proposals.filter((p) => p.bookingId === booking.id && p.origin === 'provider').at(-1);
-  if (lastProvider?.status === 'rejected') return '업체가 제안한 일정 변경을 거절했어요. 업체 사유로 무료 취소할 수 있어요.';
+  if (lastProvider?.status === 'rejected' && lastProvider.oldVisit.date === booking.visitDate && (lastProvider.oldVisit.time ?? null) === (booking.visitTime ?? null)) return '업체가 제안한 일정 변경을 거절했어요. 업체 사유로 무료 취소할 수 있어요.';
   return null;
 }
 
@@ -116,7 +120,7 @@ export function endGroup(db: MockDb, g: GroupRecord): void {
       newCloseAt: g.closeAt, newTotalTripFee: g.totalTripFee, newDepositAmount: g.totalTripFee,
     };
     g.pendingSeats = Math.max(0, g.pendingSeats - 1);
-    notify(db, '기존 공동 예약이 종료되었어요. 새 조건을 확인해 주세요.', `/requests/${r.id}/recheck`, { type: 'request', id: r.id, state: stateOfRequest(r, ap) });
+    notify(db, '기존 공동 예약이 종료되었어요. 새 조건을 확인해 주세요.', `/requests/${r.id}#pay`, { type: 'request', id: r.id, state: stateOfRequest(r, ap) });
   }
 }
 
@@ -160,7 +164,8 @@ export function createBookingFromRequest(db: MockDb, tx: Transaction): Booking {
   req.bookingId = booking.id;
   req.updatedAt = db.now;
   // 같은 비교 묶음의 다른 요청은 종료하고 자리를 해제한다 (취소수수료 없음). 별개 수리 요청(다른 묶음)은 유지한다.
-  for (const other of db.requests.filter((r) => r.bundleId === req.bundleId && r.id !== req.id)) {
+  // 비교 요청을 쓰지 않는 데모(COMPARE_REQUESTS_ENABLED = false)에서는 요청마다 개별 업체 요청이라 다른 요청을 종료하지 않는다.
+  for (const other of COMPARE_REQUESTS_ENABLED ? db.requests.filter((r) => r.bundleId === req.bundleId && r.id !== req.id) : []) {
     if (!['reviewing', 'needs_info', 'approved_pending_payment'].includes(other.status)) continue;
     if (other.status === 'approved_pending_payment' && other.groupId) {
       const og = byId(db.groups, other.groupId);
@@ -238,6 +243,7 @@ export function finalizeProposalAccept(db: MockDb, p: import('../../domain/types
   b.visitDate = p.newVisit.date;
   b.visitTime = p.newVisit.time;
   p.status = 'accepted';
+  p.respondedAt = db.now;
   notify(db, `일정 변경이 확정됐어요 · 방문 예정 ${formatVisit(b.visitDate, b.visitTime)}`, `/bookings/${b.id}`, { type: 'booking', id: b.id, state: `${b.status}:${b.workStatus}` });
   const delay = db.delays.find((d) => d.bookingId === b.id && d.status === 'open');
   if (delay && p.free === 'delay') { delay.status = 'resolved'; delay.choice = 'free_change'; delay.respondedAt = db.now; }

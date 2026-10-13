@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { summarizeBookingCost, type CostInput, type TripFeeBasis } from './bookingCost';
+import { showSettlementCard, summarizeBookingCost, type CostInput, type TripFeeBasis } from './bookingCost';
 
 const trip = (p: Partial<TripFeeBasis> = {}): TripFeeBasis => ({ kind: 'confirmed', amount: 16666, households: 3, groupTotal: 50000, currentHouseholds: 3, ...p });
 const prepaid = (p: Partial<CostInput['prepaid']> = {}) => {
@@ -75,16 +75,39 @@ describe('최종 내역 이후·취소', () => {
     const c = summarizeBookingCost(input({ statement: { status: 'awaiting_customer', items } }));
     expect(c.stage).toBe('final_awaiting');
     expect(c.total).toEqual({ label: '업체가 등록한 최종 금액(확인 전)', amount: 112500 });
-    expect(c.balance).toEqual({ kind: 'pay', label: '확인하면 추가 결제할 금액', amount: 62500 });
+    expect(c.balance).toEqual({ kind: 'pay', label: '결제할 금액', amount: 62500 });
+    // 금액 상세: 수리비(작업비 + 부품·자재비)와 내 확정 출장비로 나눈다(합 = 총금액, 중복 없음)
+    expect([c.repair, c.trip.amount, c.repairLines.map((l) => l.label)]).toEqual([100000, 12500, ['작업비', '부품·자재비']]);
+  });
+  it('확인 전 차액: 0원은 ‘추가 결제 없음’, 음수는 ‘환불 예정 금액’(절댓값)', () => {
+    const small = [{ kind: 'labor' as const, label: '작업비', amount: 30000 }, { kind: 'trip_fee' as const, label: '확정 출장비', amount: 12500 }];
+    expect(summarizeBookingCost(input({ statement: { status: 'awaiting_customer', items: small }, prepaid: prepaid({ deducted: 7500 }) })).balance)
+      .toEqual({ kind: 'zero', label: '추가 결제 없음', amount: 0 });
+    expect(summarizeBookingCost(input({ statement: { status: 'awaiting_customer', items: small }, prepaid: prepaid() })).balance)
+      .toEqual({ kind: 'refund', label: '환불 예정 금액', amount: 7500 });
+  });
+  it('이전 환불·공제가 있으면 남은 선결제 잔액으로만 차감(중복 차감 없음)', () => {
+    // 예약금 50,000 중 20,000 이미 환불 → 잔액 30,000. 최종 112,500 − 30,000 = 82,500
+    const c = summarizeBookingCost(input({ statement: { status: 'awaiting_customer', items }, prepaid: prepaid({ depositPaid: 50000, refunded: 20000 }) }));
+    expect([c.available, c.balance.amount, c.used.refunded]).toEqual([30000, 82500, 20000]);
   });
   it('협의 중·정산 완료 문구', () => {
     expect(summarizeBookingCost(input({ statement: { status: 'disputed', items } })).total!.label).toContain('협의 중');
     const s = summarizeBookingCost(input({ statement: { status: 'settled', items } }));
-    expect([s.stage, s.total!.label, s.balance.label]).toEqual(['settled', '최종 금액', '정산 완료 · 추가 결제한 금액']);
+    expect([s.stage, s.total!.label, s.balance.label]).toEqual(['settled', '최종 금액', '추가 결제한 금액']);
   });
   it('취소된 예약은 예상 총액 없이 결제·공제·환불만', () => {
     const c = summarizeBookingCost(input({ cancelled: true, prepaid: prepaid({ deducted: 12500, refunded: 37500 }) }));
     expect([c.stage, c.total, c.lines.length]).toEqual(['cancelled', null, 0]);
     expect(c.balance).toEqual({ kind: 'refund', label: '취소 환불 요청 금액', amount: 37500 });
+  });
+});
+
+describe('금액·정산 카드 표시 기준', () => {
+  it('최종 금액 등록 여부·실제 상태로만 판단(0원도 등록됨), 등록 전에는 숨김, 취소는 기록이 있을 때만', () => {
+    expect(showSettlementCard({ cancelled: false, hasStatement: false, moneyRecords: 3 })).toBe(false); // 방문 예정·작업 중(예약금 결제 기록이 있어도)
+    expect(showSettlementCard({ cancelled: false, hasStatement: true, moneyRecords: 0 })).toBe(true); // 최종 금액 등록(0원 포함)
+    expect(showSettlementCard({ cancelled: true, hasStatement: false, moneyRecords: 2 })).toBe(true);
+    expect(showSettlementCard({ cancelled: true, hasStatement: false, moneyRecords: 0 })).toBe(false);
   });
 });

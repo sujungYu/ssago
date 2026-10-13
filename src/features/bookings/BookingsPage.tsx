@@ -22,7 +22,9 @@ import { SentRequestList } from '../requests/RequestsPage';
 const TRIP_LABEL = { expected: '마감 전 예상 출장비', confirmed: '확정 출장비', locked: '유지되는 확정 출장비' } as const;
 
 /** 예약 방문 시각 라벨. 고객 가능 시간 범위가 아니라 확정된 방문 시각을 보여준다. */
-export const visitLabel = (b: BookingListItem['booking']) => (b.status === 'confirmed' && b.workStatus === 'scheduled' ? '방문 예정' : '방문 일정');
+/** 방문 일정 라벨. 업체가 기존 일정에 방문할 수 없으면 정상 방문 예정처럼 보이지 않게 ‘기존 일정(방문 불가)’ */
+export const visitLabel = (b: BookingListItem['booking'], schedule?: { oldVisitUnavailable: boolean }) =>
+  (schedule?.oldVisitUnavailable && b.status === 'confirmed' ? '기존 일정' : b.status === 'confirmed' && b.workStatus === 'scheduled' ? '방문 예정' : '방문 일정');
 
 export function BookingCard({ it }: { it: BookingListItem }) {
   const b = it.booking;
@@ -30,10 +32,11 @@ export function BookingCard({ it }: { it: BookingListItem }) {
     <Link to={`/bookings/${b.id}`} className="card stack--sm stack" style={{ textDecoration: 'none', color: 'inherit' }}>
       <div className="row row--between row--wrap">
         <p className="strong">{it.providerName}</p>
-        {bookingBadge(b)}
+        {bookingBadge(b, it.schedule)}
       </div>
       <p>{b.tasks.map((t) => t.title).join(' · ')}</p>
-      <p className="small">{visitLabel(b)} · <VisitText date={b.visitDate} time={b.visitTime} /></p>
+      <p className="small">{visitLabel(b, it.schedule)} · <VisitText date={b.visitDate} time={b.visitTime} /></p>
+      {it.schedule.oldVisitUnavailable && it.schedule.label && <p className="small strong" style={{ color: 'var(--c-warn)' }}>{it.schedule.label}</p>}
       {b.status === 'confirmed' && it.tripFee.amount !== null && (
         <p className="small muted">{TRIP_LABEL[it.tripFee.kind]} <span className="money">{formatWon(it.tripFee.amount)}</span></p>
       )}

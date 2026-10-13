@@ -34,6 +34,14 @@ export function bundleInRequestsTab(requests: Pick<RepairRequest, 'status' | 'bo
   return requests.length > 0 && !requests.some(isConvertedToBooking);
 }
 
+/**
+ * 비교 요청을 쓰지 않는 데모: 개별 요청이 보낸 요청 탭에 남는가. 예약으로 이어지지 않았고, 비교 요청의 결과(다른 업체 예약으로 종료)가 아닐 때.
+ * (원본 묶음 데이터는 그대로 두고 목록만 개별 요청 기준으로 만든다)
+ */
+export function requestInRequestsTab(r: Pick<RepairRequest, 'status' | 'bookingId'>): boolean {
+  return !isConvertedToBooking(r) && r.status !== 'closed_other_booking';
+}
+
 /** 예약의 탭: 취소됐거나 최종 정산까지 끝나 이용 완료면 완료·취소, 그 외(작업이 끝났어도 정산이 남았으면)는 확정된 예약 */
 export function bookingTabOf(b: Pick<Booking, 'status' | 'workStatus'>): BookingTab {
   return b.status === 'cancelled' || b.workStatus === 'completed' ? 'past' : 'active';

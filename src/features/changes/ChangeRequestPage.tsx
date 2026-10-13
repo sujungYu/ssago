@@ -71,7 +71,8 @@ export function ChangeRequestPage() {
                 newDateWish: mode === 'new' ? newDate : undefined, newSlot: slot,
                 reason: reason.trim() || '방문 지연에 따른 무료 일정 변경', delayId, idempotencyKey: key.get(),
               });
-              nav(`/proposals/${p.id}`, { state: { flash: '변경 요청을 보냈어요. 업체가 동의하기 전까지 기존 일정이 유지돼요.' } });
+              // 요청 결과는 예약 상세 상단 일정 변경 카드에서 확인한다(요청 화면 기록은 바꿔 뒤로가기로 다시 보내지 않게)
+              nav({ pathname: `/bookings/${p.bookingId}`, hash: 'schedule-change' }, { replace: true, state: { flash: '변경 요청을 보냈어요. 업체가 동의하기 전까지 기존 일정이 유지돼요.' } });
             });
           };
           return (
