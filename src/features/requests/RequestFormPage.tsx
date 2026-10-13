@@ -170,10 +170,10 @@ export function RequestFormPage() {
                 bundleId: bundleId ?? undefined, idempotencyKey: attempt.get(),
               });
               setBundleId(null);
-              // 제출에 성공한 뒤에만 저장 완료를 알린다(실패·취소 시에는 저장했다고 표시하지 않음)
-              nav(`/requests/${r.id}`, { state: { flash: saveForNext
-                ? '요청을 보냈어요. 다음 신청에 쓸 주소도 저장했어요. 업체가 검토하는 동안에는 예약이 확정되지 않아요.'
-                : '요청을 보냈어요. 업체가 검토하는 동안에는 예약이 확정되지 않아요.' } });
+              // 제출에 성공한 뒤에만 요청 완료 화면으로 간다(실패하면 이 화면에 입력을 그대로 둔다).
+              // 요청서 기록을 완료 화면으로 바꿔(replace) 뒤로가기로 작성 화면에 돌아와 같은 요청을 다시 보내지 않게 한다.
+              // 주소 저장 완료는 제출에 성공했을 때만 알린다.
+              nav(`/requests/${r.id}/sent`, { replace: true, state: saveForNext ? { addressSaved: true } : null });
             });
           };
 
@@ -306,7 +306,7 @@ export function RequestFormPage() {
                   <Button variant="secondary" block busy={action.busy} onClick={submit}>다시 보내기</Button>
                 </div>
               )}
-              <ActionBar note="요청만으로는 예약이 확정되지 않아요. 업체 승인 후 예약금을 결제해야 확정돼요.">
+              <ActionBar note="업체 승인 후 예약금을 결제하면 예약이 확정돼요.">
                 <Button variant="primary" block type="submit" busy={action.busy} disabled={groupMissing}>요청 보내기</Button>
               </ActionBar>
             </form>

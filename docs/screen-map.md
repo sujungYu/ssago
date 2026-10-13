@@ -7,6 +7,7 @@
 | C-03 | 카테고리별 업체 목록 | `/providers?category=` | ProviderListPage |
 | C-04 | 업체 상세 | `/providers/:id` | ProviderDetailPage |
 | C-05 | 수리 요청서 | `/providers/:id/request?group=\|new=1` | requests/RequestFormPage |
+| C-05a | 수리 요청 완료(새 요청 제출 성공 직후만) | `/requests/:id/sent` | requests/RequestSentPage |
 | C-06 | 내 예약 > 보낸 요청 | `/bookings?tab=requests` (이전 `/requests`는 이동) | bookings/BookingsPage + requests/RequestsPage(SentRequestList) |
 | C-07 | 비교 요청 묶음 | `/requests/bundle/:id` | BundlePage |
 | C-08 | 업체별 요청 상세 | `/requests/:id` | RequestDetailPage |

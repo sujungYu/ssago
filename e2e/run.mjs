@@ -164,7 +164,7 @@ await test('요청: 공동 날짜로 복수 작업 요청서 제출', async (pag
   await page.getByLabel('상세 주소', { exact: true }).fill('301동 1204호');
   await page.getByRole('button', { name: '09:00~12:00' }).click();
   await page.getByRole('button', { name: '요청 보내기' }).dblclick(); // 연타해도 한 번만
-  await waitText(page, '요청을 보냈어요');
+  await openSentDetail(page);
   await waitText(page, '업체 검토 중');
   const d = await db(page);
   const mine = d.requests.filter((r) => r.tasks.length === 2 && r.tasks[0].title === '주방 수전 교체');
@@ -379,6 +379,12 @@ await test('업체 찾기: 이용 방법 데스크톱은 가운데 모달 · 작
 // ───────── 주소: 탐색 주소 / 재사용 방문 주소 / 요청·예약 방문 주소 ─────────
 const detailInput = (page) => page.getByLabel('상세 주소', { exact: true });
 const saveBox = (page) => page.getByRole('checkbox', { name: /다음 신청에도 이 주소 사용/ });
+/** 요청서 제출 성공 → 수리 요청 완료 화면 → ‘요청 내용 확인하기’로 요청 상세(단일)·비교 요청 상세(묶음)로 이동 */
+async function openSentDetail(page) {
+  await page.getByRole('heading', { name: '수리 요청을 보냈어요' }).waitFor();
+  await page.getByRole('link', { name: '요청 내용 확인하기' }).click();
+  await page.waitForURL((u) => /^\/requests\/(bundle\/)?[^/]+$/.test(u.pathname));
+}
 async function fillNewDateRequest(page, title) {
   await page.getByLabel('어떤 작업인가요?').fill(title);
   await page.getByLabel('희망 방문 날짜').fill('2026-10-21');
@@ -432,6 +438,7 @@ await test('주소: 첫 신청 저장 선택 → 같은 건물 다음 신청 자
   d = await db(page);
   eq(d.savedVisitAddress.detail, '301동 1204호', '미선택 시 기존 저장 주소 유지');
   eq(d.requests.find((r) => r.tasks[0].title === '두 번째 신청').visitAddress.detail, '301동 1205호', '이번 요청에는 입력한 주소');
+  await openSentDetail(page);
   await waitText(page, '301동 1205호'); // 요청 상세의 방문 주소
 });
 
@@ -1754,6 +1761,9 @@ await test('비교 요청: 상태 필터(결제 대기·추가 정보 필요·�
   for (const [label, n, q] of [['결제 대기', 2, 'payment_pending'], ['추가 정보 필요', 1, 'needs_info'], ['업체 검토 중', 1, 'reviewing'], ['종료', 1, 'ended']]) {
     await pickBundleStatus(page, label);
     await page.waitForURL((u) => u.searchParams.get('status') === q);
+    // 주소가 바뀐 직후 목록이 다시 그려지기 전 값을 읽지 않도록 제목이 갱신될 때까지 기다린다
+    await page.getByRole('button', { name: /^전체 상태 필터/ }).filter({ hasText: label }).waitFor({ timeout: 3000 }).catch(() => {});
+    await bundleTitle(page).filter({ hasText: `전체 5곳 중 ${n}곳` }).waitFor({ timeout: 3000 }).catch(() => {});
     eq(await bundleTitle(page).innerText(), `업체별 응답 · 전체 5곳 중 ${n}곳`, `${label} 건수`);
     eq(await respCards(page).count(), n, `${label} 카드 수`);
     eq(await page.getByRole('button', { name: /^전체 상태 필터/ }).innerText(), label, '캡슐에 선택값');
@@ -1894,7 +1904,7 @@ await test('진행 과정: 요청서(1) → 검토(2) → 보완(2) → 승인·
   await page.getByLabel('상세 주소', { exact: true }).fill('301동 1204호');
   await page.getByRole('button', { name: '09:00~12:00' }).click();
   await page.getByRole('button', { name: '요청 보내기' }).click();
-  await waitText(page, '요청을 보냈어요');
+  await openSentDetail(page);
   await expectStep(page, 'request', '업체 검토·견적', 1, '업체가 작업 가능 여부와 견적을 확인하고 있어요.', '검토 중');
   const id = new URL(page.url()).pathname.split('/').pop();
   await dev(page, 'requestInfo', id);
@@ -2481,7 +2491,7 @@ await test('내 정보 수정 → 새 요청서 기본값, 직접 입력한 값�
   eq(await page.evaluate(() => document.activeElement?.getAttribute('data-err-target')), 'phone', '요청서 연락처 오류로 포커스');
   await fPhone.fill('010-7777-8888');
   await page.getByRole('button', { name: '요청 보내기' }).click();
-  await page.waitForURL(/\/requests\/rq-/);
+  await openSentDetail(page);
   await waitText(page, '요청용 이름');
   truthy((await page.locator('main').innerText()).includes('010-****-8888'), '제출한 연락처(마스킹)');
   const d = await db(page);
@@ -2668,9 +2678,9 @@ await test('내 예약 통합: 새 요청 제출 → 보낸 요청(목록 문구
   await fillNewDateRequest(page, '통합 탭 확인용 요청');
   await detailInput(page).fill('301동 1204호');
   await page.getByRole('button', { name: '요청 보내기' }).click();
-  await page.waitForURL((u) => /^\/requests\/rq-/.test(u.pathname));
-  const rid = new URL(page.url()).pathname.split('/').pop();
-  await page.getByRole('link', { name: '보낸 요청으로' }).click();
+  await page.waitForURL((u) => /^\/requests\/rq-[^/]+\/sent$/.test(u.pathname));
+  const rid = new URL(page.url()).pathname.split('/')[2];
+  await page.getByRole('main').getByRole('link', { name: '보낸 요청', exact: true }).click(); // 완료 화면의 보조 안내 링크
   await page.waitForURL((u) => u.pathname === '/bookings' && u.search.includes('tab=requests'));
   await resCount(page);
   truthy((await hrefs(page)).includes(`/requests/${rid}`), '제출한 요청이 보낸 요청에');
@@ -2684,6 +2694,152 @@ await test('내 예약 통합: 새 요청 제출 → 보낸 요청(목록 문구
   truthy(!(await hrefs(page)).some((h) => h.includes(rid)), '확정된 예약에는 없음');
   truthy(!(await openTab(page, '완료·취소')).some((h) => h.includes(rid)), '완료·취소에도 없음');
 });
+
+// ───────── 수리 요청 완료 화면 ─────────
+/** 앱 안 이동(문서를 새로 불러오지 않음) — 앱 상태(비교 묶음 등)를 유지한 채 주소만 바꾼다 */
+const spaGo = (page, p) => page.evaluate((to) => { history.pushState(history.state, '', to); dispatchEvent(new PopStateEvent('popstate', { state: history.state })); }, p);
+const sentText = (page) => page.locator('.sent').innerText();
+const sentHeading = (page) => page.getByRole('heading', { name: '수리 요청을 보냈어요' });
+/** 비교 묶음(b-sink: 한빛설비·새봄수리)에 밝은전기(p3) 요청을 더해 제출한다 */
+async function submitCompareRequest(page) {
+  await start(page, { path: '/requests/bundle/b-sink' });
+  await page.getByRole('button', { name: '같은 작업을 다른 업체에도 요청하기' }).click();
+  await page.waitForURL((u) => u.pathname === '/');
+  await spaGo(page, '/providers/p3/request?new=1');
+  await waitText(page, '같은 작업을 다른 업체에도 요청하고 있어요');
+  await page.getByLabel('희망 방문 날짜').fill('2026-10-21');
+  await page.getByRole('button', { name: '09:00~12:00' }).click();
+  await detailInput(page).fill('301동 1204호');
+  const n0 = (await db(page)).requests.length;
+  await page.getByRole('button', { name: '요청 보내기' }).click();
+  await page.waitForURL((u) => /^\/requests\/rq-[^/]+\/sent$/.test(u.pathname));
+  await sentHeading(page).waitFor();
+  return n0;
+}
+
+await test('요청 완료: 단일 요청 제출 → 완료 화면(실제 요약·확정 조건, 제목 포커스) → 새로고침·뒤로·앞으로 중복 없음 → 요청 상세, 목록에서는 상세로 바로', async (page) => {
+  await start(page, { path: '/providers/p1' });
+  await spaGo(page, '/providers/p1/request?new=1');
+  await waitText(page, '수리 요청서');
+  await page.getByLabel('어떤 작업인가요?').fill('완료 화면 확인 작업');
+  await page.getByLabel('희망 방문 날짜').fill('2026-10-21');
+  await page.getByRole('button', { name: '09:00~12:00' }).click();
+  await detailInput(page).fill('301동 1204호');
+  const n0 = (await db(page)).requests.length;
+  await page.getByRole('button', { name: '요청 보내기' }).dblclick(); // 연타해도 한 번만
+  await page.waitForURL((u) => /^\/requests\/rq-[^/]+\/sent$/.test(u.pathname));
+  const rid = new URL(page.url()).pathname.split('/')[2];
+  await sentHeading(page).waitFor();
+  eq(await page.evaluate(() => document.activeElement?.textContent), '수리 요청을 보냈어요', '이동 후 제목에 포커스');
+  const t = await sentText(page);
+  for (const s of ['업체가 작업 가능 여부와 견적을 확인하고 있어요.', '요청한 수리', '완료 화면 확인 작업', '요청한 업체', '한빛설비', '아직 예약이 확정된 것은 아니에요.', '업체 승인 후 예약금을 결제하면 예약이 확정돼요.', '요청 내용 확인하기', '보낸 요청에서 진행 상황을 확인할 수 있어요.']) truthy(t.includes(s), `완료 화면 ‘${s}’: ${t}`);
+  for (const s of ['예약 완료', '예약이 확정됐어요', '방문 예정', '10월 21일', ' 외 ', '개 업체']) truthy(!t.includes(s), `표시하지 않음 ‘${s}’: ${t}`);
+  eq(await page.locator('.sent__icon').evaluate((e) => getComputedStyle(e).color), 'rgb(49, 93, 168)', '블루 체크 아이콘');
+  const d = await db(page);
+  eq(d.requests.length, n0 + 1, '연타해도 요청 하나');
+  const r = d.requests.find((x) => x.id === rid);
+  eq(r.status, 'reviewing', '검토 중'); eq(r.bookingId, undefined, '요청만으로 예약 없음');
+  // 새로고침: 저장된 요청을 조회해 같은 내용, 새 요청 없음
+  await page.reload();
+  await sentHeading(page).waitFor();
+  truthy((await sentText(page)).includes('완료 화면 확인 작업'), '새로고침 후 같은 요약');
+  eq((await db(page)).requests.length, n0 + 1, '새로고침해도 새 요청 없음');
+  // 뒤로가기: 요청서가 아니라 업체 상세(요청서 기록은 완료 화면으로 바뀜) → 앞으로 가도 재제출 없음
+  await page.goBack();
+  await page.waitForURL((u) => u.pathname === '/providers/p1');
+  await page.goForward();
+  await sentHeading(page).waitFor();
+  eq((await db(page)).requests.length, n0 + 1, '뒤로·앞으로 이동해도 새 요청 없음');
+  // 키보드로 ‘요청 내용 확인하기’ → 이 요청의 상세
+  await page.getByRole('link', { name: '요청 내용 확인하기' }).focus();
+  await page.keyboard.press('Enter');
+  await page.waitForURL((u) => u.pathname === `/requests/${rid}`);
+  await waitText(page, '업체 검토 중');
+  eq((await db(page)).requests.length, n0 + 1, '버튼으로 다시 제출되지 않음');
+  // 나중에 보낸 요청 목록에서 고르면 완료 화면을 거치지 않고 상세로
+  await page.goto(`${BASE}/bookings?tab=requests`);
+  await resCount(page);
+  await page.locator(`a[href="/requests/${rid}"]`).click();
+  await page.waitForURL((u) => u.pathname === `/requests/${rid}`);
+  await waitText(page, '업체 검토 중');
+  eq(await sentHeading(page).count(), 0, '목록에서는 완료 화면 없음');
+});
+
+await test('요청 완료: 비교 요청 제출 → ‘N개 업체에 수리 요청을 보냈어요’·대표 작업 외 N건 → 비교 요청 상세', async (page) => {
+  const n0 = await submitCompareRequest(page);
+  const t = await sentText(page);
+  for (const s of ['3개 업체에 수리 요청을 보냈어요', '욕실 세면대 수전 교체 외 1건', '3개 업체', '한빛설비, 새봄수리, 밝은전기', '아직 예약이 확정된 것은 아니에요.']) truthy(t.includes(s), `비교 요약 ‘${s}’: ${t}`);
+  const d = await db(page);
+  eq(d.requests.length, n0 + 1, '요청 하나 추가');
+  eq(d.requests.at(-1).bundleId, 'b-sink', '같은 비교 묶음');
+  await page.getByRole('link', { name: '요청 내용 확인하기' }).click();
+  await page.waitForURL((u) => u.pathname === '/requests/bundle/b-sink');
+  await waitText(page, '업체별 응답');
+  await waitText(page, '밝은전기');
+});
+
+await test('요청 완료: 제출 실패 시 작성 화면 유지(완료 화면 없음) · 잘못된 주소는 안내와 보낸 요청 경로 · 검토가 지난 요청은 상세로(반복 없음)', async (page) => {
+  await start(page, { path: '/providers/p1/request?new=1', patch: (d) => { d.settings.failNextWrite = true; } });
+  await fillNewDateRequest(page, '실패 확인 작업');
+  await detailInput(page).fill('301동 1204호');
+  const n0 = (await db(page)).requests.length;
+  await page.getByRole('button', { name: '요청 보내기' }).click();
+  await waitText(page, '입력한 내용은 그대로 있어요');
+  eq(new URL(page.url()).pathname, '/providers/p1/request', '작성 화면 유지');
+  eq(await sentHeading(page).count(), 0, '완료 화면 없음');
+  eq((await db(page)).requests.length, n0, '요청 없음');
+  // 없는 요청
+  await page.goto(`${BASE}/requests/rq-nope/sent`);
+  await waitText(page, '요청 내용을 찾을 수 없어요');
+  await page.getByRole('link', { name: '보낸 요청 보기' }).click();
+  await page.waitForURL((u) => u.pathname === '/bookings' && u.search.includes('tab=requests'));
+  // 이미 승인된 비교 요청 → 비교 요청 상세(한 번만 이동하고 머무름)
+  await page.goto(`${BASE}/requests/rq-3/sent`);
+  await page.waitForURL((u) => u.pathname === '/requests/bundle/b-sink');
+  await waitText(page, '업체별 응답');
+  await page.waitForTimeout(400);
+  eq(new URL(page.url()).pathname, '/requests/bundle/b-sink', '이동 반복 없음');
+  eq(await sentHeading(page).count(), 0, '완료 안내 없음');
+  eq((await db(page)).requests.length, n0, '조회만으로 요청 생성 없음');
+});
+
+await test('요청 확정 안내 위치: 업체 찾기 홈에는 없음(주소·카테고리·공동 예약 안내 유지) · 요청서 ‘요청 보내기’ 옆 보조 설명 한 번', async (page) => {
+  await start(page, { path: '/' });
+  await page.locator('.cat-grid').waitFor();
+  const home = await page.locator('main').innerText();
+  truthy(!home.includes('요청만으로는 예약이 확정되지 않아요') && !home.includes('예약금을 결제해야 예약이 확정돼요'), '홈 안내 박스 제거');
+  truthy(home.includes('지역·건물 주소') && home.includes('어떤 수리가 필요하세요?'), '주소·카테고리 유지');
+  eq(await page.locator('main .banner').count(), 0, '홈에 남은 안내 박스 없음');
+  // 카테고리 영역 아래 = 본문 아래 여백만(빈 상자 자리 없음)
+  const gap = await page.evaluate(() => { const m = document.querySelector('main'); const s = m.querySelector('.stack'); return Math.round(m.getBoundingClientRect().bottom - s.lastElementChild.getBoundingClientRect().bottom - parseFloat(getComputedStyle(m).paddingBottom)); });
+  truthy(gap <= 1, `홈 하단 남는 여백 ${gap}px`);
+  await page.goto(`${BASE}/providers/p1/request?new=1`);
+  await page.getByRole('button', { name: '요청 보내기' }).waitFor();
+  eq((await page.locator('.action-bar__note').innerText()).trim(), '업체 승인 후 예약금을 결제하면 예약이 확정돼요.', '요청 보내기 옆 보조 설명');
+  eq(await page.getByText('업체 승인 후 예약금을 결제하면 예약이 확정돼요.', { exact: true }).count(), 1, '같은 안내 한 번만');
+  eq(await page.locator('main .banner').filter({ hasText: '예약이 확정' }).count(), 0, '큰 배너 아님');
+});
+
+for (const w of [360, 1280]) {
+  await test(`요청 완료 화면 ${w}px: 잘림·가로 넘침 없음, 과하게 길지 않음(주요 버튼이 첫 화면 안), 공통 헤더·로고 유지`, async (page) => {
+    await page.setViewportSize({ width: w, height: 800 });
+    await submitCompareRequest(page);
+    await page.evaluate(() => window.scrollTo(0, 0));
+    const r = await page.evaluate(() => {
+      const s = document.querySelector('.sent').getBoundingClientRect();
+      const btn = [...document.querySelectorAll('.sent a')].find((a) => a.textContent === '요청 내용 확인하기').getBoundingClientRect();
+      const tabbar = document.querySelector('.tabbar'); const tb = tabbar && getComputedStyle(tabbar).display !== 'none' ? tabbar.getBoundingClientRect().top : innerHeight;
+      const clipped = [...document.querySelectorAll('.sent *')].some((e) => e.scrollWidth > e.clientWidth + 1 && getComputedStyle(e).overflow !== 'visible');
+      return { overflow: document.documentElement.scrollWidth > innerWidth, clipped, width: Math.round(s.width), btnBottom: Math.round(btn.bottom), visibleBottom: Math.round(tb), btnH: Math.round(btn.height),
+        logo: !!document.querySelector('.app-header__brand'), nav: !!document.querySelector('nav.top-nav') };
+    });
+    truthy(!r.overflow && !r.clipped && r.width <= 480 && r.btnH >= 44, `배치 ${JSON.stringify(r)}`);
+    truthy(r.btnBottom <= r.visibleBottom, `주요 버튼이 첫 화면 안 ${JSON.stringify(r)}`);
+    truthy(r.logo && r.nav, '로고·공통 헤더');
+    await page.mouse.move(0, 0);
+    await page.screenshot({ path: join(ROOT, `e2e/screens/${w}_request_sent.png`) });
+  }, { width: w });
+}
 
 await test('내 예약 통합: 탭별 필터·목록 위치가 독립적으로 유지된다', async (page) => {
   await page.setViewportSize({ width: 390, height: 600 });

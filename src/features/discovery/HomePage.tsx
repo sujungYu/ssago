@@ -4,7 +4,7 @@ import { Page } from '../../app/Page';
 import { useRepo } from '../../app/context';
 import { useAsync } from '../../app/hooks';
 import { Icon } from '../../components/Icon';
-import { AsyncView, Banner, CoopGuideHint, LinkButton, Section, Skeleton } from '../../components/ui';
+import { AsyncView, CoopGuideHint, LinkButton, Section, Skeleton } from '../../components/ui';
 import { addressSubline, addressTitle, useExploreAddress } from './exploreAddress';
 import { CATEGORY_ART, CATEGORY_ART_SIZE, CATEGORY_TITLE } from './categoryArt';
 import { Fragment } from 'react';
@@ -73,7 +73,6 @@ export function HomePage() {
           )}
         </AsyncView>
       </Section>
-      <Banner tone="info" title="요청만으로는 예약이 확정되지 않아요">업체가 승인하고 예약금을 결제해야 예약이 확정돼요.</Banner>
     </Page>
   );
 }

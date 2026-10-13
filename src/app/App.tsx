@@ -8,6 +8,7 @@ import { ProviderDetailPage } from '../features/discovery/ProviderDetailPage';
 import { RequestFormPage } from '../features/requests/RequestFormPage';
 import { BundlePage } from '../features/requests/BundlePage';
 import { RequestDetailPage } from '../features/requests/RequestDetailPage';
+import { RequestSentPage } from '../features/requests/RequestSentPage';
 import { SupplementPage } from '../features/requests/SupplementPage';
 import { ApprovalPage } from '../features/payment/ApprovalPage';
 import { PaymentResultPage } from '../features/payment/PaymentResultPage';
@@ -63,6 +64,7 @@ export function App() {
           <Route path="/requests" element={<OldRequestsRedirect />} />
           <Route path="/requests/bundle/:bundleId" element={<BundlePage />} />
           <Route path="/requests/:id" element={<RequestDetailPage />} />
+          <Route path="/requests/:id/sent" element={<RequestSentPage />} />
           <Route path="/requests/:id/supplement" element={<SupplementPage />} />
           <Route path="/requests/:id/approval" element={<ApprovalPage mode="approval" />} />
           <Route path="/requests/:id/recheck" element={<ApprovalPage mode="recheck" />} />
