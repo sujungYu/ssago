@@ -9,8 +9,8 @@ describe('보낸 요청 대표 상태·할 일', () => {
   it('대표 상태: 업체 검토 중 · 예약금 결제 · 업체 거절 · 요청 취소 · 결제 기한 만료', () => {
     expect(requestDisplay('reviewing')).toEqual({ label: '업체 검토 중', tone: 'progress', actions: [] });
     expect(requestDisplay('needs_info')).toEqual({ label: '업체 검토 중', tone: 'progress', actions: ['supplement'] });
-    expect(requestDisplay('approved_pending_payment')).toEqual({ label: '예약금 결제', tone: 'progress', actions: ['deposit'] });
-    expect(requestDisplay('rejected')).toEqual({ label: '업체 거절', tone: 'ended', actions: [] });
+    expect(requestDisplay('approved_pending_payment')).toEqual({ label: '예약금 결제', tone: 'payment', actions: ['deposit'] });
+    expect(requestDisplay('rejected')).toEqual({ label: '업체 거절', tone: 'rejected', actions: [] });
     expect(requestDisplay('withdrawn')).toMatchObject({ label: '요청 취소', tone: 'ended' });
     expect(requestDisplay('approval_expired')).toMatchObject({ label: '결제 기한 만료', tone: 'ended' });
   });
@@ -30,8 +30,8 @@ describe('예약 대표 상태·할 일', () => {
     expect(bd('in_progress').label).toBe('작업 중');
     expect(bd('followup_waiting').label).toBe('작업 중');
     expect(bd('followup_waiting', { followUp: { date: '2026-10-20', window: '09:00–12:00', note: '' } }).label).toBe('방문 예정');
-    expect(bd('final_confirm_waiting', { statementStatus: 'awaiting_customer', pendingActions: ['final_statement'] })).toMatchObject({ label: '최종 정산', actions: ['final_statement'] });
-    expect(bd('final_confirm_waiting', { statementStatus: 'disputed' })).toMatchObject({ label: '정산 진행 중', actions: [] }); // 협의 중: 고객 할 일 없음
+    expect(bd('final_confirm_waiting', { statementStatus: 'awaiting_customer', pendingActions: ['final_statement'] })).toMatchObject({ label: '최종 정산', tone: 'payment', actions: ['final_statement'] }); // 예약금 결제와 같은 주황(spec 5.45)
+    expect(bd('final_confirm_waiting', { statementStatus: 'disputed' })).toMatchObject({ label: '정산 진행 중', tone: 'progress', actions: [] }); // 협의 중: 고객 할 일 없음
     expect(bd('final_confirm_waiting', { statementStatus: 'awaiting_customer', balanceInFlight: true }).label).toBe('정산 진행 중');
     expect(bd('stopped_settlement_waiting').label).toBe('정산 진행 중');
     expect(bd('scheduled', { status: 'terms_recheck' }).label).toBe('방문 예정');

@@ -214,6 +214,17 @@
 - **빈 상태:** 탭에 예약 자체가 없음 → 탭별 안내(‘확정된 예약이 없어요’/‘완료되거나 취소된 예약이 없어요’). 필터 결과만 없음 → ‘선택한 조건에 맞는 예약이 없어요. 날짜나 상태를 변경해주세요.’(필터는 계속 조작 가능). 조회 오류는 오류 안내 + 다시 시도.
 - **데이터 계약:** `queryBookings({ tab, statusGroup, visitFrom, visitTo, actionRequiredOnly })` → `{ items, hasAnyInTab, excludedMissingVisitDate }`. 목업은 메모리에서 거르고, 서버 구현은 페이지네이션이 생겨도 같은 조건을 전체 조회에 적용한다.
 
+### 5.45 내 예약 목록 상태 배지 색: 예약금 결제·최종 정산 주황, 업체 거절 빨강 (2026-10-14)
+
+- 내 예약 목록 카드의 대표 상태 배지 색만 바꿨다(이름·크기·모양·위치 그대로). 공통 매핑 `src/domain/statusDisplay.ts`에 표시 색 `payment`·`rejected`를 더하고(`REQUEST_DISPLAY`, `bookingDisplay`, `TONE_BADGE`), 배지 클래스 `.badge--payment`·`.badge--rejected`와 토큰을 추가했다.
+  | 탭 | 상태 | 글자 | 배경 |
+  |---|---|---|---|
+  | 보낸 요청 | 예약금 결제 | #9A450B (`--c-status-pay`) | #FFF3E8 (`--c-status-pay-bg`) |
+  | 보낸 요청 | 업체 거절 | #B42318 (`--c-status-reject`) | #FEECEB (`--c-status-reject-bg`) |
+  | 확정된 예약 | 최종 정산 | #9A450B | #FFF3E8 (예약금 결제와 같음) |
+- 그대로: 업체 검토 중·방문 예정·일정 조율 중·작업 중·정산 진행 중(연한 블루), 요청 취소·결제 기한 만료·다른 업체 예약으로 종료(연한 회색), 완료·취소 탭(이용 완료 연한 그린·예약 취소 연한 회색), 카드 하단 할 일 문구와 주황 점(`--c-orange`), 필터 캡슐·선택 표시·버튼 색. 대표 상태 배지는 목록에서만 쓰므로 다른 화면의 배지(결제 상태·환불 등)는 바뀌지 않는다.
+- 대비: #9A450B/#FFF3E8 약 6.0:1, #B42318/#FEECEB 약 5.8:1(작은 글씨 기준 4.5:1 이상).
+
 ### 5.44 자재 취소 조건 펼치기 ↔ 동의 체크 간격 16px (2026-10-14)
 
 - 예약 상세 자재 주문 조건 카드에서만 조정(`.mat-cancel-fold`). 기준은 체크 영역(라벨, 터치 영역 — 안쪽 위 여백 12px 포함) 위쪽.
@@ -658,11 +669,11 @@
 | 탭 | 대표 상태 | 내부 상태 | 색 |
 |---|---|---|---|
 | 보낸 요청 | 업체 검토 중 | `reviewing`, `needs_info`(+ 확인 필요) | 연한 블루 |
-| | 예약금 결제 대기 | `approved_pending_payment`(결제 실패·결과 확인 중 포함, 조건 재확인이면 + 확인 필요) | 연한 블루 |
-| | 업체 거절 / 요청 취소 / 결제 기한 만료 | `rejected` / `withdrawn` / `approval_expired` | 연한 회색 |
+| | 예약금 결제 대기 | `approved_pending_payment`(결제 실패·결과 확인 중 포함, 조건 재확인이면 + 확인 필요) | 연한 주황(5.45) |
+| | 업체 거절 / 요청 취소 / 결제 기한 만료 | `rejected` / `withdrawn` / `approval_expired` | 연한 빨강(업체 거절, 5.45) / 연한 회색 / 연한 회색 |
 | 확정된 예약 | 방문 예정 | `scheduled`, 후속 방문 일정이 확정된 `followup_waiting`, 조건 재확인(`terms_recheck`) 예약 | 연한 블루 |
 | | 작업 중 | `in_progress`, 후속 방문 일정 미정 `followup_waiting` | 연한 블루 |
-| | 최종 금액 확인 필요 | `final_confirm_waiting` + 최종 내역 확인 대기(협의로 수정된 금액 재확인 포함) | 연한 블루 |
+| | 최종 금액 확인 필요 | `final_confirm_waiting` + 최종 내역 확인 대기(협의로 수정된 금액 재확인 포함) | 연한 주황(5.45) |
 | | 정산 진행 중 | 금액 이견(`disputed`)·잔금 결제 결과 확인 중인 `final_confirm_waiting`, `stopped_settlement_waiting` | 연한 블루 |
 | 완료·취소 | 이용 완료 / 예약 취소 | `completed` / `cancelled` | 연한 그린 / 연한 회색 |
 

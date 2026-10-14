@@ -51,7 +51,8 @@ export function checkPayable(i: PayCheckInput): { ok: true } | { ok: false; reas
 }
 
 // ───────── 상태 라벨 ─────────
-export type Tone = 'neutral' | 'info' | 'action' | 'success' | 'warn' | 'danger';
+/** payment·rejected: 내 예약 목록 대표 상태 배지 전용(예약금 결제·최종 정산 / 업체 거절, spec 5.45) */
+export type Tone = 'neutral' | 'info' | 'action' | 'success' | 'warn' | 'danger' | 'payment' | 'rejected';
 
 /** 요청 상태의 표시 이름·색은 목록 대표 상태(src/domain/statusDisplay.ts REQUEST_DISPLAY)와 같다. hint는 상세·비교 화면 안내 */
 export const REQUEST_STATUS: Record<RequestStatus, { label: string; tone: Tone; hint: string }> = {

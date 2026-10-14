@@ -2,13 +2,14 @@
  * 요청·예약의 사용자 표시 상태와 할 일(spec 5.17·5.18). 내부 업무 상태(RequestStatus·Booking.status·workStatus·정산 상태)·탭 분류·결제 조건은
  * 그대로 두고, 목록·필터·상세 배지가 같은 이름과 같은 ‘할 일’ 기준을 쓰도록 여기 한 곳에서 매핑한다.
  *
- * - 대표 상태 색: 진행(progress) = 연한 블루, 종료(ended) = 연한 회색, 이용 완료(done) = 연한 그린.
+ * - 대표 상태 색: 진행(progress) = 연한 블루, 종료(ended) = 연한 회색, 이용 완료(done) = 연한 그린,
+ *   결제 필요(payment: 예약금 결제·최종 정산) = 연한 주황, 업체 거절(rejected) = 연한 빨강(2026-10-14, spec 5.45).
  * - 할 일(actions): 고객이 지금 처리해야 할 미처리 행동만. 업체 검토·업체 응답 대기(희망 일정 전달 후 등)·결제·환불 결과 대기·금액 협의 중에는 없다.
  *   목록 카드 하단에 중요한 행동 한 줄(+ ‘외 N건’)을 보여주고, 상세 상단 확인 카드에서 모든 행동을 처리한다.
  */
 import type { Booking, RequestStatus, StatementStatus } from './types';
 
-export type DisplayTone = 'progress' | 'ended' | 'done';
+export type DisplayTone = 'progress' | 'ended' | 'done' | 'payment' | 'rejected';
 
 /** 고객 할 일 종류(중요한 순서 = ACTION_ORDER) */
 export type ActionKind = 'deposit' | 'supplement' | 'delay' | 'schedule' | 'additional' | 'material' | 'final_statement';
@@ -43,8 +44,8 @@ export function actionSummary(actions: ActionKind[]): string | null {
 export const REQUEST_DISPLAY: Record<RequestStatus, { label: string; tone: DisplayTone }> = {
   reviewing: { label: '업체 검토 중', tone: 'progress' },
   needs_info: { label: '업체 검토 중', tone: 'progress' },
-  approved_pending_payment: { label: '예약금 결제', tone: 'progress' },
-  rejected: { label: '업체 거절', tone: 'ended' },
+  approved_pending_payment: { label: '예약금 결제', tone: 'payment' },
+  rejected: { label: '업체 거절', tone: 'rejected' },
   withdrawn: { label: '요청 취소', tone: 'ended' },
   approval_expired: { label: '결제 기한 만료', tone: 'ended' },
   closed_other_booking: { label: '다른 업체 예약으로 종료', tone: 'ended' },
@@ -139,8 +140,8 @@ export function bookingDisplay(i: BookingDisplayInput): BookingDisplay {
   if (b.status === 'cancelled') return { label: PAST_GROUP_LABEL.cancelled, tone: 'ended', actions: [], group: null, visitPending: false };
   if (b.workStatus === 'completed') return { label: PAST_GROUP_LABEL.completed, tone: 'done', actions: [], group: null, visitPending: false };
   const group = activeGroupOf(i)!;
-  return { label: ACTIVE_GROUP_LABEL[group], tone: 'progress', actions: bookingActions(i), group, visitPending: group === 'rescheduling' };
+  return { label: ACTIVE_GROUP_LABEL[group], tone: group === 'final_confirm' ? 'payment' : 'progress', actions: bookingActions(i), group, visitPending: group === 'rescheduling' };
 }
 
 /** 대표 상태 색 → 배지 색 */
-export const TONE_BADGE = { progress: 'info', ended: 'neutral', done: 'success' } as const;
+export const TONE_BADGE = { progress: 'info', ended: 'neutral', done: 'success', payment: 'payment', rejected: 'rejected' } as const;

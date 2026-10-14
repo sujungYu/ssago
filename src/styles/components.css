@@ -102,6 +102,9 @@ a.list-row:hover { background: #fafbfd; }
 .badge--success { background: var(--c-success-bg); color: var(--c-success); }
 .badge--warn { background: var(--c-warn-bg); color: var(--c-warn); }
 .badge--danger { background: var(--c-danger-bg); color: var(--c-danger); }
+/* 내 예약 목록 대표 상태(spec 5.45): 결제 필요(예약금 결제·최종 정산) 연한 주황, 업체 거절 연한 빨강. 색만 다르고 크기·모양은 .badge 그대로 */
+.badge--payment { background: var(--c-status-pay-bg); color: var(--c-status-pay); }
+.badge--rejected { background: var(--c-status-reject-bg); color: var(--c-status-reject); }
 .chips { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
 .chip {
   min-height: 44px; padding: 0 var(--sp-4); border-radius: var(--r-pill); border: 1px solid var(--c-line-strong); background: var(--c-surface);

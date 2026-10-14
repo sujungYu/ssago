@@ -8,6 +8,9 @@
   --c-text: #20242c;
   --c-text-2: #606773;
   --c-text-gray: #3d434d; /* 진한 회색 — 업체 목록의 업체 수·정렬 드롭다운 */
+  /* 내 예약 목록 상태 배지(spec 5.45): 결제 필요(예약금 결제·최종 정산), 업체 거절 */
+  --c-status-pay: #9a450b; --c-status-pay-bg: #fff3e8;
+  --c-status-reject: #b42318; --c-status-reject-bg: #feeceb;
   --c-line: #e4e6ea;
   --c-line-strong: #c9ced6;
   --c-info-bg: #edf3fc;
