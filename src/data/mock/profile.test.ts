@@ -50,22 +50,22 @@ describe('내 정보 수정', () => {
     const r = repo();
     expect(await code(r.updateProfile({ name: '   ', phone: '01012345678' }))).toBe('invalid');
     expect(await code(r.updateProfile({ name: '김', phone: '0101234' }))).toBe('invalid');
-    expect((await r.getProfile()).name).toBe('김온다 (가상 고객)');
+    expect((await r.getProfile()).name).toBe('유수리');
   });
   it('저장 실패(쓰기 실패·브라우저 저장 불가)면 바꾸지 않는다', async () => {
     const r = repo();
     r.__db().settings.failNextWrite = true;
     expect(await code(r.updateProfile({ name: '박데모', phone: '01098765432' }))).toBe('network');
-    expect((await r.getProfile()).name).toBe('김온다 (가상 고객)');
+    expect((await r.getProfile()).name).toBe('유수리');
     // 브라우저 저장소를 쓸 수 없는 환경(테스트 환경에는 sessionStorage가 없다)
     const p = new MockRepository({ latencyMs: 0, persist: true });
     expect(await code(p.updateProfile({ name: '박데모', phone: '01098765432' }))).toBe('storage_failed');
-    expect((await p.getProfile()).name).toBe('김온다 (가상 고객)');
+    expect((await p.getProfile()).name).toBe('유수리');
   });
   it('저장값이 잘못됐거나 이전 형식(연락처 없음)이면 기본 가상 고객 정보를 쓴다', async () => {
     const r = repo();
     (r.__db() as unknown as { customer: unknown }).customer = { id: 'cu1', name: '   ', phoneMasked: '010-****-0000' };
-    expect(await r.getProfile()).toMatchObject({ name: '김온다 (가상 고객)', phone: '01000000000', phoneMasked: '010-****-0000' });
+    expect(await r.getProfile()).toMatchObject({ name: '유수리', phone: '01000000000', phoneMasked: '010-****-0000' });
     (r.__db() as unknown as { customer: unknown }).customer = { id: 'cu1', name: '김', phone: 12 };
     expect((await r.getProfile()).phone).toBe('01000000000');
   });
@@ -78,12 +78,12 @@ describe('내 정보 수정', () => {
     await r.simulateDepositPayment({ requestId: 'rq-3', approvalVersion: d.approval!.version, idempotencyKey: 'pf-pay' });
     const bookingId = (await r.getRequest('rq-3')).request.bookingId!;
     const bookedContact = (await r.getBooking(bookingId)).booking.contact;
-    expect(bookedContact).toEqual({ name: '김온다 (가상 고객)', phone: '01000000000' });
+    expect(bookedContact).toEqual({ name: '유수리', phone: '01000000000' });
 
     await r.updateProfile({ name: '박데모', phone: '010-9876-5432' });
     expect((await r.getRequest(created.id)).request.contact).toEqual({ name: '김온다', phone: '01011112222' });
     expect((await r.getBooking(bookingId)).booking.contact).toEqual(bookedContact);
-    expect((await r.getBooking('bk-k2')).booking.contact?.name).toBe('김온다 (가상 고객)');
+    expect((await r.getBooking('bk-k2')).booking.contact?.name).toBe('유수리');
   });
   it('요청 연락처 형식이 틀리면 접수하지 않는다', async () => {
     expect(await code(repo().createRequest(req({ contact: { name: ' ', phone: '01011112222' } })))).toBe('invalid');

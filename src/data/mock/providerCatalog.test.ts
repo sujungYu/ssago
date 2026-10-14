@@ -223,7 +223,7 @@ describe('추가 업체의 날짜 선택·수리 요청 흐름', () => {
 
   it('모든 추가 업체: 공동 예약 요청과 새 요청을 등록 작업 여러 개로 제출할 수 있다', async () => {
     const r = repo();
-    const base = { addressId: 'ad-apt', addressDetail: '301동 1204호', saveAddressForNext: false, contact: { name: '김온다 (가상 고객)', phone: '01000000000' } };
+    const base = { addressId: 'ad-apt', addressDetail: '301동 1204호', saveAddressForNext: false, contact: { name: '유수리', phone: '01000000000' } };
     for (const p of EXTRA_PROVIDERS) {
       const d = await r.getProvider(p.id, 'ad-apt');
       const tasks = d.services.slice(0, 2).map((s) => ({ serviceId: s.id, description: '데모 요청', photoNames: [] }));

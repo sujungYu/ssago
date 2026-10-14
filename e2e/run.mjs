@@ -3794,7 +3794,7 @@ await test('내 정보 수정: 현재 값 표시 → 저장 → 즉시 반영·�
   eq((await editBtn(page).innerText()).trim(), '수정', '버튼 글자');
   await editBtn(page).click();
   await pDlg(page).waitFor();
-  eq(await pName(page).inputValue(), '김온다 (가상 고객)', '현재 이름 미리 표시');
+  eq(await pName(page).inputValue(), '유수리', '현재 이름 미리 표시');
   eq(await pPhone(page).inputValue(), '010-0000-0000', '현재 연락처(전체 번호) 미리 표시');
   eq(await pPhone(page).getAttribute('type'), 'tel', '전화번호 키보드(type)');
   eq(await pPhone(page).getAttribute('inputmode'), 'tel', '전화번호 키보드(inputmode)');
@@ -3835,13 +3835,13 @@ await test('내 정보 수정: 취소·닫기·Escape·바깥 누르기는 변�
     if (how === 'backdrop') await page.mouse.click(5, 5);
     await pDlg(page).waitFor({ state: 'detached' });
     const card = await profileCard(page).innerText();
-    truthy(card.includes('김온다 (가상 고객)') && card.includes('010-****-0000'), `${how}: 반영 안 됨 ${card}`);
+    truthy(card.includes('유수리') && card.includes('010-****-0000'), `${how}: 반영 안 됨 ${card}`);
     truthy(!(await page.locator('main').innerText()).includes('정보를 수정했어요.'), `${how}: 완료 안내 없음`);
     await editBtn(page).click();
-    eq(await pName(page).inputValue(), '김온다 (가상 고객)', `${how}: 다시 열면 저장된 값`);
+    eq(await pName(page).inputValue(), '유수리', `${how}: 다시 열면 저장된 값`);
     await pDlg(page).getByRole('button', { name: '취소' }).click();
   }
-  eq((await db(page)).customer.name, '김온다 (가상 고객)', '저장소 그대로');
+  eq((await db(page)).customer.name, '유수리', '저장소 그대로');
 });
 
 await test('내 정보 수정: 빈 값·공백 이름·잘못된 연락처 → 입력란 아래 오류, 첫 오류로 포커스, 고치면 저장', async (page) => {
@@ -3864,7 +3864,7 @@ await test('내 정보 수정: 빈 값·공백 이름·잘못된 연락처 → �
     eq(await page.evaluate(() => document.activeElement?.getAttribute('data-err-target')), 'phone', `${v}: 연락처로 포커스`);
     truthy(await pDlg(page).isVisible(), '오류면 닫히지 않음');
   }
-  eq((await db(page)).customer.name, '김온다 (가상 고객)', '오류면 저장 안 함');
+  eq((await db(page)).customer.name, '유수리', '오류면 저장 안 함');
   // Enter로 제출(키보드)
   await pPhone(page).fill('01012345678');
   await pPhone(page).press('Enter');
@@ -3883,7 +3883,7 @@ await test('내 정보 수정: 저장 실패 시 입력 유지·실패 안내, �
   eq(await pName(page).inputValue(), '실패후성공', '실패 후 이름 유지');
   eq(await pPhone(page).inputValue(), '010-2222-3333', '실패 후 연락처 유지');
   truthy(!(await page.locator('main').innerText()).includes('정보를 수정했어요.'), '실패인데 완료 안내 없음');
-  truthy((await profileCard(page).innerText()).includes('김온다 (가상 고객)'), '실패면 반영 안 함');
+  truthy((await profileCard(page).innerText()).includes('유수리'), '실패면 반영 안 함');
   // 저장 중: 버튼 비활성·연타해도 한 번, Escape로 닫히지 않음
   const save = pDlg(page).getByRole('button', { name: '저장하기' });
   await save.click();
@@ -3937,12 +3937,12 @@ await test('내 정보 수정 → 새 요청서 기본값, 직접 입력한 값�
   // 기존 요청·확정 예약은 제출 당시 정보
   await page.goto(`${BASE}/requests/rq-3`);
   await waitText(page, '연락처');
-  truthy((await page.locator('main').innerText()).includes('김온다 (가상 고객) · 010-****-0000'), '기존 요청 연락처 유지');
+  truthy((await page.locator('main').innerText()).includes('유수리 · 010-****-0000'), '기존 요청 연락처 유지');
   await page.goto(`${BASE}/bookings/bk-k2`);
   await page.getByRole('heading', { name: '예약 정보', exact: true }).waitFor();
-  await waitText(page, '김온다 (가상 고객)');
+  await waitText(page, '유수리');
   const bk = await page.locator('main').innerText();
-  truthy(bk.includes('김온다 (가상 고객) · 010-****-0000') && !bk.includes('다른이름'), '기존 예약 연락처 유지');
+  truthy(bk.includes('유수리 · 010-****-0000') && !bk.includes('다른이름'), '기존 예약 연락처 유지');
 });
 
 for (const w of [390, 1280]) {

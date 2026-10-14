@@ -31,7 +31,7 @@ export function MePage() {
           <>
             <div className="card row">
               <span className="avatar" aria-hidden><Icon name="user" /></span>
-              <div className="grow"><p className="strong">{p.name}</p><p className="small muted">데모 고객 · {p.phoneMasked}</p></div>
+              <div className="grow"><p className="strong">{p.name}</p><p className="small muted">{p.phoneMasked}</p></div>
               <Button variant="secondary" sm aria-haspopup="dialog" aria-label="내 정보 수정" onClick={() => { setDone(false); setEditing(true); }}>수정</Button>
             </div>
             {editing && <ProfileEditDialog profile={p} onClose={() => setEditing(false)} onSaved={(next) => { setJustSaved({ p: next, of: q.data }); setEditing(false); setDone(true); }} />}

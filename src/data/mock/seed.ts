@@ -177,8 +177,8 @@ const tk = (title: string, description: string, photoNames: string[] = []): Task
 
 const T_FAUCET = () => [tk('욕실 세면대 수전 교체', '수전 손잡이가 헐거워 물이 샙니다.', ['faucet.jpg']), tk('배수 트랩 교체', '배수 속도가 느리고 냄새가 납니다.')];
 
-/** 기본 가상 고객(저장된 내 정보가 없거나 잘못됐을 때 사용). 실제 개인정보가 아니다. */
-export const DEFAULT_CUSTOMER: CustomerContact = { name: '김온다 (가상 고객)', phone: '01000000000' };
+/** 기본 고객(저장된 내 정보가 없거나 잘못됐을 때 사용). 실제 개인정보가 아니다(가상 이름·번호). 2026-10-14 ‘김온다 (가상 고객)’에서 변경(spec 5.52) */
+export const DEFAULT_CUSTOMER: CustomerContact = { name: '유수리', phone: '01000000000' };
 
 function request(r: Partial<RepairRequest> & Pick<RepairRequest, 'id' | 'providerId' | 'status' | 'tasks'>): RepairRequest {
   const addressId = r.addressId ?? 'ad-apt';

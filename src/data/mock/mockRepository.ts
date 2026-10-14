@@ -35,6 +35,7 @@ import { DEFAULT_CUSTOMER, createSeed } from './seed';
 import { PROVIDER_SERVICES } from './providerServices';
 import { migrateDemoSchedule } from './scheduleMigration';
 import { migrateCatalog } from './catalogMigration';
+import { migrateDefaultCustomerName } from './customerMigration';
 import { isRetiredCategory } from '../../domain/categories';
 import { PROVIDER_REQUEST_DAYS } from './providerRequestDays';
 import { PROVIDER_SHOWCASE } from './providerShowcase';
@@ -71,7 +72,9 @@ export class MockRepository implements Repository {
     const scheduleMoved = !!seed && migrateDemoSchedule(this.db, seed);
     // 없앤 카테고리·업체 소속 정리(저장된 상태에 ‘기타 수리’가 남아 있어도 다시 보이지 않게)
     const catalogMoved = !!seed && migrateCatalog(this.db, seed);
-    const migrated = scheduleMoved || catalogMoved;
+    // 예전 기본 고객 이름(김온다)이 저장돼 있으면 새 기본 이름으로(직접 바꾼 이름·연락처·다른 기록은 그대로)
+    const nameMoved = !!loaded && migrateDefaultCustomerName(this.db);
+    const migrated = scheduleMoved || catalogMoved || nameMoved;
     if (this.persist && (!loaded || migrated)) this.save(); // 새 세션의 시드도 저장해 새로고침·점검 도구가 같은 상태를 보게 한다
   }
 
@@ -1034,7 +1037,7 @@ export class MockRepository implements Repository {
     });
   }
 
-  /** 저장된 고객 정보가 없거나 형식이 잘못됐으면 기본 가상 고객 정보를 쓴다(이전 형식 저장값 포함). */
+  /** 저장된 고객 정보가 없거나 형식이 잘못됐으면 기본 고객 정보(유수리)를 쓴다(이전 형식 저장값 포함). */
   private profile(): CustomerProfile {
     const c = this.db.customer as Partial<CustomerProfile> | undefined;
     const ok = c && typeof c.name === 'string' && typeof c.phone === 'string' ? normalizeContact({ name: c.name, phone: c.phone }) : null;
