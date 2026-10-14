@@ -113,7 +113,7 @@ export function BookingsPage() {
           ))}
         </div>
       </div>
-      <div role="tabpanel" id="res-panel" aria-labelledby={`res-tab-${tab}`} className="stack stack--lg">
+      <div role="tabpanel" id="res-panel" aria-labelledby={`res-tab-${tab}`} className="stack stack--lg res-panel">
         {/* 이 탭에 내역 자체가 없으면 필터를 보여주지 않는다 */}
         {hasAny !== false && (tab === 'requests'
           ? <RequestFilterBar filter={filter.requests} onApply={(requests) => apply({ ...filter, requests })} count={count} />

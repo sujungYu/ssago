@@ -16,7 +16,7 @@ export function CapsuleButton({ label, value, defaultValue, onClick }: { label: 
     <button type="button" className={`capsule${active ? ' capsule--on' : ''}`} aria-haspopup="dialog"
       aria-label={`${label} 필터: ${value ?? defaultValue}`} onClick={(e) => onClick(e.currentTarget)}>
       <span className="capsule__text">{value ?? label}</span>
-      <Icon name="down" size={16} />
+      <Icon name="down" size={14} />
     </button>
   );
 }
@@ -25,7 +25,7 @@ export function CapsuleButton({ label, value, defaultValue, onClick }: { label: 
 export function ToggleCapsule({ label, pressed, onToggle }: { label: string; pressed: boolean; onToggle: () => void }) {
   return (
     <button type="button" className={`capsule capsule--toggle${pressed ? ' capsule--on' : ''}`} aria-pressed={pressed} onClick={onToggle}>
-      <span className="capsule__check" aria-hidden>{pressed && <Icon name="check" size={14} />}</span>
+      <span className="capsule__check" aria-hidden>{pressed && <Icon name="check" size={10} />}</span>
       <span className="capsule__text">{label}</span>
     </button>
   );

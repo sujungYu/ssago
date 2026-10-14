@@ -47,7 +47,7 @@ export function SortMenu<T extends string>({ label, value, options, onChange }: 
         aria-label={`${label}: ${current.label}`}
         onClick={() => setOpen((o) => !o)} onKeyDown={(e) => { if (e.key === 'ArrowDown' && !open) { e.preventDefault(); setOpen(true); } }}>
         <span>{current.label}</span>
-        <Icon name="down" size={16} />
+        <Icon name="down" size={14} />
       </button>
       {open && (
         <ul className="sort-menu__list" id={menuId} role="menu" aria-label={label} ref={menuRef} onKeyDown={onMenuKey}>

@@ -99,7 +99,7 @@ function ProviderList() {
               <div className="provider-list">
               {/* 정렬: 왼쪽 결과 건수, 오른쪽 정렬 기준 드롭다운. 순서만 바꾸고 카드의 공동 예약 후보·내용은 그대로 */}
               <div className="sort-bar">
-                <p className="sort-bar__count" aria-live="polite">전체 <strong>{items.length}곳</strong></p>
+                <p className="sort-bar__count" aria-live="polite">전체 {items.length}곳</p>
                 <SortMenu label="정렬" value={sort} options={PROVIDER_SORT_OPTIONS} onChange={setSort} />
               </div>
               <ul className="stack" aria-label="업체 목록">

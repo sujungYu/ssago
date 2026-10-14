@@ -27,7 +27,7 @@ export function BookingFilterBar({ filter, onApply, count }: { filter: BookingsF
         <CapsuleButton label="방문일" defaultValue="전체 기간" value={periodLabel(active ? a : p, active ? ACTIVE_PERIOD_OPTIONS : PAST_PERIOD_OPTIONS)} onClick={(el) => setOpen({ kind: 'period', anchor: el })} />
         {active && <ToggleCapsule label="확인 필요" pressed={a.actionOnly} onToggle={() => onApply({ ...filter, active: { ...a, actionOnly: !a.actionOnly } })} />}
       </div>
-      <p className="filter-bar__count small" aria-live="polite">{count === undefined ? ' ' : <>{active ? '예약' : '내역'} <b>{count}</b>건</>}</p>
+      <p className="filter-bar__count" aria-live="polite">{count === undefined ? ' ' : <>{active ? '예약' : '내역'} {count}건</>}</p>
 
       {open?.kind === 'status' && active && (
         <OptionPicker title="예약 상태" name="booking-active-status" anchor={open.anchor} onClose={() => setOpen(null)} options={ACTIVE_STATUS_OPTIONS}

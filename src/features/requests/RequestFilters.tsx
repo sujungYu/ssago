@@ -21,7 +21,7 @@ export function RequestFilterBar({ filter, onApply, count }: { filter: RequestFi
         <CapsuleButton label="요청일" defaultValue="전체 기간" value={periodButtonLabel(filter)} onClick={(el) => setOpen({ kind: 'period', anchor: el })} />
         <ToggleCapsule label="확인 필요" pressed={!!filter.actionOnly} onToggle={() => onApply({ ...filter, actionOnly: !filter.actionOnly })} />
       </div>
-      <p className="filter-bar__count small" aria-live="polite">{count === undefined ? ' ' : <>{COMPARE_REQUESTS_ENABLED ? '요청 묶음' : '보낸 요청'} <b>{count}</b>건</>}</p>
+      <p className="filter-bar__count" aria-live="polite">{count === undefined ? ' ' : <>{COMPARE_REQUESTS_ENABLED ? '요청 묶음' : '보낸 요청'} {count}건</>}</p>
       {open?.kind === 'status' && (
         <OptionPicker title="요청 상태" name="status-group" anchor={open.anchor} onClose={() => setOpen(null)}
           options={STATUS_GROUP_OPTIONS.map((o) => (o.value === 'reviewing' ? { ...o, hint: '추가 정보 요청 포함' } : o.value === 'payment_pending' ? { ...o, hint: '바뀐 조건 확인 포함' } : o))}

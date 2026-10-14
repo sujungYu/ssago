@@ -293,16 +293,34 @@ a.list-row:hover { background: #fafbfd; }
 /* 필터 막대: [요청 상태 ▾] [요청일 ▾] [확인 필요]  보낸 요청 N건 — 공간이 부족하면 건수가 다음 줄(왼쪽)로 내려간다 */
 .filter-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--sp-2) var(--sp-3); }
 .filter-bar__buttons { display: flex; flex-wrap: wrap; gap: var(--sp-2); min-width: 0; }
-.filter-bar__count { margin: 0; color: var(--c-text-2); white-space: nowrap; }
-.filter-bar__count b { color: var(--c-text); }
-/* 캡슐형 필터 버튼(흰 배경·얇은 회색 테두리·높이 42px). 적용되면 연한 블루 배경·블루 글씨 */
-.capsule { display: inline-flex; align-items: center; gap: var(--sp-1); min-height: 42px; max-width: 100%; padding: 6px var(--sp-3) 6px var(--sp-4); border: 1px solid var(--c-line-strong); border-radius: var(--r-pill); background: var(--c-surface); color: var(--c-text); font: inherit; font-size: var(--fs-sm); font-weight: 600; text-align: left; cursor: pointer; }
-.capsule__text { min-width: 0; overflow-wrap: anywhere; }
-.capsule > svg { flex: none; color: var(--c-text-2); }
-.capsule:hover { border-color: var(--c-primary); }
-.capsule:focus-visible { outline: 2px solid var(--c-focus); outline-offset: 2px; }
+/* 목록 건수(‘보낸 요청 N건’·‘예약 N건’·‘내역 N건’, spec 5.53): 14px 진한 회색, 문구 전체 보통 굵기(숫자만 강조하지 않음). 필터와 세로 가운데(.filter-bar align-items) */
+/* 목록 건수 공통 텍스트(spec 5.57): 내 예약 ‘보낸 요청·예약·내역 N건’과 업체 목록 ‘전체 N곳’ — 14px·보통 굵기(400)·진한 회색, 숫자 강조 없음 */
+.filter-bar__count, .sort-bar__count { margin: 0; font-size: 14px; font-weight: 400; line-height: 1.4; color: var(--c-text-gray); white-space: nowrap; }
+.filter-bar__count { margin-left: auto; } /* 좁아서 다음 줄로 내려가도 오른쪽 */
+/* 내 예약 탭 패널: 필터 행 아래 → 첫 카드(또는 빈 결과·로딩) 16px. 패널 간격(24px)에서 8px을 줄여 이 한 곳만 조정(카드 사이 간격·다른 영역은 그대로) */
+.res-panel > .filter-bar { margin-bottom: calc(var(--sp-4) - var(--sp-6)); }
+/* 탭 아래 구분선 → 필터 위 16px(페이지 간격 24px에서 8px 줄임, spec 5.54) */
+.res-panel { margin-top: calc(var(--sp-4) - var(--sp-6)); }
+/*
+ * 선택 상자 공통(spec 5.54·5.56): 업체 목록 정렬 버튼(.sort-menu__btn)과 내 예약·비교 요청 필터(.capsule)가 같은 규칙을 쓴다.
+ * 흰 배경·연한 회색 테두리·8px 모서리·높이 36px·좌우 12px·13px 보통 굵기(400) 진한 회색, 아래 화살표 14px(같은 색, 글자와 4px — 아이콘 크기는 컴포넌트에서 14).
+ * 너비는 문구에 맞춘다(최소 너비 없음). 키보드 포커스 = 파란 테두리.
+ * 터치 화면: 보이는 36px 그대로 상자 밖 위아래 4px씩 넓혀 누르는 영역 44px(테두리 안쪽 34px + 5px×2). 필터 줄 간격 8px이라 줄바꿈돼도 겹치지 않는다.
+ */
+.sort-menu__btn, .capsule {
+  position: relative; display: inline-flex; align-items: center; gap: 4px; height: 36px; max-width: 100%; padding: 0 12px;
+  border: 1px solid var(--c-line); border-radius: var(--r-sm); background: var(--c-surface); color: var(--c-text-gray);
+  font: inherit; font-size: 13px; font-weight: 400; line-height: 1; white-space: nowrap; cursor: pointer;
+}
+.sort-menu__btn > svg, .capsule > svg { flex: none; color: var(--c-text-gray); }
+.sort-menu__btn:hover, .capsule:hover { border-color: var(--c-line-strong); }
+.sort-menu__btn:focus-visible, .capsule:focus-visible { outline: none; border-color: var(--c-focus); box-shadow: 0 0 0 1px var(--c-focus); }
+@media (pointer: coarse) { .sort-menu__btn::after, .capsule::after { content: ''; position: absolute; inset: -5px -1px; } }
+.capsule__text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* 적용된 필터(선택값 표시)·켜진 토글: 연한 블루 배경 + 블루 테두리·글씨(기존 선택 표시 유지). 포커스는 위 파란 테두리 + 바깥 1px */
 .capsule--on { background: var(--c-info-bg); border-color: var(--c-primary); color: var(--c-primary); }
 .capsule--on > svg { color: var(--c-primary); }
+.capsule--on:hover { border-color: var(--c-primary); }
 .choice__hint { display: block; margin-top: 2px; font-size: var(--fs-xs); color: var(--c-text-2); }
 .choices { border: 0; padding: 0; margin: 0; display: flex; flex-direction: column; gap: var(--sp-2); }
 .choice {
@@ -370,8 +388,9 @@ button.explore-address:hover { background: #fafbfd; }
 .dialog--popover { position: fixed; width: min(380px, calc(100vw - 32px)); border-radius: var(--r-lg); border: 1px solid var(--c-line); box-shadow: 0 12px 32px rgba(32, 36, 44, .16); padding: var(--sp-4); min-height: 0; }
 
 /* 켜고 끄는 캡슐(확인 필요만) */
-.capsule--toggle { padding-left: var(--sp-3); }
-.capsule__check { display: inline-grid; place-items: center; width: 18px; height: 18px; border: 1.5px solid var(--c-line-strong); border-radius: 50%; flex: none; }
+.capsule--toggle { padding-left: var(--sp-3); gap: 6px; }
+/* ‘확인 필요’ 원 14px(체크 10px — 컴포넌트), 원과 글자 6px(.capsule--toggle gap) */
+.capsule__check { display: inline-grid; place-items: center; width: 14px; height: 14px; border: 1.5px solid var(--c-line-strong); border-radius: 50%; flex: none; }
 .capsule--on .capsule__check { border-color: var(--c-primary); background: var(--c-primary); color: #fff; }
 
 /* ───────── 업체 상세: 공동 예약 캘린더 ───────── */
@@ -744,19 +763,9 @@ button.explore-address:hover { background: #fafbfd; }
 /* 목록 헤더–첫 업체 카드 12px(페이지 기본 간격 24px 대신). 주소 카드–헤더는 페이지 간격 24px 그대로 */
 .provider-list { display: flex; flex-direction: column; gap: var(--sp-3); min-width: 0; }
 .sort-bar { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); min-width: 0; }
-.sort-bar__count { margin: 0; font-size: 16px; line-height: 1.4; color: var(--c-text-gray); }
-.sort-bar__count strong { font-weight: 500; }
+/* 업체 목록 ‘전체 N곳’ 글자 모양은 위 ‘목록 건수 공통 텍스트’(.sort-bar__count) */
 .sort-menu { position: relative; flex: none; max-width: 70%; }
-.sort-menu__btn {
-  position: relative; display: inline-flex; align-items: center; gap: 4px; height: 40px; max-width: 100%; padding: 0 12px 0 14px;
-  border: 1px solid var(--c-line); border-radius: var(--r-sm); background: var(--c-surface); color: var(--c-text-gray);
-  font: inherit; font-size: 14px; font-weight: 500; line-height: 1; white-space: nowrap; cursor: pointer;
-}
-.sort-menu__btn > svg { flex: none; color: var(--c-text-gray); }
-.sort-menu__btn:hover { border-color: var(--c-line-strong); }
-.sort-menu__btn:focus-visible { outline: none; border-color: var(--c-focus); box-shadow: 0 0 0 1px var(--c-focus); }
-/* 터치 화면: 보이는 높이 40px는 그대로, 누르는 영역만 위아래로 넓혀 44px(테두리 안쪽 38px + 3px×2) */
-@media (pointer: coarse) { .sort-menu__btn::after { content: ''; position: absolute; inset: -3px -1px; } }
+/* 정렬 버튼 모양은 위 ‘선택 상자 공통’ 규칙(.sort-menu__btn, .capsule) */
 .sort-menu__list {
   position: absolute; right: 0; top: calc(100% + 6px); z-index: 25; margin: 0; padding: var(--sp-1); list-style: none;
   width: max-content; min-width: 100%; max-width: calc(100vw - 32px); background: var(--c-surface);
