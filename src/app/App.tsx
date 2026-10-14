@@ -2,7 +2,6 @@ import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-route
 import { listPath } from '../domain/reservationTabs';
 import { useEffect } from 'react';
 import { HomePage } from '../features/discovery/HomePage';
-import { AddressPage } from '../features/discovery/AddressPage';
 import { ProviderListPage } from '../features/discovery/ProviderListPage';
 import { ProviderDetailPage } from '../features/discovery/ProviderDetailPage';
 import { RequestFormPage } from '../features/requests/RequestFormPage';
@@ -58,7 +57,8 @@ export function App() {
           {/* 로그인 없는 데모: 모든 화면을 바로 이용한다(인증 가드 없음). 데이터는 전부 목업이다. */}
           {OLD_AUTH_PATHS.map((p) => <Route key={p} path={p} element={<Navigate to="/" replace />} />)}
           <Route path="/" element={<HomePage />} />
-          <Route path="/address" element={<AddressPage />} />
+          {/* 예전 주소 설정 화면: 중간 화면 없이 홈으로 바꿔 이동하고 홈에서 주소 검색을 한 번 연다(기록을 대체해 뒤로 가기에 다시 나오지 않음) */}
+          <Route path="/address" element={<Navigate to="/" replace state={{ openAddress: true }} />} />
           <Route path="/providers" element={<ProviderListPage />} />
           <Route path="/providers/:id" element={<ProviderDetailPage />} />
           <Route path="/providers/:id/request" element={<RequestFormPage />} />

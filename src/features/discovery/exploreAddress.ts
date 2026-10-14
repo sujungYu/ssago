@@ -4,7 +4,7 @@ import type { Address } from '../../domain/types';
 
 /**
  * 업체 찾기의 탐색 지역·건물 주소. 업체 찾기·카테고리별 업체 목록·업체 상세가 같은 앱 상태(addressId)를 읽는다(화면별 주소 상태 없음).
- * 주소 내용은 저장소에서 불러온다(목업: 가상 주소록). 동·호수 같은 신청용 상세 주소는 여기에 없다.
+ * 주소 내용은 저장소에서 불러온다(실제 주소 검색으로 등록한 주소 또는 시드의 가상 주소). 동·호수 같은 신청용 상세 주소는 여기에 없다.
  */
 export function useExploreAddress(): { addressId: string | null; address: AsyncState<Address | null> } {
   const repo = useRepo();

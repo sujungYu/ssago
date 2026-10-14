@@ -15,11 +15,12 @@ import { orderSelected } from '../../domain/taskSelection';
 import { formatWon } from '../../domain/money';
 import { expectedFeeForJoiner } from '../../domain/pricing';
 import { Icon } from '../../components/Icon';
-import { AsyncView, Banner, Button, Dialog, EmptyState, Field, KV, LinkButton, Section } from '../../components/ui';
+import { AsyncView, Banner, Button, EmptyState, Field, KV, LinkButton, Section } from '../../components/ui';
 import { SAVED_ADDRESS_LOADED, detailError, savedDetailFor } from '../../domain/address';
 import { NAME_MAX, PHONE_HINT, formatPhone, nameError, phoneDigits, phoneError } from '../../domain/profile';
 import type { Address } from '../../domain/types';
-import { AddressSearch } from '../discovery/AddressSearch';
+import { PostcodeDialog } from '../discovery/PostcodeSearch';
+import { addressSubline, addressTitle } from '../discovery/exploreAddress';
 
 /** 고른 작업별 작성 내용. 작업 ID로 관리해 선택을 바꿔도 다른 작업의 내용이 섞이지 않는다 */
 interface TaskDraft { description: string; photoNames: string[] }
@@ -75,6 +76,7 @@ function RequestForm({ id }: { id: string }) {
   const [autofilled, setAutofilled] = useState<string | null>(null); // 자동 입력한 저장 상세 주소
   const [saveForNext, setSaveForNext] = useState(false); // 고객이 직접 선택(기본 미선택)
   const [picking, setPicking] = useState(false);
+  const pickBase = useAction(); // 고른 실제 주소를 주소록에 등록(방문 건물 변경)
   const [baseChanged, setBaseChanged] = useState(false);
   const [touched, setTouched] = useState(false);
   const [contactName, setContactName] = useState('');
@@ -311,7 +313,7 @@ function RequestForm({ id }: { id: string }) {
                     <AsyncView state={address} loading={<p className="muted">주소를 불러오는 중이에요</p>}>
                       {(a) => a ? (
                         <div className="row row--between row--top">
-                          <div className="grow"><p className="strong">{a.label}</p><p className="small">{a.line1}</p></div>
+                          <div className="grow"><p className="strong">{addressTitle(a)}</p>{addressSubline(a) && <p className="small">{addressSubline(a)}</p>}</div>
                           <Button variant="secondary" sm onClick={() => setPicking(true)}>다른 주소</Button>
                         </div>
                       ) : (
@@ -341,11 +343,11 @@ function RequestForm({ id }: { id: string }) {
                 </div>
               </Section>
               {picking && (
-                <Dialog title="방문할 건물 주소" onClose={() => setPicking(false)} closeLabel="닫기" actions={null}>
-                  <p className="small muted">건물을 바꾸면 이전 건물의 상세 주소는 비워져요.</p>
-                  <AddressSearch selectedId={baseId} onPick={changeBase} />
-                </Dialog>
+                <PostcodeDialog title="방문할 건물 주소" note="도로명·지번·건물명으로 검색해 주세요. 건물을 바꾸면 이전 건물의 상세 주소는 비워져요."
+                  onSelect={(input) => { void pickBase.run(() => repo.registerAddress(input)).then((a) => { if (a) changeBase(a); else setPicking(false); }); }}
+                  onClose={() => setPicking(false)} />
               )}
+              {pickBase.error && <Banner tone="danger" title={pickBase.error.title}>{pickBase.error.hint}</Banner>}
 
               <Section title="연락받을 정보">
                 <div className="card stack">

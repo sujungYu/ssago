@@ -1,10 +1,11 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Page } from '../../app/Page';
 import { useRepo } from '../../app/context';
 import { useAsync } from '../../app/hooks';
 import { Icon } from '../../components/Icon';
-import { AsyncView, CoopGuideHint, LinkButton, Section, Skeleton } from '../../components/ui';
+import { AsyncView, Button, CoopGuideHint, Section, Skeleton } from '../../components/ui';
+import { ADDRESS_OPENER, useExploreAddressPicker } from './AddressPicker';
 import { addressSubline, addressTitle, useExploreAddress } from './exploreAddress';
 import { CATEGORY_ART, CATEGORY_ART_SIZE, CATEGORY_TITLE } from './categoryArt';
 import { Fragment } from 'react';
@@ -20,6 +21,16 @@ export function HomePage() {
   // 카테고리별 업체 목록과 같은 탐색 주소 상태를 쓴다
   const { addressId, address: addr } = useExploreAddress();
   const cats = useAsync(() => repo.listCategories(), [repo]);
+  const picker = useExploreAddressPicker();
+  // 예전 주소 설정 주소(/address)로 들어오면 홈에서 주소 검색을 한 번 연다. 기록 상태를 바로 지워 뒤로 가기·새로고침에 다시 열리지 않게 한다
+  const loc = useLocation();
+  const nav = useNavigate();
+  const openAddress = (loc.state as { openAddress?: boolean } | null)?.openAddress === true;
+  useEffect(() => {
+    if (!openAddress) return;
+    nav(loc.pathname + loc.search, { replace: true, state: null });
+    picker.open();
+  }, [openAddress]); // eslint-disable-line react-hooks/exhaustive-deps
   // 이미지를 불러오지 못한 카테고리: 같은 크기의 빈 이미지 영역을 두고 이름·이동은 그대로
   const [broken, setBroken] = useState<Set<string>>(() => new Set());
   return (
@@ -29,19 +40,19 @@ export function HomePage() {
         {addressId === null ? (
           <div className="card stack">
             <p>수리받을 지역·건물을 정하면, 같은 날 함께 참여할 수 있는 공동 예약 후보를 알려드려요.</p>
-            <LinkButton to="/address?back=/" variant="primary" block><Icon name="pin" size={18} />지역·건물 주소 설정하기</LinkButton>
+            <Button variant="primary" block onClick={picker.open} {...ADDRESS_OPENER}><Icon name="pin" size={18} />지역·건물 주소 설정하기</Button>
           </div>
         ) : (
           <AsyncView state={addr} loading={<Skeleton h={60} />}>
             {(a) => a && (
-              <Link to="/address?back=/" className="card list-row explore-address" aria-label={`지역·건물 주소 변경: ${addressTitle(a)}`}>
+              <button type="button" className="card list-row explore-address" onClick={picker.open} {...ADDRESS_OPENER} aria-label={`지역·건물 주소 변경: ${addressTitle(a)}`}>
                 <Icon name="pin" />
                 <span className="list-row__main">
                   <span className="list-row__title">{addressTitle(a)}</span>
                   {addressSubline(a) && <span className="small muted">{addressSubline(a)}</span>}
                 </span>
                 <span className="small strong nowrap" style={{ color: 'var(--c-primary)' }}>변경</span>
-              </Link>
+              </button>
             )}
           </AsyncView>
         )}
@@ -73,6 +84,7 @@ export function HomePage() {
           )}
         </AsyncView>
       </Section>
+      {picker.dialog}
     </Page>
   );
 }

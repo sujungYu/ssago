@@ -11,6 +11,7 @@ import type { SelectedTaskInput } from '../../domain/taskSelection';
 import type { RequestListQuery } from '../../domain/requestFilter';
 export type { RequestListQuery } from '../../domain/requestFilter';
 import type { TripFeeBasis } from '../../domain/bookingCost';
+import type { PostcodeAddressInput } from '../../domain/address';
 import type { BookingListQuery, PendingAction } from '../../domain/bookingFilter';
 import type { BookingDisplay } from '../../domain/statusDisplay';
 export type { BookingListQuery, PendingAction } from '../../domain/bookingFilter';
@@ -293,7 +294,11 @@ export interface Repository {
 
   // 탐색
   listCategories(): Promise<Category[]>;
-  searchAddresses(keyword: string): Promise<Address[]>;
+  /**
+   * 실제 주소 검색(카카오 우편번호 서비스)에서 고른 건물 주소를 주소록에 등록하고 건물 주소를 돌려준다(같은 건물이면 같은 ID).
+   * 탐색 주소·요청서 방문 건물로 쓰기 전에 부른다. 업체·공동 예약은 데모 데이터에 연결되며 실제 방문 가능 지역·거리 조건은 검증하지 않는다.
+   */
+  registerAddress(input: PostcodeAddressInput): Promise<Address>;
   /** 이 사용자가 마지막으로 저장한 탐색 지역·건물 주소(없으면 null). 재접속 시 기본값 */
   getExploreAddress(): Promise<Address | null>;
   /** 탐색 지역·건물 주소 저장. 기존 요청·예약 주소는 바꾸지 않는다 */

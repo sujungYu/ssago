@@ -15,10 +15,12 @@ import {
 import { NEW_REQUEST_BLOCK_TEXT, jointNoteForNewDay, newRequestBlock, visitDays } from '../../domain/visitDays';
 import type { IsoDate, ProviderDetail, PublicGroup } from '../../domain/types';
 import { Icon } from '../../components/Icon';
-import { AsyncView, Badge, Banner, Button, ErrorState, KV, LinkButton, PhoneButton, Section, Skeleton, Stars } from '../../components/ui';
+import { AsyncView, Badge, Banner, Button, ErrorState, KV, PhoneButton, Section, Skeleton, Stars } from '../../components/ui';
 import { initialOf } from '../shared';
 import { JointCalendar } from './JointCalendar';
 import { ProviderIntro, ProviderPortfolio } from './ProviderShowcase';
+import { useExploreAddress } from './exploreAddress';
+import { ADDRESS_OPENER, useExploreAddressPicker } from './AddressPicker';
 
 /**
  * 선택한 날짜의 공동 예약 카드. ‘신청 가능한 시각’은 그 그룹 시간대에서 요청서와 같은 기준(selectableTimes, 1시간 간격)으로 만든
@@ -27,7 +29,7 @@ import { ProviderIntro, ProviderPortfolio } from './ProviderShowcase';
  * 표시 라벨은 ‘공동 예약’ 하나다(참여 조건 scopeType 데이터는 그대로 두고, 여러 그룹일 때 라디오 이름에만 쓴다).
  * select가 없으면(그 날짜 그룹이 하나 — 자동 선택) 라디오 없는 카드, 있으면(같은 날 여러 그룹) 기존처럼 라디오로 하나를 고른다.
  */
-function JointGroupCard({ g, now, select }: { g: PublicGroup; now: string; select?: { checked: boolean; onChange: () => void } }) {
+function JointGroupCard({ g, now, select, demoArea }: { g: PublicGroup; now: string; select?: { checked: boolean; onChange: () => void }; /** 실제 주소 검색 주소(데모 데이터 연결) — 참여 조건(같은 단지·가까운 이웃)을 확인한 것처럼 말하지 않는다 */ demoArea?: boolean }) {
   const fee = jointFeeView(g);
   const times = selectableTimes(g.slots);
   const body = (
@@ -44,9 +46,9 @@ function JointGroupCard({ g, now, select }: { g: PublicGroup; now: string; selec
     </div>
   );
   if (!select) return <div className="joint-card card">{body}</div>;
-  const scope = g.scopeType === 'complex' ? '같은 단지' : '가까운 이웃';
+  const scope = demoArea ? '' : g.scopeType === 'complex' ? '같은 단지 ' : '가까운 이웃 ';
   // 시간 제목이 없으므로 라디오 이름에 날짜·참여 조건·신청 가능한 시각·마감을 담는다
-  const name = `${formatDate(g.date)} ${scope} 공동 예약 · 신청 가능한 시각 ${times.join(', ')} · 접수 마감 ${formatDateTime(g.closeAt)}`;
+  const name = `${formatDate(g.date)} ${scope}공동 예약 · 신청 가능한 시각 ${times.join(', ')} · 접수 마감 ${formatDateTime(g.closeAt)}`;
   return (
     <div className="joint-card">
       <label className="radio-card">
@@ -81,6 +83,8 @@ function Body({ p, addressId, now }: { p: ProviderDetail; addressId: string | nu
   const today = todayYmd(now);
   // 공동 예약 날짜는 조회 주소가 있고 참여 가능 여부를 확인할 수 있을 때만. 새 요청 날짜는 업체 접수 기준으로 따로 판단한다(visitDays)
   const showJoint = addressId !== null && p.jointAvailable !== null;
+  const demoArea = useExploreAddress().address.data?.source === 'postcode';
+  const picker = useExploreAddressPicker(); // 주소 설정: 이 화면 위에 주소 검색을 바로 연다
   const days = visitDays(showJoint ? p.groups : [], p.newRequest, now);
   // 이 기록 항목(location.key)에 저장해 둔 선택. 요청서에서 뒤로 돌아오면 같은 항목이라 날짜·그룹·달을 되살린다.
   // 저장한 날짜를 지금 고를 수 없으면(일정 변경·마감·접수 기준 변경) 날짜·그룹을 정리한다(골라 둔 그룹이 신청 불가가 되면 날짜도 푼다).
@@ -185,7 +189,7 @@ function Body({ p, addressId, now }: { p: ProviderDetail; addressId: string | nu
         {addressId === null && (
           <>
             <Banner tone="info" title="지역·건물 주소를 설정해 주세요">주소를 정하면 참여할 수 있는 공동 예약 날짜도 함께 보여드려요. 지금은 새 요청 날짜만 고를 수 있어요.</Banner>
-            <LinkButton to={`/address?back=${encodeURIComponent(`/providers/${p.id}`)}`} variant="secondary" block><Icon name="pin" size={18} />지역·건물 주소 설정하기</LinkButton>
+            <Button variant="secondary" block onClick={picker.open} {...ADDRESS_OPENER}><Icon name="pin" size={18} />지역·건물 주소 설정하기</Button>
           </>
         )}
         {addressId !== null && p.jointAvailable === null && (
@@ -209,12 +213,12 @@ function Body({ p, addressId, now }: { p: ProviderDetail; addressId: string | nu
                   ) : day.data.length === 1 && (groupId === day.data[0].id || autoDate !== date) ? (
                     // 날짜당 그룹 하나(현재 데모): 날짜를 고르면 그 그룹이 자동 선택돼 라디오 없이 카드만 보여준다.
                     // 다른 그룹이 신청 불가가 돼 하나만 남았고 선택이 풀린 경우에는 아래처럼 직접 고르게 한다(자동으로 다시 고르지 않음)
-                    <JointGroupCard g={day.data[0]} now={now} />
+                    <JointGroupCard g={day.data[0]} now={now} demoArea={demoArea} />
                   ) : (
                     // 같은 날 여러 그룹(실제 서비스 구조): 임의로 고르거나 숨기지 않고 하나를 직접 고르게 한다
                     <fieldset className="stack--sm stack" style={{ border: 0, padding: 0, margin: 0 }}>
                       <legend className="sr-only">{title} 공동 예약 중 하나 선택</legend>
-                      {day.data.map((g) => <JointGroupCard key={g.id} g={g} now={now} select={{ checked: groupId === g.id, onChange: () => pickGroup(g.id) }} />)}
+                      {day.data.map((g) => <JointGroupCard key={g.id} g={g} now={now} demoArea={demoArea} select={{ checked: groupId === g.id, onChange: () => pickGroup(g.id) }} />)}
                     </fieldset>
                   )
                 ) : view === 'new' ? (
@@ -259,6 +263,7 @@ function Body({ p, addressId, now }: { p: ProviderDetail; addressId: string | nu
 
       {/* 하단 고정 없이 마지막 본문 다음(간격 24px)에 둔다. 새 요청 날짜는 날짜를 고르면, 공동 예약 날짜는 그룹을 고르면 켜진다 */}
       <Button variant="primary" block disabled={!canRequest} busy={go.busy} onClick={() => void request()}>이 날짜로 수리 요청하기</Button>
+      {picker.dialog}
     </>
   );
 }

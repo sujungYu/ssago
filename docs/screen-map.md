@@ -3,7 +3,7 @@
 | ID | 화면 | 경로 | 파일 |
 |---|---|---|---|
 | C-01 | 업체 찾기 | `/` | features/discovery/HomePage |
-| C-02 | 방문 지역 설정 | `/address` | AddressPage |
+| C-02 | 방문 지역 설정 — 화면 없음, 홈·업체 목록·업체 상세에서 주소 검색 레이어(spec 5.32·5.33) | `/address`는 홈으로 이동 후 레이어 열기 | AddressPicker · PostcodeSearch |
 | C-03 | 카테고리별 업체 목록 | `/providers?category=` | ProviderListPage |
 | C-04 | 업체 상세 | `/providers/:id` | ProviderDetailPage |
 | C-05 | 수리 요청서 | `/providers/:id/request?group=\|new=1` | requests/RequestFormPage |

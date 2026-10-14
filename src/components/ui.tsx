@@ -216,7 +216,8 @@ export function Dialog({ title, onClose, children, actions, closeLabel, anchor, 
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') closeRef.current();
       if (e.key === 'Tab' && ref.current) {
-        const f = Array.from(ref.current.querySelectorAll<HTMLElement>('button:not(:disabled), [href], input, textarea, select'));
+        // iframe(주소 검색 등 외부 화면)도 포커스 순서에 넣어 Tab으로 들어갈 수 있게 한다
+        const f = Array.from(ref.current.querySelectorAll<HTMLElement>('button:not(:disabled), [href], input, textarea, select, iframe'));
         if (!f.length) return;
         const a = f[0], z = f[f.length - 1];
         if (e.shiftKey && document.activeElement === a) { e.preventDefault(); z.focus(); }

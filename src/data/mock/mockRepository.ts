@@ -3,7 +3,7 @@ import { expectedFeeForJoiner, computeSettlement, perHouseholdFee } from '../../
 import { checkPayable } from '../../domain/rules';
 import { REQUEST_PRIORITY } from '../../domain/rules';
 import { filterRequestBundles } from '../../domain/requestFilter';
-import { detailError, toVisitAddress } from '../../domain/address';
+import { detailError, postcodeToAddress, toVisitAddress, type PostcodeAddressInput } from '../../domain/address';
 import { maskPhone, normalizeContact } from '../../domain/profile';
 import type { TripFeeBasis } from '../../domain/bookingCost';
 import { filterBookings, tabOf, type BookingListQuery, type PendingAction } from '../../domain/bookingFilter';
@@ -40,6 +40,8 @@ import { newRequestBlock } from '../../domain/visitDays';
 
 // v3: 주소 구조 변경(탐색 주소 / 재사용 방문 주소 / 요청·예약 방문 주소 스냅숏 분리). 이전 형식 저장값은 읽지 않는다.
 const STORAGE_KEY = 'on-gimae/mock-db/v3';
+/** 실제 주소 검색으로 고른 주소가 연결되는 데모 공동 예약 지역(시드의 기본 데모 단지 ‘햇살마을 3단지’와 같은 기준 키) */
+const DEMO_AREA_ANCHORS = ['complex:haessal3'];
 
 export interface MockRepoOptions {
   persist?: boolean;
@@ -157,7 +159,7 @@ export class MockRepository implements Repository {
   private address(id: string): Address {
     const a = byId(this.db.addressBook, id);
     if (!a) throw new RepoError('not_found');
-    return { id: a.id, label: a.label, line1: a.line1, kind: a.kind };
+    return { id: a.id, label: a.label, line1: a.line1, kind: a.kind, ...(a.source ? { source: a.source } : {}) };
   }
   /** 이 주소로 참여 가능하고 접수가 열린 그룹만 반환한다. 주소 판단이 불가하면(주소 판단 서비스 장애·주소록에 없는 주소) null. */
   private eligibleGroups(providerId: string, addressId: string | null): GroupRecord[] | null {
@@ -206,12 +208,16 @@ export class MockRepository implements Repository {
 
   // ───────── 탐색 ─────────
   listCategories(): Promise<Category[]> { return this.read(() => this.db.categories); }
-  searchAddresses(keyword: string): Promise<Address[]> {
-    return this.read(() => {
-      const q = keyword.trim();
-      return this.db.addressBook
-        .filter((a) => !q || a.line1.includes(q) || a.label.includes(q))
-        .map((a) => this.address(a.id));
+  registerAddress(input: PostcodeAddressInput): Promise<Address> {
+    return this.write(() => {
+      const a = postcodeToAddress(input);
+      if (!a.line1) throw new RepoError('invalid');
+      // 실제 주소는 데모 공동 예약 지역의 기준 키에 연결한다 — 어떤 실제 주소를 골라도 카테고리별 데모 업체·공동 예약 후보가 보인다.
+      // 업체의 활동 지역·그룹 데이터는 바꾸지 않고, 실제 방문 가능 지역·동일 단지·반경 검증을 한 것으로 다루지 않는다(Address.source).
+      const rec = { ...a, anchors: [...DEMO_AREA_ANCHORS] };
+      const i = this.db.addressBook.findIndex((x) => x.id === a.id);
+      if (i >= 0) this.db.addressBook[i] = rec; else this.db.addressBook.push(rec);
+      return this.address(a.id);
     });
   }
   getAddress(id: string): Promise<Address> { return this.read(() => this.address(id)); }

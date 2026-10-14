@@ -342,6 +342,9 @@ a.list-row:hover { background: #fafbfd; }
 .region-card > .grow { min-width: 0; }
 .region-card__actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--sp-2); flex: none; }
 .explore-address { text-decoration: none; color: inherit; padding: var(--sp-3) var(--sp-4); }
+/* 주소 카드는 주소 검색을 바로 여는 버튼이다(예전 링크와 같은 모양) */
+button.explore-address { width: 100%; font: inherit; text-align: left; cursor: pointer; }
+button.explore-address:hover { background: #fafbfd; }
 .explore-address > svg:first-child { color: var(--c-primary); flex: none; }
 /* 모바일 키보드·하단 고정 버튼에 입력란이 가리지 않게 포커스 이동 시 여유를 둔다 */
 .input, .textarea { scroll-margin-top: 72px; scroll-margin-bottom: 160px; }
@@ -608,6 +611,9 @@ a.list-row:hover { background: #fafbfd; }
 .fold__item-title { font-weight: 700; overflow-wrap: anywhere; word-break: keep-all; }
 .work-list > li + li { padding-top: var(--sp-3); border-top: 1px solid var(--c-line); }
 @media (prefers-reduced-motion: reduce) { .fold__btn svg { transition: none; } }
+/* 실제 주소 검색(카카오 우편번호 서비스 embed) 영역: 대화상자 안에서 검색 화면 높이를 정해 준다(최소 400px — 서비스 최소 높이) */
+.postcode { height: min(480px, calc(90dvh - 150px)); min-height: 400px; border: 1px solid var(--c-line); border-radius: var(--r-md); overflow: hidden; }
+.postcode[hidden] { display: none; }
 /* 서비스 이용 안내 FAQ: 흰 카드 안에 기존 펼치기를 쌓는다. 첫 질문 위 구분선은 카드 테두리와 겹치므로 없애고, 긴 질문은 화살표 왼쪽에서 줄바꿈 */
 .faq { padding-top: 0; padding-bottom: 0; }
 .faq .fold:first-child { border-top: 0; }

@@ -16,8 +16,13 @@ export interface Category {
 export interface Address {
   id: string; // 건물 식별자
   label: string; // 예: 햇살마을 3단지
-  line1: string; // 도로명 또는 지번 주소 + 건물명(가상)
+  line1: string; // 도로명 또는 지번 주소 + 건물명(가상). 실제 주소 검색으로 고른 주소는 도로명주소(없으면 지번)만
   kind: 'apartment' | 'house';
+  /**
+   * 'postcode' = 실제 주소 검색(카카오 우편번호 서비스)으로 고른 주소. 업체·공동 예약은 데모 데이터에 연결될 뿐이며,
+   * 실제 방문 가능 지역·동일 단지·반경 300m 조건은 검증하지 않았다(spec 5.32). 없으면 기존 가상 주소(시드 기록).
+   */
+  source?: 'postcode';
 }
 
 /** 요청·예약에 보존하는 방문 주소(제출 당시 스냅숏). 탐색 주소·재사용 주소를 참조하지 않는다. src/domain/address.ts */

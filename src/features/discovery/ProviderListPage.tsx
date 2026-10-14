@@ -12,6 +12,7 @@ import { AsyncView, Badge, Banner, Button, EmptyState, LinkButton, LoadingBlock,
 import { describeError } from '../../domain/errors';
 import { initialOf } from '../shared';
 import { addressSubline, addressTitle, useExploreAddress } from './exploreAddress';
+import { ADDRESS_OPENER, useExploreAddressPicker } from './AddressPicker';
 
 export function JointBadge({ p, hasAddress, addressUnknown }: { p: ProviderSummary; hasAddress: boolean; addressUnknown?: boolean }) {
   if (!hasAddress) return <Badge>지역·건물 주소를 정하면 확인할 수 있어요</Badge>;
@@ -42,7 +43,7 @@ export function ProviderListPage() {
   const catName = cats.data?.find((c) => c.id === categoryId)?.name ?? (cats.loading ? null : '업체 목록');
   const addressUnknown = addressId !== null && !!address.error; // 주소를 확인하지 못함
   const addressLoading = addressId !== null && !address.data && !address.error;
-  const changeTo = `/address?back=${encodeURIComponent(`/providers?category=${categoryId}`)}`;
+  const picker = useExploreAddressPicker(); // 주소 설정·변경: 이 화면 위에 주소 검색을 바로 연다
   return (
     <Page title={catName} back="/">
       <div className="card row row--between region-card" aria-busy={addressLoading || undefined}>
@@ -66,7 +67,7 @@ export function ProviderListPage() {
         </div>
         <div className="region-card__actions">
           {addressUnknown && <Button sm onClick={address.reload}>다시 시도</Button>}
-          <LinkButton to={changeTo} variant={addressId === null ? 'primary' : 'secondary'} sm>{addressId === null ? '설정' : '변경'}</LinkButton>
+          <Button variant={addressId === null ? 'primary' : 'secondary'} sm onClick={picker.open} {...ADDRESS_OPENER}>{addressId === null ? '설정' : '변경'}</Button>
         </div>
       </div>
       {/* 주소를 불러오는 동안은 목록을 보여주지 않는다(주소와 다른 기준의 결과처럼 보이지 않게) */}
@@ -121,12 +122,15 @@ export function ProviderListPage() {
                   );
                 })}
               </ul>
+              {/* 실제 주소를 골라도 업체·공동 예약 일정은 데모 데이터다(실제 방문 가능 지역·거리 조건은 확인하지 않음) */}
+              <p className="small muted">업체와 공동 예약 일정은 데모 데이터예요.</p>
               </div>
             )}
           </>
         )}
       </AsyncView>
       )}
+      {picker.dialog}
     </Page>
   );
 }
