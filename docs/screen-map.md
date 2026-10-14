@@ -30,7 +30,7 @@
 | C-25 | 결제·환불 내역 | `/ledger` | LedgerPages |
 | S-01 | 결제 진행·결과(모의) | `/pay/:txId` (진행은 각 화면의 버튼 상태) | payment/PaymentResultPage |
 | S-02 | 알림 진입 | `/notice/:id` | system/SystemPages |
-| S-03 | 약관·개인정보·이용 안내 | `/guide` | SystemPages (요약만) |
+| S-03 | 서비스 이용 안내(이용 안내 + FAQ, 약관·개인정보처리방침 아님) | `/guide` | SystemPages |
 | S-04a | 로그인 | `/login` | features/auth/AuthPages (LoginPage) |
 | S-04b | 회원가입 | `/signup` | SignUpPage |
 | S-04c | 가입 완료(확인 메일 필요 시 안내) | `/signup/done` | SignUpDonePage |

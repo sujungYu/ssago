@@ -41,7 +41,7 @@ export function MePage() {
       <Section title="내역·안내">
         <ul className="card card--flush divided">
           <li><Link className="list-row" to="/ledger"><Icon name="wallet" /><span className="list-row__main"><span className="list-row__title">결제·환불 내역</span></span><Icon name="chevron" size={18} /></Link></li>
-          <li><Link className="list-row" to="/guide"><Icon name="info" /><span className="list-row__main"><span className="list-row__title">이용 안내·약관·개인정보</span></span><Icon name="chevron" size={18} /></Link></li>
+          <li><Link className="list-row" to="/guide"><Icon name="info" /><span className="list-row__main"><span className="list-row__title">서비스 이용 안내</span></span><Icon name="chevron" size={18} /></Link></li>
         </ul>
       </Section>
       <Banner tone="info" title="로그인 없는 데모예요">

@@ -608,6 +608,10 @@ a.list-row:hover { background: #fafbfd; }
 .fold__item-title { font-weight: 700; overflow-wrap: anywhere; word-break: keep-all; }
 .work-list > li + li { padding-top: var(--sp-3); border-top: 1px solid var(--c-line); }
 @media (prefers-reduced-motion: reduce) { .fold__btn svg { transition: none; } }
+/* 서비스 이용 안내 FAQ: 흰 카드 안에 기존 펼치기를 쌓는다. 첫 질문 위 구분선은 카드 테두리와 겹치므로 없애고, 긴 질문은 화살표 왼쪽에서 줄바꿈 */
+.faq { padding-top: 0; padding-bottom: 0; }
+.faq .fold:first-child { border-top: 0; }
+.faq .fold__btn { gap: var(--sp-3); padding: var(--sp-3) 0; word-break: keep-all; overflow-wrap: anywhere; }
 /*
  * 예약금 결제 확인 카드(spec 5.20): 기본 정보(방문 일정·예상 총금액·예약금·결제 기한)만, 예약금은 연한 블루 강조 영역.
  * 이름 왼쪽 · 값 오른쪽, 긴 값은 줄바꿈. 확인 체크는 안쪽 여백이 있는 줄(문구 전체가 누르는 영역).
