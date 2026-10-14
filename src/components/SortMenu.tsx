@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { Icon } from './Icon';
 
 /**
- * 정렬 드롭다운. 캡슐형 버튼(선택된 기준 + 아래 화살표) → 버튼 아래 메뉴(선택 항목은 블루 + 체크).
+ * 정렬 드롭다운. 작은 버튼(흰 바탕·연회색 테두리, 선택된 기준 + 아래 화살표) → 버튼 아래 메뉴(선택 항목은 블루 + 체크).
  * 고르면 바로 적용하고 닫는다. 키보드: 버튼에서 Enter·Space·↓로 열기, 메뉴에서 ↑·↓·Home·End 이동, Enter·Space 선택, Escape·Tab 닫기.
  * 닫으면 버튼으로 포커스를 돌려준다. 메뉴 바깥을 누르면 닫는다. 오른쪽 정렬이라 좁은 화면에서도 가로로 넘치지 않는다.
  */
@@ -43,10 +43,10 @@ export function SortMenu<T extends string>({ label, value, options, onChange }: 
 
   return (
     <div className="sort-menu" ref={wrapRef}>
-      <button ref={btnRef} type="button" className="capsule capsule--on sort-menu__btn" aria-haspopup="menu" aria-expanded={open} aria-controls={open ? menuId : undefined}
+      <button ref={btnRef} type="button" className="sort-menu__btn" aria-haspopup="menu" aria-expanded={open} aria-controls={open ? menuId : undefined}
         aria-label={`${label}: ${current.label}`}
         onClick={() => setOpen((o) => !o)} onKeyDown={(e) => { if (e.key === 'ArrowDown' && !open) { e.preventDefault(); setOpen(true); } }}>
-        <span className="capsule__text">{current.label}</span>
+        <span>{current.label}</span>
         <Icon name="down" size={16} />
       </button>
       {open && (

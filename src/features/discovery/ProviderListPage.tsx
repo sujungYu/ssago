@@ -85,10 +85,11 @@ export function ProviderListPage() {
                 다른 카테고리를 확인하거나 나중에 다시 찾아 주세요.
               </EmptyState>
             ) : (
-              <>
-              {/* 정렬: 왼쪽 업체 수, 오른쪽 정렬 기준 드롭다운. 순서만 바꾸고 카드의 공동 예약 후보·내용은 그대로 */}
+              // 목록 헤더 + 업체 카드 묶음: 위 주소 카드와는 페이지 간격(24px), 헤더–첫 카드는 12px
+              <div className="provider-list">
+              {/* 정렬: 왼쪽 결과 건수, 오른쪽 정렬 기준 드롭다운. 순서만 바꾸고 카드의 공동 예약 후보·내용은 그대로 */}
               <div className="sort-bar">
-                <p className="small" aria-live="polite">업체 <b>{items.length}</b>곳</p>
+                <p className="sort-bar__count" aria-live="polite">전체 <strong>{items.length}곳</strong></p>
                 <SortMenu label="정렬" value={sort} options={PROVIDER_SORT_OPTIONS} onChange={setSort} />
               </div>
               <ul className="stack" aria-label="업체 목록">
@@ -120,7 +121,7 @@ export function ProviderListPage() {
                   );
                 })}
               </ul>
-              </>
+              </div>
             )}
           </>
         )}

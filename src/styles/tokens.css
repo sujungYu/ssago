@@ -7,6 +7,7 @@
   --c-surface: #ffffff;
   --c-text: #20242c;
   --c-text-2: #606773;
+  --c-text-gray: #3d434d; /* 진한 회색 — 업체 목록의 업체 수·정렬 드롭다운 */
   --c-line: #e4e6ea;
   --c-line-strong: #c9ced6;
   --c-info-bg: #edf3fc;
