@@ -70,7 +70,8 @@ describe('내 예약 조회(queryBookings)', () => {
     const r = repo();
     expect(await r.queryBookings({ tab: 'past', visitFrom: '2025-01-01', visitTo: '2025-01-02' })).toMatchObject({ items: [], hasAnyInTab: true });
     r.__db().bookings = r.__db().bookings.filter((b) => b.status !== 'cancelled' && b.workStatus !== 'completed');
-    expect(await r.queryBookings({ tab: 'past' })).toMatchObject({ items: [], hasAnyInTab: false });
+    r.__db().requests = r.__db().requests.filter((q) => q.status !== 'withdrawn'); // 요청 취소도 이 탭에 있다(spec 5.47)
+    expect(await r.queryBookings({ tab: 'past' })).toMatchObject({ items: [], cancelledRequests: [], hasAnyInTab: false });
     r.__db().settings.failNextQuery = true;
     expect(await code(r.queryBookings({ tab: 'active' }))).toBe('network');
   });

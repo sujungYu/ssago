@@ -558,7 +558,8 @@ const bkStatus = (page) => page.getByRole('button', { name: /^(예약 )?상태 �
 const bkVisit = (page) => page.getByRole('button', { name: /^방문일 필터/ });
 const bkToggle = (page) => page.getByRole('button', { name: '확인 필요' });
 /** 카드의 할 일 문구(없으면 '') */
-const todoOf = async (card) => (await card.locator('.card-todo').count()) ? (await card.locator('.card-todo').innerText()).trim() : '';
+// 2026-10-14(spec 5.46): 목록 카드 할 일은 상단 ‘확인이 필요해요’ 머리 하나(구체 문구 없음)
+const todoOf = async (card) => (await card.locator('.card-head').count()) ? (await card.locator('.card-head').innerText()).trim() : '';
 const bkCards = (page) => page.locator('main .booking-list > li');
 const bkTab = (page, name) => page.getByRole('tab', { name });
 /** 조회가 끝나 목록 배지가 조건에 맞을 때까지 기다린 뒤 배지 목록 */
@@ -567,7 +568,7 @@ async function bkBadges(page, allowed) {
   return page.locator('main .booking-list > li .badge').allInnerTexts();
 }
 async function bkCount(page, n) {
-  await page.locator('.filter-bar__count', { hasText: `예약 ${n}건` }).waitFor();
+  await page.locator('.filter-bar__count', { hasText: new RegExp('^(예약|내역) ' + n + '건') }).waitFor(); // 완료·취소 탭은 ‘내역’(예약 + 요청 취소, spec 5.47)
   await page.waitForFunction((k) => document.querySelectorAll('main .booking-list > li').length === k, n).catch(() => {});
   eq(await bkCards(page).count(), n, `표시 예약 수 ${n}`);
 }
@@ -595,15 +596,15 @@ await test('내 예약 필터: 확정된 예약 상태·방문일·할 일 있�
   await bkCount(page, 6);
   await bkPick(page, 'status', '작업 중');
   eq((await bkBadges(page, ['작업 중'])).join(), '작업 중', '작업 중');
-  eq(await todoOf(bkCards(page).first()), '추가 작업을 확인해 주세요', '작업 중 카드 할 일');
+  eq(await todoOf(bkCards(page).first()), '확인이 필요해요', '작업 중 카드 할 일');
   await bkPick(page, 'status', '최종 정산');
   eq((await bkBadges(page, ['최종 정산'])).join(), '최종 정산,최종 정산,최종 정산', '최종 정산 3건');
-  eq((await bkCards(page).locator('.card-todo').allInnerTexts()).map((x) => x.trim()).join('|'), '최종 금액을 확인해 주세요|최종 금액을 확인해 주세요|최종 금액을 확인해 주세요', '최종 정산 할 일');
+  eq(await bkCards(page).locator('.card-head').count(), 3, '최종 정산 카드 머리(확인이 필요해요)');
   await bkPick(page, 'status', '정산 진행 중');
   await bkCount(page, 1);
   eq((await bkBadges(page, ['정산 진행 중'])).join(), '정산 진행 중', '정산 대기·금액 이견 → 정산 진행 중');
   // 할 일 있는 예약만: 정산 진행 중(금액 협의 중)은 고객 할 일이 없어 결과 없음(행동 영역도 없음)
-  eq(await bkCards(page).locator('.card-todo').count(), 0, '금액 협의 중에는 할 일 문구 없음');
+  eq(await bkCards(page).locator('.card-head').count(), 0, '금액 협의 중에는 확인 머리 없음');
   await bkToggle(page).click();
   // 토글은 주소(조건)를 바꿔 다시 그려지므로 반영될 때까지 기다린 뒤 확인한다
   await page.getByRole('button', { name: '확인 필요', pressed: true }).waitFor({ timeout: 3000 }).catch(() => {});
@@ -677,7 +678,7 @@ await test('내 예약 필터: 방문일 직접 선택 오류 · 결과 없음�
   await waitText(page, '선택한 조건에 맞는 예약이 없어요.');
   await waitText(page, '날짜나 상태를 변경해주세요.');
   eq(await page.getByRole('button', { name: /초기화/ }).count(), 0, '빈 결과에도 초기화 없음');
-  truthy(!(await page.locator('main').innerText()).includes('완료되거나 취소된 예약이 없어요'), '예약 없음과 구분');
+  truthy(!(await page.locator('main').innerText()).includes('완료되거나 취소된 내역이 없어요'), '예약 없음과 구분');
   // 적용 전 닫으면 유지(키보드: Enter로 열고 Esc로 닫으면 버튼으로 포커스 복귀)
   await bkStatus(page).focus();
   await page.keyboard.press('Enter');
@@ -721,7 +722,7 @@ const countText = async (page) => { await page.locator('.filter-bar__count', { h
 const search = (page) => { const p = new URLSearchParams(new URL(page.url()).search); eq(p.get('tab'), 'requests', '보낸 요청 탭'); p.delete('tab'); const q = p.toString(); return q ? `?${q}` : ''; };
 const onPath = (page, p) => page.waitForURL((u) => u.pathname === p);
 const listBadges = async (page) => { await page.locator('main .request-list .badge').first().waitFor(); return badges(page); };
-const ENDED = ['업체 거절', '요청 취소', '결제 기한 만료'];
+const ENDED = ['업체 거절', '결제 기한 만료']; // 요청 취소는 완료·취소 탭(spec 5.47)
 async function pickStatus(page, label) {
   await statusBtn(page).click();
   const dlg = page.getByRole('dialog', { name: '요청 상태' });
@@ -770,18 +771,17 @@ await test('요청 필터: 대표 상태 단일 선택(업체 검토 중·예약
   // 할 일 문구: 추가 정보 필요(rq-2)는 ‘업체 검토 중’ + ‘요청서를 보완해 주세요’, 결제 대기는 ‘예약금 결제’ + ‘예약금을 결제해 주세요’
   await expectGroup('업체 검토 중', 'reviewing', ['업체 검토 중']);
   // 할 일: 보완 요청(rq-2)만 ‘요청서를 보완해 주세요’, 업체 검토만 기다리는 rq-1에는 없음
-  eq((await cards(page).locator('.card-todo').allInnerTexts()).map((x) => x.trim()).join('|'), '요청서를 보완해 주세요', '검토 중 할 일');
+  eq(await cards(page).locator('.card-head').count(), 1, '검토 중 할 일(요청서 보완) 머리');
   await expectGroup('예약금 결제', 'payment_pending', ['예약금 결제']);
-  const payTodos = (await cards(page).locator('.card-todo').allInnerTexts()).map((x) => x.trim());
-  truthy(payTodos.length === await cards(page).count() && payTodos.every((x) => x === '예약금을 결제해 주세요'), `결제 대기 할 일: ${payTodos}`);
+  const payTodos = (await cards(page).locator('.card-head').allInnerTexts()).map((x) => x.trim());
+  truthy(payTodos.length === await cards(page).count() && payTodos.every((x) => x === '확인이 필요해요'), `결제 대기 확인 머리: ${payTodos}`);
   eq(await page.locator('main .request-list .badge').filter({ hasText: '확인 필요' }).count(), 0, '확인 필요 배지 없음');
   await statusBtn(page).click();
   const opts = await page.getByRole('dialog', { name: '요청 상태' }).getByRole('radio').evaluateAll((rs) => rs.map((r) => r.closest('label')?.querySelector('.opt__label, span')?.textContent ?? r.getAttribute('aria-label') ?? ''));
   eq(await page.getByRole('dialog', { name: '요청 상태' }).getByRole('radio', { name: /^예약 완료/ }).count(), 0, '보낸 요청 필터에 예약 완료 없음');
-  eq(await page.getByRole('dialog', { name: '요청 상태' }).getByRole('radio', { name: /^(종료|철회|승인 만료|추가 정보 필요)/ }).count(), 0, `이전 이름 없음: ${opts}`);
+  eq(await page.getByRole('dialog', { name: '요청 상태' }).getByRole('radio', { name: /^(종료|철회|승인 만료|추가 정보 필요|요청 취소)/ }).count(), 0, `이전 이름·요청 취소(완료·취소 탭) 없음: ${opts}`);
   await page.keyboard.press('Escape');
   eq((await expectGroup('업체 거절', 'rejected', ['업체 거절'])).join(), '업체 거절', '업체 거절');
-  eq((await expectGroup('요청 취소', 'withdrawn', ['요청 취소'])).join(), '요청 취소', '철회 → 요청 취소');
   eq((await expectGroup('결제 기한 만료', 'expired', ['결제 기한 만료'])).join(), '결제 기한 만료', '승인 만료 → 결제 기한 만료');
   // 종료 상태는 연한 회색(진행 상태는 연한 블루)
   eq(await page.locator('main .request-list .badge').first().evaluate((e) => getComputedStyle(e).backgroundColor), 'rgb(238, 240, 243)', '종료 회색 배지');
@@ -945,7 +945,7 @@ await test('요청 필터: 목록 위치 유지(상세 → 뒤로) · 필터 변
 
 await test('요청 필터: 다른 소유 계정의 목업 상태가 남아 있으면 데모 고객 데이터로 초기화(필터·위치·방문 지역 포함)', async (page) => {
   await start(page, { path: '/bookings?tab=requests' });
-  await pickStatus(page, '요청 취소');
+  await pickStatus(page, '업체 거절');
   truthy((await page.evaluate(() => JSON.stringify({ ...sessionStorage }))).includes('list-filter'), '필터 저장');
   // 이전 버전·다른 계정의 상태를 흉내 낸다(사용자 구분 구조는 유지된다)
   await page.evaluate((k) => { const d = JSON.parse(sessionStorage.getItem(k)); d.ownerAccountId = 'someone-else'; d.requests[0].tasks[0].title = '다른 계정 데이터'; sessionStorage.setItem(k, JSON.stringify(d)); }, DB_KEY);
@@ -955,7 +955,7 @@ await test('요청 필터: 다른 소유 계정의 목업 상태가 남아 있�
   truthy(!dump.includes('다른 계정 데이터'), '다른 계정 목업 데이터가 남음');
   // 방문 기록(nav-trail: 브라우저 뒤로가기 대상 경로)은 적용된 필터가 아니므로 제외하고 본다
   const saved = await page.evaluate(() => JSON.stringify(Object.fromEntries(Object.entries(sessionStorage).filter(([k]) => k !== 'nav-trail'))));
-  truthy(!saved.includes('status=withdrawn'), '다른 계정 필터가 남음');
+  truthy(!saved.includes('status=rejected'), '다른 계정 필터가 남음');
   eq(new URL(page.url()).search, '?tab=requests', '필터 초기화(첫 탭·기본 조건)');
 });
 
@@ -1300,7 +1300,7 @@ await test('재확인: 기존 그룹 종료 → 새 조건 동의 후 결제', a
   const card = page.locator('main .request-list > li').filter({ has: page.locator('a[href="/requests/rq-10"]') });
   await card.locator('.badge').first().waitFor();
   eq((await card.locator('.badge').allInnerTexts()).join(), '예약금 결제', '목록 대표 상태');
-  eq(await todoOf(card), '예약금을 결제해 주세요', '목록 할 일');
+  eq(await todoOf(card), '확인이 필요해요', '목록 할 일');
   await page.goto(`${BASE}/requests/rq-10`);
   await waitText(page, '방문 일정과 금액을 확인해 주세요');
   eq(await page.getByRole('link', { name: '새 예약 조건 확인하기' }).count(), 0, '중간 확인 버튼 없음');
@@ -1449,25 +1449,25 @@ await test('예약 목록·상세: 확정된 예약/완료·취소, 마감 후 �
   const k3 = page.locator('a[href="/bookings/bk-k3"]');
   await k3.locator('.badge').first().waitFor();
   eq((await k3.locator('.badge').allInnerTexts()).join(), '방문 예정', '대표 상태 배지 하나(확인 필요 배지 없음)');
-  eq(await todoOf(k3), '방문 지연 대응을 선택해 주세요', '지연 대응 할 일');
+  eq(await todoOf(k3), '확인이 필요해요', '지연 대응 할 일');
   eq(await page.locator('main .booking-list .badge').filter({ hasText: '확인 필요' }).count(), 0, '확인 필요 배지 없음');
   const listText = await page.locator('main .booking-list').innerText();
   for (const gone of ['지연되고 있어요', '추가 작업 동의가 필요해요', '자재 조건을 확인하고', '금액을 협의 중이에요', '리뷰를 작성할 수 있어요', '결제 결과를 확인 중이에요']) truthy(!listText.includes(gone), `목록 설명 문구 없음: ${gone}`);
-  eq(await page.locator('main .booking-list svg').count(), 0, '목록의 정보 아이콘 없음');
-  // 할 일 영역: 회색 구분선 + 12px, 주황 점(6~8px) + 8px + 차콜 600 본문 문구. 카드 바탕·테두리는 그대로
+  eq(await page.locator('main .booking-list svg:not(.card-head svg)').count(), 0, '목록 본문에 아이콘 없음(확인 머리 아이콘만)');
+  // 확인 머리(spec 5.46): 카드 전체 너비 맨 위, 연한 블루 바탕·블루 작은 글씨 + 정보 아이콘, 주황 점·하단 문구 없음. 카드 바탕·테두리·상태 배지 그대로
   const st = await k3.evaluate((a) => {
-    const t = a.querySelector('.card-todo'); const d = a.querySelector('.card-todo__dot'); const ts = getComputedStyle(t); const ds = getComputedStyle(d); const cs = getComputedStyle(a);
-    return { line: ts.borderTopColor, pad: ts.paddingTop, color: ts.color, weight: ts.fontWeight, size: ts.fontSize, dot: [Math.round(d.getBoundingClientRect().width), ds.backgroundColor, d.getAttribute('aria-hidden')], gap: ts.columnGap, cardBg: cs.backgroundColor, cardBorder: cs.borderTopColor, status: [getComputedStyle(a.querySelector('.badge')).backgroundColor, getComputedStyle(a.querySelector('.badge')).color] };
+    const h = a.querySelector('.card-head'); const hs = getComputedStyle(h); const cs = getComputedStyle(a); const r = a.getBoundingClientRect(), hr = h.getBoundingClientRect();
+    return { full: Math.abs(hr.left - r.left) <= 1.5 && Math.abs(hr.right - r.right) <= 1.5 && hr.top - r.top <= 1.5, bg: hs.backgroundColor, color: hs.color, size: hs.fontSize, icon: !!h.querySelector('svg'), old: !!a.querySelector('.card-todo, .card-todo__dot'), cardBg: cs.backgroundColor, cardBorder: cs.borderTopColor, status: [getComputedStyle(a.querySelector('.badge')).backgroundColor, getComputedStyle(a.querySelector('.badge')).color] };
   });
-  eq(JSON.stringify(st), JSON.stringify({ line: 'rgb(228, 230, 234)', pad: '12px', color: 'rgb(32, 36, 44)', weight: '600', size: '15px', dot: [7, 'rgb(181, 73, 12)', 'true'], gap: '8px', cardBg: 'rgb(255, 255, 255)', cardBorder: 'rgb(228, 230, 234)', status: ['rgb(237, 243, 252)', 'rgb(49, 93, 168)'] }), '할 일 영역 디자인');
+  eq(JSON.stringify(st), JSON.stringify({ full: true, bg: 'rgb(237, 243, 252)', color: 'rgb(49, 93, 168)', size: '12px', icon: true, old: false, cardBg: 'rgb(255, 255, 255)', cardBorder: 'rgb(228, 230, 234)', status: ['rgb(237, 243, 252)', 'rgb(49, 93, 168)'] }), '확인 머리 디자인');
   // 할 일이 없는 카드: 행동 영역·구분선 없음 · 결제 결과·업체 응답 대기·금액 협의 중에는 문구 없음
   eq(await todoOf(page.locator('a[href="/bookings/bk-k2"]')), '', '할 일 없는 예약');
   eq((await page.locator('a[href="/bookings/bk-k2"] .badge').allInnerTexts()).join(), '방문 예정', '할 일 없는 예약 배지');
   eq((await page.locator('a[href="/bookings/bk-k9"] .badge').allInnerTexts()).join(), '최종 정산', '최종 정산(대표 상태)');
-  eq(await todoOf(page.locator('a[href="/bookings/bk-k9"]')), '최종 금액을 확인해 주세요', '최종 금액 할 일');
+  eq(await todoOf(page.locator('a[href="/bookings/bk-k9"]')), '확인이 필요해요', '최종 금액 할 일');
   eq((await page.locator('a[href="/bookings/bk-k12"] .badge').allInnerTexts()).join(), '정산 진행 중', '금액 협의 중 → 정산 진행 중');
   eq(await todoOf(page.locator('a[href="/bookings/bk-k12"]')), '', '금액 협의 중에는 할 일 없음');
-  for (const [id, todo] of [['bk-k4', '새 일정을 확인해 주세요'], ['bk-k5', '자재 주문 조건을 확인해 주세요'], ['bk-k6', '추가 작업을 확인해 주세요']]) eq(await todoOf(page.locator(`a[href="/bookings/${id}"]`)), todo, `${id} 할 일`);
+  for (const [id, todo] of [['bk-k4', '확인이 필요해요'], ['bk-k5', '확인이 필요해요'], ['bk-k6', '확인이 필요해요']]) eq(await todoOf(page.locator(`a[href="/bookings/${id}"]`)), todo, `${id} 할 일`);
   // 카드를 누르면 상세 상단 해당 확인 카드(실제 행동 버튼)
   await page.locator('a[href="/bookings/bk-k6"]').click();
   await page.waitForURL((u) => u.pathname === '/bookings/bk-k6');
@@ -1917,7 +1917,7 @@ await test('일정 변경 B(기존 방문 불가): 상단 카드 하나(방문 �
   truthy(lc.includes('방문 일정 조율 중') && !lc.includes('10월 14일') && !lc.includes('방문 불가') && !lc.includes('방문 예정'), `목록 카드: ${lc}`);
   await listCard(page, 'bk-k4').locator('.badge').first().waitFor();
   eq((await listCard(page, 'bk-k4').locator('.badge').allInnerTexts()).join(), '일정 조율 중', '목록 배지');
-  eq(await todoOf(listCard(page, 'bk-k4')), '새 일정을 확인해 주세요', '응답할 제안 → 할 일');
+  eq(await todoOf(listCard(page, 'bk-k4')), '확인이 필요해요', '응답할 제안 → 할 일');
   eq(await listCard(page, 'bk-k4').locator('[style*="--c-warn"]').count(), 0, '노란 경고 문구 없음');
   // 수락(연타해도 한 번)
   await page.goto(`${BASE}/bookings/bk-k4`);
@@ -2177,9 +2177,8 @@ for (const w of [360, 1280]) {
     await page.goto(BASE + '/bookings?tab=active');
     eq((await badgesOf(page, 'bk-k9')).join(), '최종 정산', '대표 상태');
     // 여러 할 일: 중요한 하나 + 외 N건(지연 → 추가 작업 → 자재 → 최종 금액)
-    eq(await todoOf(page.locator('a[href="/bookings/bk-k9"]')), '방문 지연 대응을 선택해 주세요 외 3건', '여러 할 일 요약');
-    const tr = await page.locator('a[href="/bookings/bk-k9"] .card-todo').evaluate((e) => ({ over: e.scrollWidth > e.clientWidth + 1, right: e.getBoundingClientRect().right <= e.closest('a').getBoundingClientRect().right }));
-    truthy(!tr.over && tr.right, `할 일 문구 잘림 없음 ${JSON.stringify(tr)}`);
+    eq(await todoOf(page.locator('a[href="/bookings/bk-k9"]')), '확인이 필요해요', '여러 할 일 요약');
+    eq(await page.locator('a[href="/bookings/bk-k9"] .card-head').count(), 1, '할 일이 여러 개여도 머리는 한 번');
     // 키보드: 카드 링크에 포커스 → Enter로 상세
     await page.locator('a[href="/bookings/bk-k9"]').focus();
     await page.keyboard.press('Enter');
@@ -2297,7 +2296,7 @@ await test('빈 상태: 요청·예약·내역이 없을 때', async (page) => {
   await page.locator('.empty').getByRole('link', { name: '업체 찾아보기' }).waitFor();
   await page.getByRole('tab', { name: '확정된 예약' }).click(); await waitText(page, '확정된 예약이 없어요');
   eq(await page.locator('.filter-bar').count(), 0, '예약이 없으면 필터 숨김');
-  await page.getByRole('tab', { name: '완료·취소' }).click(); await waitText(page, '완료되거나 취소된 예약이 없어요');
+  await page.getByRole('tab', { name: '완료·취소' }).click(); await waitText(page, '완료되거나 취소된 내역이 없어요');
   await page.goto(`${BASE}/ledger`); await waitText(page, '내역이 없어요');
 });
 
@@ -3976,7 +3975,8 @@ for (const w of [390, 1280]) {
 }
 
 // ───────── 내 예약 통합 메뉴: 보낸 요청 / 확정된 예약 / 완료·취소 ─────────
-const resTab = (page, name) => page.getByRole('tab', { name, exact: true });
+// 탭 이름 뒤에 확인 필요 건수(‘, 확인 필요한 항목 N건’)가 붙을 수 있다(spec 5.48)
+const resTab = (page, name) => page.getByRole('tab', { name: new RegExp('^' + name + '(, 확인 필요한 항목 [0-9]+건)?$') });
 const resCount = async (page) => {
   await page.locator('.filter-bar__count b').waitFor();
   await page.waitForSelector('main [aria-busy="true"]', { state: 'detached' }).catch(() => {});
@@ -3995,9 +3995,9 @@ await test('내 예약 통합: 메뉴 3개·탭 순서·기본 탭·URL 반영, 
   await page.setViewportSize({ width: 1280, height: 800 });
   await start(page, { path: '/bookings' });
   await page.waitForURL((u) => u.search === '?tab=requests');
-  eq((await page.getByRole('tab').allInnerTexts()).join('/'), '보낸 요청/확정된 예약/완료·취소', '탭 순서');
+  eq((await page.getByRole('tab').evaluateAll((ts) => ts.map((t) => t.dataset.label))).join('/'), '보낸 요청/확정된 예약/완료·취소', '탭 순서');
   eq(await resTab(page, '보낸 요청').getAttribute('aria-selected'), 'true', '처음은 보낸 요청');
-  eq((await page.locator('nav.top-nav a').allInnerTexts()).map((x) => x.trim()).join('/'), '업체 찾기/내 예약/내 정보', '상단 메뉴');
+  eq((await page.locator('nav.top-nav a').allInnerTexts()).map((x) => x.trim().replace(/[\s\d]*,\s*확인 필요한 항목 \d+건$/, '')).join('/'), '업체 찾기/내 예약/내 정보', '상단 메뉴');
   eq(await page.locator('nav.top-nav').getByRole('link', { name: '내 예약' }).getAttribute('aria-current'), 'page', '내 예약 활성');
   eq(await page.getByRole('link', { name: '내 요청' }).count(), 0, '내 요청 메뉴 없음');
   await openTab(page, '확정된 예약');
@@ -4056,7 +4056,7 @@ await test('내 예약 통합: 각 요청·예약은 한 탭에만(건수 = 표�
   await openTab(page, '보낸 요청');
   const main = await page.locator('main').innerText();
   truthy(main.includes('업체 거절') && main.includes('거절 사유: 서랍 레일 규격을 확인하기 어려워'), '거절 + 사유');
-  truthy(main.includes('요청 취소') && main.includes('결제 기한 만료') && !main.includes('철회') && !main.includes('승인 만료'), '요청 취소·결제 기한 만료(이전 이름 없음)');
+  truthy(!main.includes('요청 취소') && main.includes('결제 기한 만료') && !main.includes('철회') && !main.includes('승인 만료'), '결제 기한 만료(이전 이름 없음), 요청 취소는 완료·취소 탭');
   truthy(main.includes('업체 검토 중') && main.includes('요청서를 보완해 주세요') && main.includes('예약금 결제') && !main.includes('추가 정보 필요') && !main.includes('확인 필요'), '검토(보완 요청은 할 일)·예약금 결제');
   truthy(!main.includes('예약 완료'), '보낸 요청에 예약 완료 없음');
   // 확정된 예약: 최종 금액 확인·정산 대기 유지 / 완료·취소: 이용 완료·취소(환불 상태)
@@ -4623,11 +4623,11 @@ await test('내 예약 통합: 탭별 필터·목록 위치가 독립적으로 �
   await page.evaluate(() => window.scrollTo(0, 0));
   // 필터 독립: 보낸 요청 조건이 확정된 예약 조건에 영향 없음
   await openTab(page, '보낸 요청');
-  await pickStatus(page, '요청 취소');
+  await pickStatus(page, '업체 거절');
   await openTab(page, '확정된 예약');
   eq((await bkStatus(page).innerText()).trim(), '예약 상태', '확정된 예약 조건은 기본');
   await openTab(page, '보낸 요청');
-  await statusBtn(page).filter({ hasText: '요청 취소' }).waitFor();
+  await statusBtn(page).filter({ hasText: '업체 거절' }).waitFor();
 });
 
 for (const w of [360, 1280, 320, 200]) {
@@ -4736,7 +4736,7 @@ await test('상단 메뉴 홈 아이콘: 주요 화면 공통·접근성 이름�
     eq(r.iconColor, r.color, `${p} 아이콘 색 = 메뉴 색`);
     eq(r.href, '/', `${p} 업체 찾기로`);
     eq(r.current, p === '/' ? 'page' : null, `${p} 활성 표시`);
-    eq((await page.locator('nav.top-nav a').allInnerTexts()).map((x) => x.trim()).join('/'), '업체 찾기/내 예약/내 정보', `${p} 메뉴 3개`);
+    eq((await page.locator('nav.top-nav a').allInnerTexts()).map((x) => x.trim().replace(/[\s\d]*,\s*확인 필요한 항목 \d+건$/, '')).join('/'), '업체 찾기/내 예약/내 정보', `${p} 메뉴 3개`);
     eq(await page.locator('nav.top-nav').getByRole('link', { name: '내 예약' }).getAttribute('aria-current'), p === '/' || p === '/me' ? null : 'page', `${p} 내 예약 활성`);
     if (title) {
       eq((await page.locator('.app-header__title').innerText()).trim(), title, `${p} 제목 유지`);

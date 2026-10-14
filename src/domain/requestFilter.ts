@@ -15,7 +15,7 @@ import { REQUEST_DISPLAY, requestItemActions } from './statusDisplay';
 export type PeriodPreset = 'all' | '7d' | '30d' | '90d' | 'custom';
 
 /** 사용자용 상태 그룹(필터 전용). 업무 상태(RequestStatus)를 바꾸지 않고 조회 조건으로만 묶는다. */
-export type StatusGroup = 'all' | 'reviewing' | 'payment_pending' | 'rejected' | 'withdrawn' | 'expired';
+export type StatusGroup = 'all' | 'reviewing' | 'payment_pending' | 'rejected' | 'expired';
 
 export interface RequestFilter {
   period: PeriodPreset;
@@ -44,14 +44,13 @@ const PRESET_DAYS: Partial<Record<PeriodPreset, number>> = { '7d': 7, '30d': 30,
  * 상태 선택지 → 업무 상태 매핑(목록 대표 상태와 같은 기준). 업무 상태는 합치거나 바꾸지 않고 조회 조건으로만 묶는다.
  * - 업체 검토 중: reviewing + needs_info(추가 정보 필요는 ‘업체 검토 중’ + 확인 필요로 보인다)
  * - 예약금 결제: approved_pending_payment(조건 재확인·결제 실패·결과 확인 중 포함)
- * - 업체 거절 / 요청 취소(withdrawn) / 결제 기한 만료(approval_expired)
+ * - 업체 거절 / 결제 기한 만료(approval_expired). 요청 취소(withdrawn)는 2026-10-14부터 완료·취소 탭에 있어 여기 선택지가 없다(spec 5.47)
  * booked(예약 완료)와 closed_other_booking(비교 요청 결과 종료)은 보낸 요청 데모 목록에 나오지 않아 선택지가 없다(‘전체’에서만).
  */
 export const STATUS_GROUP_STATUSES: Record<Exclude<StatusGroup, 'all'>, RequestStatus[]> = {
   reviewing: ['reviewing', 'needs_info'],
   payment_pending: ['approved_pending_payment'],
   rejected: ['rejected'],
-  withdrawn: ['withdrawn'],
   expired: ['approval_expired'],
 };
 
@@ -60,11 +59,10 @@ export const STATUS_GROUP_OPTIONS: { value: StatusGroup; label: string }[] = [
   { value: 'reviewing', label: REQUEST_DISPLAY.reviewing.label },
   { value: 'payment_pending', label: REQUEST_DISPLAY.approved_pending_payment.label },
   { value: 'rejected', label: REQUEST_DISPLAY.rejected.label },
-  { value: 'withdrawn', label: REQUEST_DISPLAY.withdrawn.label },
   { value: 'expired', label: REQUEST_DISPLAY.approval_expired.label },
 ];
-/** 이전 주소의 상태 값: 추가 정보 필요 → 업체 검토 중, 종료(여러 상태 묶음) → 전체 */
-const LEGACY_STATUS: Record<string, StatusGroup> = { needs_info: 'reviewing', ended: 'all' };
+/** 이전 주소의 상태 값: 추가 정보 필요 → 업체 검토 중, 종료(여러 상태 묶음) → 전체, 요청 취소(완료·취소 탭으로 옮김) → 전체 */
+const LEGACY_STATUS: Record<string, StatusGroup> = { needs_info: 'reviewing', ended: 'all', withdrawn: 'all' };
 const isStatusGroup = (s: string | null): s is StatusGroup => STATUS_GROUP_OPTIONS.some((o) => o.value === s);
 
 // ───────── 날짜 ─────────

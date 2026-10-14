@@ -9,7 +9,7 @@ import { DEMO_PHOTO_SIZE, INTRO_PHOTOS, WORK_SCENES } from './demoPhotos';
 import { PROVIDER_REQUEST_DAYS } from './providerRequestDays';
 import { PROVIDER_SERVICES } from './providerServices';
 import { PROVIDER_SHOWCASE } from './providerShowcase';
-import { EXTRA_JOINT_DAYS, EXTRA_PROVIDERS } from './providersExtra';
+import { EXTRA_JOINT_DAYS, EXTRA_PROVIDERS, NO_JOINT_EXTRA } from './providersExtra';
 import { DEMO_SCHEDULE_VERSION, migrateDemoSchedule } from './scheduleMigration';
 import { CATEGORIES, createSeed } from './seed';
 
@@ -192,10 +192,11 @@ describe('업체 소개·작업 사례(데모 콘텐츠)', () => {
 });
 
 describe('추가 업체의 날짜 선택·수리 요청 흐름', () => {
-  it('공동 예약: 10/19~25 중 서로 다른 날짜 3개·날짜당 그룹 하나, 접수 마감 전날 18:00, 출장비는 기존 계산 기준', async () => {
+  it('공동 예약: 10/19~25 중 서로 다른 날짜 3개·날짜당 그룹 하나, 접수 마감 전날 18:00, 출장비는 기존 계산 기준(공동 예약 후보 없는 업체는 그룹 없음)', async () => {
     const r = repo();
     for (const p of EXTRA_PROVIDERS) {
       const d = await r.getProvider(p.id, 'ad-apt');
+      if (NO_JOINT_EXTRA.has(p.id)) { expect(d.groups, p.id).toEqual([]); expect(d.jointAvailable, p.id).toBe(false); continue; }
       const days = EXTRA_JOINT_DAYS[p.id];
       expect(d.groups.map((g) => g.date), p.id).toEqual(days.map((x) => `2026-10-${x.day}`));
       expect(new Set(days.map((x) => x.day)).size, p.id).toBe(3);
@@ -227,9 +228,11 @@ describe('추가 업체의 날짜 선택·수리 요청 흐름', () => {
       const d = await r.getProvider(p.id, 'ad-apt');
       const tasks = d.services.slice(0, 2).map((s) => ({ serviceId: s.id, description: '데모 요청', photoNames: [] }));
       const g = d.groups[0];
-      const joint = await r.createRequest({ ...base, providerId: p.id, groupId: g.id, slots: [selectableTimes(g.slots)[0]], tasks, idempotencyKey: `t-joint-${p.id}` });
-      expect([joint.providerId, joint.groupId, joint.status], p.id).toEqual([p.id, g.id, 'reviewing']);
-      expect(joint.tasks.map((t) => t.title), p.id).toEqual(d.services.slice(0, 2).map((s) => s.name));
+      if (g) { // 공동 예약 후보가 없는 업체(NO_JOINT_EXTRA)는 새 요청만
+        const joint = await r.createRequest({ ...base, providerId: p.id, groupId: g.id, slots: [selectableTimes(g.slots)[0]], tasks, idempotencyKey: `t-joint-${p.id}` });
+        expect([joint.providerId, joint.groupId, joint.status], p.id).toEqual([p.id, g.id, 'reviewing']);
+        expect(joint.tasks.map((t) => t.title), p.id).toEqual(d.services.slice(0, 2).map((s) => s.name));
+      } else expect(NO_JOINT_EXTRA.has(p.id), p.id).toBe(true);
       const date = newRequestDates(d.newRequest, r.now())[0];
       const fresh = await r.createRequest({ ...base, providerId: p.id, groupId: null, newDateWish: date, slots: ['10:00'], tasks: tasks.slice(0, 1), idempotencyKey: `t-new-${p.id}` });
       expect([fresh.providerId, fresh.groupId, fresh.newDateWish, fresh.status], p.id).toEqual([p.id, null, date, 'reviewing']);

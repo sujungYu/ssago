@@ -2,9 +2,10 @@
  * 내 예약(통합 메뉴) 탭 분류 — 목록 노출 기준을 한 곳에서 관리한다. 업무 상태를 바꾸거나 새 상태를 만들지 않는다.
  *
  * - 보낸 요청(requests): 예약금 결제 성공으로 예약이 생기기 전의 요청 묶음. 검토 중·추가 정보 필요·승인 후 결제 대기
- *   (결제 실패·결과 확인 중 포함 — 예약이 생기지 않았으므로)·업체 거절·철회·승인 만료처럼 예약으로 이어지지 않고 끝난 요청도 남긴다.
+ *   (결제 실패·결과 확인 중 포함 — 예약이 생기지 않았으므로)·업체 거절·승인 만료처럼 예약으로 이어지지 않고 끝난 요청도 남긴다.
  * - 확정된 예약(active): 예약이 확정된 뒤 이용 완료·예약 취소 전까지(방문 예정·작업 중·후속 방문 대기·최종 금액 확인·정산 대기·조건 재확인).
- * - 완료·취소(past): 최종 정산까지 끝난 이용 완료(workStatus=completed) 또는 확정 후 취소된 예약(환불 상태는 카드에서 계속 표시).
+ * - 완료·취소(past): 최종 정산까지 끝난 이용 완료(workStatus=completed), 확정 후 취소된 예약(환불 상태는 카드에서 계속 표시),
+ *   그리고 예약 확정 전 고객이 직접 취소한 요청(‘요청 취소’, status=withdrawn — 2026-10-14, spec 5.47). 요청은 요청 그대로 보여주며 예약으로 바꾸지 않는다.
  *
  * 판단 근거는 실제 데이터의 연결 관계다(날짜·화면 문구로 추측하지 않음).
  * - 요청이 예약으로 이어졌는지 = 요청의 bookingId(예약금 결제 성공 시 예약 생성과 함께 기록) 또는 요청 상태 booked.
@@ -29,9 +30,18 @@ export function isConvertedToBooking(r: Pick<RepairRequest, 'status' | 'bookingI
   return r.status === 'booked' || !!r.bookingId;
 }
 
-/** 요청 묶음(같은 작업의 업체별 요청)이 보낸 요청 탭에 남는가: 어느 요청도 예약으로 이어지지 않았을 때만 */
+/** 요청 묶음(같은 작업의 업체별 요청)이 보낸 요청 탭에 남는가: 어느 요청도 예약으로 이어지지 않았고, 모두 요청 취소가 아닐 때(모두 취소면 완료·취소) */
 export function bundleInRequestsTab(requests: Pick<RepairRequest, 'status' | 'bookingId'>[]): boolean {
-  return requests.length > 0 && !requests.some(isConvertedToBooking);
+  return requests.length > 0 && !requests.some(isConvertedToBooking) && requests.some((r) => r.status !== 'withdrawn');
+}
+
+/**
+ * 요청 하나의 목록 탭: 예약으로 이어진 요청은 null(그 예약이 예약 탭에 보인다), 고객이 예약 확정 전에 취소한 요청(withdrawn)은 완료·취소,
+ * 비교 요청 결과로 끝난 요청(다른 업체 예약으로 종료)은 null(데모 목록에 없음), 그 밖은 보낸 요청. 한 요청은 한 탭에만 보인다.
+ */
+export function requestTabOf(r: Pick<RepairRequest, 'status' | 'bookingId'>): 'requests' | 'past' | null {
+  if (isConvertedToBooking(r) || r.status === 'closed_other_booking') return null;
+  return r.status === 'withdrawn' ? 'past' : 'requests';
 }
 
 /**
@@ -39,7 +49,7 @@ export function bundleInRequestsTab(requests: Pick<RepairRequest, 'status' | 'bo
  * (원본 묶음 데이터는 그대로 두고 목록만 개별 요청 기준으로 만든다)
  */
 export function requestInRequestsTab(r: Pick<RepairRequest, 'status' | 'bookingId'>): boolean {
-  return !isConvertedToBooking(r) && r.status !== 'closed_other_booking';
+  return requestTabOf(r) === 'requests';
 }
 
 /** 예약의 탭: 취소됐거나 최종 정산까지 끝나 이용 완료면 완료·취소, 그 외(작업이 끝났어도 정산이 남았으면)는 확정된 예약 */
@@ -50,5 +60,5 @@ export function bookingTabOf(b: Pick<Booking, 'status' | 'workStatus'>): Booking
 /** 상세 화면의 ‘목록으로’ 이동 대상 */
 export const listPath = (t: ReservationTab): string => `/bookings?tab=${t}`;
 export const LIST_LINK_LABEL: Record<ReservationTab, string> = {
-  requests: '보낸 요청으로', active: '확정된 예약으로', past: '완료·취소 내역으로',
+  requests: '보낸 요청으로', active: '확정된 예약으로', past: '완료·취소 목록으로',
 };

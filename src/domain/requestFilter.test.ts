@@ -81,9 +81,9 @@ describe('상태 그룹 필터(단일 선택)', () => {
     expect(r[0].items.map((x) => x.id)).toEqual(['rq-3']); // 같은 묶음의 거절 요청은 숨김(삭제 아님)
     expect(r[0].hiddenItemCount).toBe(1);
   });
-  it('보낸 요청 필터 = 목록 대표 상태 다섯(예약 완료 선택지 없음)', () => {
-    expect(STATUS_GROUP_OPTIONS.map((o) => o.value)).toEqual(['all', 'reviewing', 'payment_pending', 'rejected', 'withdrawn', 'expired']);
-    expect(STATUS_GROUP_OPTIONS.map((o) => o.label)).toEqual(['전체', '업체 검토 중', '예약금 결제', '업체 거절', '요청 취소', '결제 기한 만료']);
+  it('보낸 요청 필터 = 목록 대표 상태 넷(예약 완료·요청 취소 선택지 없음 — 요청 취소는 완료·취소 탭)', () => {
+    expect(STATUS_GROUP_OPTIONS.map((o) => o.value)).toEqual(['all', 'reviewing', 'payment_pending', 'rejected', 'expired']);
+    expect(STATUS_GROUP_OPTIONS.map((o) => o.label)).toEqual(['전체', '업체 검토 중', '예약금 결제', '업체 거절', '결제 기한 만료']);
     expect(Object.values(STATUS_GROUP_STATUSES).flat()).not.toContain('booked');
   });
   it('선택지 이름은 카드 배지(REQUEST_DISPLAY)와 같고, 그 선택지가 그 이름의 업무 상태만 거른다', () => {
@@ -98,9 +98,9 @@ describe('상태 그룹 필터(단일 선택)', () => {
     expect(r[0].items.map((x) => x.request.status)).toEqual(['rejected']);
     expect(run({ status: 'reviewing' }).map((b) => b.items.map((x) => x.id))).toEqual([['rq-1', 'rq-2']]);
   });
-  it('업무 상태는 합치지 않는다: 다른 업체 예약으로 종료(비교 요청 결과)만 선택지 없이 전체에서만, 나머지는 한 번씩', () => {
+  it('업무 상태는 합치지 않는다: 다른 업체 예약으로 종료(비교 요청 결과)·요청 취소(완료·취소 탭)는 선택지 없이, 나머지는 한 번씩', () => {
     const all = Object.values(STATUS_GROUP_STATUSES).flat();
-    expect([...all].sort()).toEqual(Object.keys(REQUEST_STATUS).filter((k) => k !== 'booked' && k !== 'closed_other_booking').sort());
+    expect([...all].sort()).toEqual(Object.keys(REQUEST_STATUS).filter((k) => k !== 'booked' && k !== 'closed_other_booking' && k !== 'withdrawn').sort());
     expect(new Set(all).size).toBe(all.length);
   });
   it('접수일 단독 · 상태 단독 · 두 조건 AND(묶음 안 업체별 접수일이 달라도 업체별 요청 기준)', () => {
@@ -128,12 +128,13 @@ describe('상태 그룹 필터(단일 선택)', () => {
 
 describe('URL 쿼리', () => {
   it('왕복해도 같은 값', () => {
-    const v = f({ period: 'custom', from: '2026-10-01', to: '2026-10-08', status: 'withdrawn' });
+    const v = f({ period: 'custom', from: '2026-10-01', to: '2026-10-08', status: 'expired' });
     expect(parseRequestFilter(writeRequestFilter(qs(''), v))).toEqual(v);
-    expect(writeRequestFilter(qs(''), v).toString()).toBe('period=custom&from=2026-10-01&to=2026-10-08&status=withdrawn');
+    expect(writeRequestFilter(qs(''), v).toString()).toBe('period=custom&from=2026-10-01&to=2026-10-08&status=expired');
     // 이전 주소: 추가 정보 필요 → 업체 검토 중, 종료 → 전체
     expect(parseRequestFilter(qs('status=needs_info')).status).toBe('reviewing');
     expect(parseRequestFilter(qs('status=ended')).status).toBe('all');
+    expect(parseRequestFilter(qs('status=withdrawn')).status).toBe('all'); // 요청 취소는 완료·취소 탭으로 옮김(spec 5.47) — 이전 주소는 전체
   });
   it('기본값은 쿼리에 넣지 않고, 다른 쿼리 값은 유지한다', () => {
     expect(writeRequestFilter(qs('x=1&period=7d&status=booked'), DEFAULT_REQUEST_FILTER).toString()).toBe('x=1');

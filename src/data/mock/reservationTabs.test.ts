@@ -4,7 +4,8 @@ import { MockRepository } from './mockRepository';
 import { DevController } from '../../dev/devController';
 import { bookingTabOf, bundleInRequestsTab, isConvertedToBooking } from '../../domain/reservationTabs';
 import { hasReservationFilterParams, parseReservationFilter, tabFilterKey, writeReservationFilter } from '../../domain/reservationFilter';
-import { DEFAULT_ACTIVE, DEFAULT_PAST } from '../../domain/bookingFilter';
+import { DEFAULT_ACTIVE, DEFAULT_PAST, PAST_STATUS_OPTIONS } from '../../domain/bookingFilter';
+import { requestDisplay } from '../../domain/statusDisplay';
 import { DEFAULT_REQUEST_FILTER } from '../../domain/requestFilter';
 import type { RequestStatus } from '../../domain/types';
 
@@ -28,6 +29,7 @@ describe('탭 분류 규칙(공통)', () => {
   });
   it('묶음은 어느 요청도 예약으로 이어지지 않았을 때만 보낸 요청(종료된 묶음 포함)', () => {
     expect(bundleInRequestsTab([{ status: 'rejected' }, { status: 'withdrawn' }])).toBe(true);
+    expect(bundleInRequestsTab([{ status: 'withdrawn' }])).toBe(false); // 모두 요청 취소면 완료·취소
     expect(bundleInRequestsTab([{ status: 'booked', bookingId: 'b' }, { status: 'closed_other_booking' }])).toBe(false);
     expect(bundleInRequestsTab([])).toBe(false);
   });
@@ -45,9 +47,9 @@ describe('탭 분류 규칙(공통)', () => {
 
 describe('탭 URL', () => {
   it('탭과 탭별 필터는 서로 다른 키로 독립 저장되고 그대로 복원된다', () => {
-    const f = { tab: 'active' as const, requests: { period: '7d' as const, status: 'withdrawn' as const }, active: { ...DEFAULT_ACTIVE, actionOnly: true }, past: { ...DEFAULT_PAST, status: 'cancelled' as const } };
+    const f = { tab: 'active' as const, requests: { period: '7d' as const, status: 'rejected' as const }, active: { ...DEFAULT_ACTIVE, actionOnly: true }, past: { ...DEFAULT_PAST, status: 'cancelled' as const } };
     const s = writeReservationFilter(qs('x=1'), f).toString();
-    expect(s).toBe('tab=active&period=7d&status=withdrawn&a_action=1&p_status=cancelled&x=1');
+    expect(s).toBe('tab=active&period=7d&status=rejected&a_action=1&p_status=cancelled&x=1');
     expect(parseReservationFilter(qs(s))).toEqual(f);
   });
   it('탭이 없으면(이전 주소) 들어 있는 필터 키로 탭을 정하고, 잘못된 값은 기본값', () => {
@@ -63,9 +65,9 @@ describe('탭 URL', () => {
     expect(hasReservationFilterParams(qs('x=1'))).toBe(false);
   });
   it('목록 키는 현재 탭과 그 탭의 필터로만 정해진다(다른 탭 필터가 바뀌어도 같음)', () => {
-    const base = parseReservationFilter(qs('tab=requests&status=withdrawn'));
-    expect(tabFilterKey(base)).toBe('tab=requests&status=withdrawn');
-    expect(tabFilterKey({ ...base, active: { ...DEFAULT_ACTIVE, status: 'scheduled' } })).toBe('tab=requests&status=withdrawn');
+    const base = parseReservationFilter(qs('tab=requests&status=rejected'));
+    expect(tabFilterKey(base)).toBe('tab=requests&status=rejected');
+    expect(tabFilterKey({ ...base, active: { ...DEFAULT_ACTIVE, status: 'scheduled' } })).toBe('tab=requests&status=rejected');
     expect(tabFilterKey({ ...base, tab: 'past' })).toBe('tab=past');
   });
 });
@@ -80,13 +82,18 @@ describe('내 예약 탭 노출(중복 없음)', () => {
     // 보낸 요청에는 booked·bookingId가 있는 요청, 같은 묶음의 다른 업체 요청이 없다
     const convertedBundles = new Set(db.requests.filter(isConvertedToBooking).map((x) => x.bundleId));
     expect(db.requests.filter((x) => sent.includes(x.id)).some((x) => convertedBundles.has(x.bundleId))).toBe(false);
-    // 예약으로 이어지지 않은 요청은 모두 보낸 요청에
-    expect(db.requests.filter((x) => !convertedBundles.has(x.bundleId)).map((x) => x.id).sort()).toEqual([...sent].sort());
+    // 예약으로 이어지지 않은 요청은 보낸 요청에, 단 요청 취소(withdrawn)는 완료·취소에만(spec 5.47)
+    const cancelled = (await r.queryBookings({ tab: 'past' })).cancelledRequests.map((i) => i.request.id);
+    expect(db.requests.filter((x) => !convertedBundles.has(x.bundleId) && x.status !== 'withdrawn').map((x) => x.id).sort()).toEqual([...sent].sort());
+    expect(cancelled.sort()).toEqual(db.requests.filter((x) => !convertedBundles.has(x.bundleId) && x.status === 'withdrawn').map((x) => x.id).sort());
+    expect(sent.filter((id) => cancelled.includes(id))).toEqual([]); // 두 탭에 중복 없음
     // 예약은 확정된 예약/완료·취소 중 하나에만, 빠짐없이
     expect(active.filter((id) => past.includes(id))).toEqual([]);
     expect([...active, ...past].sort()).toEqual(db.bookings.map((b) => b.id).sort());
-    // 거절·철회·만료로 끝난 요청도 보낸 요청에 남는다
-    expect(sent).toEqual(expect.arrayContaining(['rq-5', 'rq-6', 'rq-7']));
+    // 거절·만료로 끝난 요청은 보낸 요청에 남고, 요청 취소(rq-6)는 완료·취소에
+    expect(sent).toEqual(expect.arrayContaining(['rq-5', 'rq-7']));
+    expect(sent).not.toContain('rq-6');
+    expect(cancelled).toContain('rq-6');
     // 다른 업체 예약으로 종료된 요청(rq-8)은 그 묶음의 예약이 있어 보낸 요청에 없다
     expect(sent).not.toContain('rq-8');
     expect((await r.queryRequests({})).hasAnyRequest).toBe(true);
@@ -139,7 +146,7 @@ describe('내 예약 탭 노출(중복 없음)', () => {
     expect(await sentBundles(r)).not.toContain('b-sink');
     expect((await r.getRequest('rq-4')).request.status).toBe('closed_other_booking');
   });
-  it('확정 전 거절·철회·만료는 보낸 요청에만(종료 상태로)', async () => {
+  it('확정 전 거절·만료는 보낸 요청에만(종료 상태로), 요청 취소(철회)는 완료·취소에만 — 예약으로 바꾸지 않는다', async () => {
     const r = repo();
     const dev = new DevController(r);
     dev.rejectRequest('rq-1');
@@ -147,9 +154,12 @@ describe('내 예약 탭 노출(중복 없음)', () => {
     await r.withdrawRequest('rq-2');
     const items = (await r.queryRequests({})).bundles.flatMap((b) => b.items);
     expect(Object.fromEntries(items.filter((i) => ['rq-1', 'rq-2', 'rq-10'].includes(i.request.id)).map((i) => [i.request.id, i.request.status])))
-      .toEqual({ 'rq-1': 'rejected', 'rq-2': 'withdrawn', 'rq-10': 'approval_expired' });
-    const all = [...(await r.queryBookings({ tab: 'active' })).items, ...(await r.queryBookings({ tab: 'past' })).items];
+      .toEqual({ 'rq-1': 'rejected', 'rq-10': 'approval_expired' });
+    const past = await r.queryBookings({ tab: 'past' });
+    expect(past.cancelledRequests.map((i) => [i.request.id, i.request.status])).toContainEqual(['rq-2', 'withdrawn']);
+    const all = [...(await r.queryBookings({ tab: 'active' })).items, ...past.items];
     expect(all.some((it) => ['rq-1', 'rq-2', 'rq-10'].includes(it.booking.requestId))).toBe(false);
+    expect(r.__db().bookings.some((b) => b.requestId === 'rq-2')).toBe(false); // 예약 데이터로 바꾸거나 복제하지 않음
   });
   it('최종 금액 확인·정산 대기는 확정된 예약 유지, 정산 완료(이용 완료)되면 완료·취소로만', async () => {
     const r = repo();
@@ -169,5 +179,32 @@ describe('내 예약 탭 노출(중복 없음)', () => {
     expect(ended.bundles.every((b) => b.items.every((i) => ['rejected', 'withdrawn', 'approval_expired'].includes(i.request.status)))).toBe(true);
     r.__db().requests = r.__db().requests.filter(isConvertedToBooking);
     expect(await r.queryRequests({})).toEqual({ bundles: [], hasAnyRequest: false });
+  });
+});
+
+describe('완료·취소 탭의 요청 취소(spec 5.47)', () => {
+  it('상태 선택지: 전체 · 이용 완료 · 요청 취소 · 예약 취소, 이름은 카드 라벨과 같다', () => {
+    expect(PAST_STATUS_OPTIONS.map((o) => o.label)).toEqual(['전체', '이용 완료', '요청 취소', '예약 취소']);
+    expect(PAST_STATUS_OPTIONS.find((o) => o.value === 'request_cancelled')!.label).toBe(requestDisplay('withdrawn').label);
+  });
+  it('요청 취소 선택 → 요청 취소만, 이용 완료·예약 취소 선택 → 요청 취소 없음, 건수 = 예약 + 요청 취소', async () => {
+    const r = repo();
+    const all = await r.queryBookings({ tab: 'past' });
+    const only = await r.queryBookings({ tab: 'past', statusGroup: 'request_cancelled' });
+    expect(only.items).toEqual([]);
+    expect(only.cancelledRequests.map((i) => i.request.id)).toEqual(all.cancelledRequests.map((i) => i.request.id));
+    expect(all.cancelledRequests.length).toBeGreaterThan(0);
+    expect(all.cancelledRequests.every((i) => i.request.status === 'withdrawn')).toBe(true);
+    for (const g of ['completed', 'cancelled'] as const) expect((await r.queryBookings({ tab: 'past', statusGroup: g })).cancelledRequests).toEqual([]);
+    const c = (await r.queryBookings({ tab: 'past', statusGroup: 'completed' })).items.length + (await r.queryBookings({ tab: 'past', statusGroup: 'cancelled' })).items.length;
+    expect(all.items.length + all.cancelledRequests.length).toBe(c + only.cancelledRequests.length);
+  });
+  it('날짜(방문일) 조건이 있으면 확정 방문일이 없는 요청 취소는 제외하고 그 수를 알린다(날짜를 만들지 않음)', async () => {
+    const r = repo();
+    const n = (await r.queryBookings({ tab: 'past' })).cancelledRequests.length;
+    const d = await r.queryBookings({ tab: 'past', visitFrom: '2026-01-01', visitTo: '2026-12-31' });
+    expect(d.cancelledRequests).toEqual([]);
+    expect(d.excludedCancelledRequests).toBe(n);
+    expect((await r.queryBookings({ tab: 'active' })).cancelledRequests).toEqual([]);
   });
 });

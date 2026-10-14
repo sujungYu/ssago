@@ -11,6 +11,8 @@
   /* 내 예약 목록 상태 배지(spec 5.45): 결제 필요(예약금 결제·최종 정산), 업체 거절 */
   --c-status-pay: #9a450b; --c-status-pay-bg: #fff3e8;
   --c-status-reject: #b42318; --c-status-reject-bg: #feeceb;
+  /* 확인 필요 건수 배지(spec 5.48) */
+  --c-count: #315da8; --c-count-bg: #e8effb;
   --c-line: #e4e6ea;
   --c-line-strong: #c9ced6;
   --c-info-bg: #edf3fc;

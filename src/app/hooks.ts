@@ -70,3 +70,13 @@ export function useAttemptKey(prefix: string) {
   const ref = useRef<string>(newKey(prefix));
   return { get: () => ref.current, renew: () => { ref.current = newKey(prefix); } };
 }
+
+/**
+ * 확인 필요 건수(spec 5.48) — 헤더 ‘내 예약’·내 예약 탭 배지 공통. 저장소 변경(응답·결제·취소·기한 만료 등)마다 다시 센다(useAsync 구독).
+ * 필터와 무관한 탭 전체 기준. 불러오는 중·실패면 undefined(배지를 숨김).
+ */
+export function useTodoCounts(): { requests: number; active: number } | undefined {
+  const repo = useRepo();
+  const q = useAsync(() => repo.getTodoCounts(), [repo]);
+  return q.error ? undefined : q.data;
+}

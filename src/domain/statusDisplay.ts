@@ -41,12 +41,13 @@ export function actionSummary(actions: ActionKind[]): string | null {
 
 // ───────── 보낸 요청 ─────────
 /** 보낸 요청 대표 상태(업무 상태 → 표시). 추가 정보 필요도 ‘업체 검토 중’(할 일: 요청서 보완) */
+const REQUEST_DISPLAY_WITHDRAWN = '요청 취소';
 export const REQUEST_DISPLAY: Record<RequestStatus, { label: string; tone: DisplayTone }> = {
   reviewing: { label: '업체 검토 중', tone: 'progress' },
   needs_info: { label: '업체 검토 중', tone: 'progress' },
   approved_pending_payment: { label: '예약금 결제', tone: 'payment' },
   rejected: { label: '업체 거절', tone: 'rejected' },
-  withdrawn: { label: '요청 취소', tone: 'ended' },
+  withdrawn: { label: REQUEST_DISPLAY_WITHDRAWN, tone: 'ended' },
   approval_expired: { label: '결제 기한 만료', tone: 'ended' },
   closed_other_booking: { label: '다른 업체 예약으로 종료', tone: 'ended' },
   booked: { label: '예약 완료', tone: 'done' },
@@ -126,8 +127,9 @@ export const bookingActions = (i: Pick<BookingDisplayInput, 'booking' | 'pending
 export const bookingHasTodo = (i: Pick<BookingDisplayInput, 'booking' | 'pendingActions'>): boolean => bookingActions(i).length > 0;
 
 /** 완료·취소 탭 대표 상태 = 카드 배지 = 완료·취소 상태 필터 값 */
-export type PastGroup = 'completed' | 'cancelled';
-export const PAST_GROUP_LABEL: Record<PastGroup, string> = { completed: '이용 완료', cancelled: '예약 취소' };
+/** 요청 취소(request_cancelled) = 예약 확정 전 고객이 취소한 요청(withdrawn), 예약 취소(cancelled) = 확정 후 취소된 예약(spec 5.47) */
+export type PastGroup = 'completed' | 'request_cancelled' | 'cancelled';
+export const PAST_GROUP_LABEL: Record<PastGroup, string> = { completed: '이용 완료', request_cancelled: REQUEST_DISPLAY_WITHDRAWN, cancelled: '예약 취소' };
 
 export interface BookingDisplay extends StatusDisplay {
   group: ActiveGroup | null;

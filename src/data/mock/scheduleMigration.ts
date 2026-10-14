@@ -6,8 +6,9 @@ import type { MockDb } from './db';
  * 목업 DB는 탭의 sessionStorage에 통째로 저장·복원되므로, 버전이 낮은 저장 상태는 아래 이전(migrate)으로 일정만 새 기준에 맞춘다.
  * v2(2026-10-13): 모든 업체가 10/19~25 중 서로 다른 날짜 3개에 날짜당 하나.
  * v3(2026-10-13): 업체를 35곳으로 늘림(카테고리마다 10곳). 새 업체(p9~p35)와 그 공동 예약 일정을 더한다.
+ * v4(2026-10-14): 카테고리마다 절반쯤만 공동 예약 후보 — 추가 업체 일부(NO_JOINT_EXTRA)의 열린 데모 일정(gx-…)을 뺀다(spec 5.49).
  */
-export const DEMO_SCHEDULE_VERSION = 3;
+export const DEMO_SCHEDULE_VERSION = 4;
 
 /** 이전 데모에만 있던 열린 일정(지금 시드에 없음). 기록이 참조하지 않으면 지운다 */
 const RETIRED_DEMO_GROUP_IDS = new Set(['g2', 'g3']);
@@ -45,7 +46,8 @@ export function migrateDemoSchedule(db: MockDb, seed: MockDb): boolean {
         ...g, providerId: s.providerId, date: s.date, closeAt: s.closeAt, slots: [...s.slots], anchorKey: s.anchorKey,
         scopeType: s.scopeType, totalTripFee: s.totalTripFee, capacity: s.capacity,
       });
-    } else if (!s && RETIRED_DEMO_GROUP_IDS.has(g.id)) {
+    } else if (!s && (RETIRED_DEMO_GROUP_IDS.has(g.id) || (g.id.startsWith('gx-') && isOpenDemo(g)))) {
+      // 시드에서 빠진 데모 일정: 참조 기록이 없으면 지우고, 있으면(이 탭에서 신청한 요청 등) 기록 연결을 지키되 캘린더·후보에서 뺀다
       if (referenced.has(g.id)) out.push({ ...g, anchorKey: RETIRED_ANCHOR });
     } else out.push(g);
   }

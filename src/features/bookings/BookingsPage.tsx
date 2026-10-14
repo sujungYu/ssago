@@ -2,11 +2,11 @@ import { useRef, type KeyboardEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { Page } from '../../app/Page';
 import { useRepo } from '../../app/context';
-import { useAsync } from '../../app/hooks';
+import { useAsync, useTodoCounts } from '../../app/hooks';
 import { formatWon } from '../../domain/money';
-import { AsyncView, EmptyState, LinkButton } from '../../components/ui';
+import { AsyncView, CountBadge, EmptyState, LinkButton } from '../../components/ui';
 import type { BookingListItem, BookingQueryResult, RequestListResult } from '../../data/repositories/types';
-import { StatusBadges, TodoLine, VisitText } from '../shared';
+import { StatusBadges, TodoHead, VisitText } from '../shared';
 import { formatDate } from '../../domain/time';
 import { useListScrollRestore, useUrlFilter, type UrlFilterCodec } from '../../app/listFilter';
 import { toBookingQuery } from '../../domain/bookingFilter';
@@ -17,7 +17,7 @@ import {
 } from '../../domain/reservationFilter';
 import { BookingFilterBar } from './BookingFilters';
 import { RequestFilterBar } from '../requests/RequestFilters';
-import { SentRequestList } from '../requests/RequestsPage';
+import { SentRequestCard, SentRequestList } from '../requests/RequestsPage';
 
 const TRIP_LABEL = { expected: '마감 전 예상 출장비', confirmed: '확정 출장비', locked: '유지되는 확정 출장비' } as const;
 
@@ -34,7 +34,9 @@ export function BookingCard({ it }: { it: BookingListItem }) {
   const disp = it.display;
   const followUpNext = b.status === 'confirmed' && b.workStatus === 'followup_waiting' && b.followUp;
   return (
-    <Link to={`/bookings/${b.id}`} className="card stack--sm stack" style={{ textDecoration: 'none', color: 'inherit' }}>
+    <Link to={`/bookings/${b.id}`} className={`card stack--sm stack${disp.actions.length ? ' card--todo' : ''}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+      {/* 할 일이 있을 때만 상단 머리(처리는 상세 상단 확인 카드에서) */}
+      <TodoHead actions={disp.actions} />
       <div className="row row--between row--top" style={{ gap: 'var(--sp-2)' }}>
         <p className="strong" style={{ minWidth: 0, overflowWrap: 'anywhere' }}>{it.providerName}</p>
         <StatusBadges d={disp} />
@@ -48,8 +50,6 @@ export function BookingCard({ it }: { it: BookingListItem }) {
       )}
       {/* 취소된 예약: 환불 처리 상태(정보, 행동 안내 아님) */}
       {b.status === 'cancelled' && it.attention && <p className="small muted">{it.attention}</p>}
-      {/* 할 일(있을 때만): 주황 점 + 행동 문구. 처리는 상세 상단 확인 카드에서 */}
-      <TodoLine actions={disp.actions} />
     </Link>
   );
 }
@@ -61,7 +61,7 @@ type TabData = { kind: 'requests'; r: RequestListResult } | { kind: 'bookings'; 
 const EMPTY: Record<ReservationTab, { title: string; body: string; icon: string; findLink?: boolean }> = {
   requests: { icon: 'list', title: '보낸 요청이 없어요', body: '업체를 찾아 수리를 요청하면, 예약이 확정되기 전까지 업체 답변과 진행 상황을 여기에서 확인할 수 있어요.', findLink: true },
   active: { icon: 'calendar', title: '확정된 예약이 없어요', body: '업체 승인 후 예약금을 결제하면 확정된 예약이 여기에 나타나요. 승인 대기·결제 대기 요청은 보낸 요청에서 확인해요.', findLink: true },
-  past: { icon: 'calendar', title: '완료되거나 취소된 예약이 없어요', body: '이용을 마쳤거나(최종 정산까지 완료) 확정 후 취소한 예약이 여기에 모여요.' },
+  past: { icon: 'calendar', title: '완료되거나 취소된 내역이 없어요', body: '이용을 마쳤거나(최종 정산까지 완료) 취소한 예약, 예약 확정 전에 취소한 요청이 여기에 모여요.' },
 };
 
 /**
@@ -92,8 +92,9 @@ export function BookingsPage() {
     tabRefs.current[next]?.focus();
   };
   const hasAny = !ready || !q.data ? undefined : q.data.kind === 'requests' ? q.data.r.hasAnyRequest : q.data.r.hasAnyInTab;
-  const count = ready && !q.error && q.data ? (q.data.kind === 'requests' ? q.data.r.bundles.length : q.data.r.items.length) : undefined;
+  const count = ready && !q.error && q.data ? (q.data.kind === 'requests' ? q.data.r.bundles.length : q.data.r.items.length + q.data.r.cancelledRequests.length) : undefined;
   const empty = EMPTY[tab];
+  const todo = useTodoCounts();
 
   return (
     <Page title="내 예약" tabs>
@@ -104,7 +105,8 @@ export function BookingsPage() {
           {RESERVATION_TABS.map((t, i) => (
             <button key={t.value} type="button" ref={(el) => { tabRefs.current[i] = el; }} role="tab" id={`res-tab-${t.value}`} aria-controls="res-panel"
               className="tabs__tab" data-label={t.label} aria-selected={tab === t.value} tabIndex={tab === t.value ? 0 : -1} onClick={() => setTab(t.value)} onKeyDown={(e) => onTabKey(e, i)}>
-              {t.label}
+              {/* 확인 필요 건수(탭 전체, 필터와 무관). 완료·취소에는 없음(spec 5.48) */}
+              <span className="tabs__label">{t.label}{t.value !== 'past' && <CountBadge n={todo?.[t.value]} />}</span>
             </button>
           ))}
         </div>
@@ -123,17 +125,25 @@ export function BookingsPage() {
                 </EmptyState>
               );
             }
-            const n = d.kind === 'requests' ? d.r.bundles.length : d.r.items.length;
+            const n = d.kind === 'requests' ? d.r.bundles.length : d.r.items.length + d.r.cancelledRequests.length;
             return (
               <>
                 {d.kind === 'bookings' && d.r.excludedMissingVisitDate > 0 && <p className="small muted">방문일이 확인되지 않은 예약 {d.r.excludedMissingVisitDate}건은 방문일 조건에서 제외했어요. ‘전체 기간’에서는 보여요.</p>}
+                {/* 요청 취소는 확정 방문일이 없어 방문일 조건에 맞출 수 없다(요청일·취소일로 대신하지 않음, spec 5.47) */}
+                {d.kind === 'bookings' && d.r.excludedCancelledRequests > 0 && <p className="small muted">요청 취소 {d.r.excludedCancelledRequests}건은 확정된 방문일이 없어 방문일 조건에서 제외했어요. ‘전체 기간’에서는 보여요.</p>}
                 {n === 0 ? (
                   // 초기화 버튼은 두지 않는다. 위 필터는 그대로 조작할 수 있다.
                   <EmptyState icon="filter" title={d.kind === 'requests' ? '선택한 조건에 맞는 요청이 없어요.' : '선택한 조건에 맞는 예약이 없어요.'}>날짜나 상태를 변경해주세요.</EmptyState>
                 ) : d.kind === 'requests' ? (
                   <SentRequestList bundles={d.r.bundles} busy={q.loading} />
                 ) : (
-                  <ul className="stack booking-list" aria-busy={q.loading || undefined}>{d.r.items.map((it) => <li key={it.booking.id}><BookingCard it={it} /></li>)}</ul>
+                  <ul className="stack booking-list" aria-busy={q.loading || undefined}>
+                    {d.r.items.map((it) => <li key={it.booking.id}><BookingCard it={it} /></li>)}
+                    {/* 완료·취소 탭: 예약 다음에 요청 취소(요청 카드 그대로, 누르면 요청 상세) */}
+                    {d.r.cancelledRequests.map((i) => (
+                      <li key={i.request.id}><SentRequestCard b={{ bundleId: i.request.bundleId, taskTitles: i.request.tasks.map((t) => t.title), items: [i], updatedAt: i.request.updatedAt, hiddenItemCount: 0 }} /></li>
+                    ))}
+                  </ul>
                 )}
               </>
             );

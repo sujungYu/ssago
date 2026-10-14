@@ -6,7 +6,8 @@ import type { CustomerContact, VisitAddress } from '../domain/types';
 import { maskPhone } from '../domain/profile';
 import type { Tone } from '../domain/rules';
 import { Badge, PhoneButton } from '../components/ui';
-import { TONE_BADGE, actionSummary, bookingDisplay, type ActionKind, type BookingDisplay, type PendingAction, type StatusDisplay } from '../domain/statusDisplay';
+import { Icon } from '../components/Icon';
+import { TONE_BADGE, bookingDisplay, type ActionKind, type BookingDisplay, type PendingAction, type StatusDisplay } from '../domain/statusDisplay';
 import type { BookingDetail } from '../data/repositories/types';
 
 /**
@@ -32,10 +33,13 @@ export function StatusBadges({ d }: { d: Pick<StatusDisplay, 'label' | 'tone'> }
  * 목록 카드 하단 할 일 한 줄(spec 5.18): 작은 주황 점 + 행동 문구(+ ‘외 N건’). 버튼이 아니라 안내이며 카드를 누르면 상세 상단 확인 카드로 간다.
  * 할 일이 없으면 영역·구분선을 그리지 않는다. 점은 장식이고 의미는 문구로 전달한다.
  */
-export function TodoLine({ actions }: { actions: ActionKind[] }) {
-  const text = actionSummary(actions);
-  if (!text) return null;
-  return <p className="card-todo"><span className="card-todo__dot" aria-hidden />{text}</p>;
+/**
+ * 목록 카드 상단 ‘ⓘ 확인이 필요해요’ 머리(spec 5.46). 고객이 처리할 일이 하나라도 있을 때만(‘확인 필요’ 필터와 같은 기준), 여러 개여도 한 번.
+ * 상세 화면 확인 카드 머리(.act-card__head)와 같은 모양. 구체적인 할 일은 상세에서 확인한다(목록에는 문구를 두지 않음).
+ */
+export function TodoHead({ actions }: { actions: ActionKind[] }) {
+  if (!actions.length) return null;
+  return <p className="act-card__head card-head"><Icon name="info" size={14} />확인이 필요해요</p>;
 }
 
 /** 예약 상세 데이터에서 고객이 지금 해야 할 행동(목록의 pendingActions와 같은 기준) */

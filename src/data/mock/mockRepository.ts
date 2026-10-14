@@ -6,9 +6,9 @@ import { filterRequestBundles } from '../../domain/requestFilter';
 import { detailError, postcodeToAddress, toVisitAddress, type PostcodeAddressInput } from '../../domain/address';
 import { maskPhone, normalizeContact } from '../../domain/profile';
 import type { TripFeeBasis } from '../../domain/bookingCost';
-import { filterBookings, tabOf, type BookingListQuery, type PendingAction } from '../../domain/bookingFilter';
-import { bookingDisplay } from '../../domain/statusDisplay';
-import { bundleInRequestsTab, requestInRequestsTab } from '../../domain/reservationTabs';
+import { filterBookings, filterCancelledRequests, tabOf, type BookingListQuery, type PendingAction } from '../../domain/bookingFilter';
+import { bookingDisplay, bookingHasTodo, requestItemActions } from '../../domain/statusDisplay';
+import { bundleInRequestsTab, requestInRequestsTab, requestTabOf } from '../../domain/reservationTabs';
 import { COMPARE_REQUESTS_ENABLED } from '../../domain/demoScope';
 import { resolveSelectedTasks } from '../../domain/taskSelection';
 import { NEW_DATE_WINDOWS, isValidRequestTimes, isValidVisitTime } from '../../domain/visitTime';
@@ -21,7 +21,7 @@ import type {
 import { isGroupJoinable } from '../../domain/jointCalendar';
 import type {
   AdditionalView, ApprovalView, BookingDetail, BookingListItem, BookingQueryResult, BundleDetail, BundleListItem, CancelContext, ChangeOption,
-  RequestListQuery, RequestListResult,
+  RequestListQuery, RequestListResult, TodoCounts,
   ChangeRequestInput, LedgerEntry, MaterialView, NewRequestInput, NoticeLanding, PaymentResult, ProposalResult, ProposalView,
   ProviderBrief, ProviderQuery, Repository, RequestDetail, RequestListItem, ReviewContext, StatementResult, StatementView,
   TransactionDetail,
@@ -344,14 +344,28 @@ export class MockRepository implements Repository {
   queryRequests(query: RequestListQuery): Promise<RequestListResult> {
     // 목업은 전체를 메모리에서 거른다. 서버 구현은 같은 조건을 조회 쿼리에 넣는다.
     return this.read(() => {
-      // 보낸 요청 탭: 예약으로 이어진 요청이 있는 묶음은 통째로 뺀다(그 예약은 예약 탭에만 보인다). 원본 요청은 지우지 않는다.
-      const all = COMPARE_REQUESTS_ENABLED
-        ? this.bundleList().filter((b) => bundleInRequestsTab(b.items.map((i) => i.request)))
-        // 비교 요청을 쓰지 않는 데모: 업체별 개별 요청 하나씩(묶음 데이터는 보존, 목록·건수만 개별 요청 기준)
-        : [...this.db.requests].filter(requestInRequestsTab).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
-          .map((r) => ({ bundleId: r.bundleId, taskTitles: r.tasks.map((t) => t.title), items: [this.reqListItem(r)], updatedAt: r.updatedAt }));
+      const all = this.requestTabCards();
       return { bundles: filterRequestBundles(all, query), hasAnyRequest: all.length > 0 };
     });
+  }
+
+  /** 보낸 요청 탭의 카드(필터 전) */
+  private requestTabCards(): BundleListItem[] {
+    // 보낸 요청 탭: 예약으로 이어진 요청이 있는 묶음은 통째로 뺀다(그 예약은 예약 탭에만 보인다). 원본 요청은 지우지 않는다.
+    return COMPARE_REQUESTS_ENABLED
+      ? this.bundleList().filter((b) => bundleInRequestsTab(b.items.map((i) => i.request)))
+      // 비교 요청을 쓰지 않는 데모: 업체별 개별 요청 하나씩(묶음 데이터는 보존, 목록·건수만 개별 요청 기준)
+      : [...this.db.requests].filter(requestInRequestsTab).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+        .map((r) => ({ bundleId: r.bundleId, taskTitles: r.tasks.map((t) => t.title), items: [this.reqListItem(r)], updatedAt: r.updatedAt }));
+  }
+
+  async getTodoCounts(): Promise<TodoCounts> {
+    // 헤더·탭의 보조 표시라 개발용 ‘다음 조회 실패’(failNextQuery)를 소비하지 않는다(목록 조회 실패 재현을 가리지 않게). 지연은 같다.
+    await this.delay();
+    return {
+      requests: this.requestTabCards().filter((b) => b.items.some((i) => requestItemActions(i).length > 0)).length,
+      active: this.bookingItems().filter((it) => tabOf(it.booking) === 'active' && bookingHasTodo(it)).length,
+    };
   }
 
   private bundleList(): BundleListItem[] {
@@ -567,10 +581,17 @@ export class MockRepository implements Repository {
     return this.read(() => {
       const all = this.bookingItems();
       const { items, excludedMissingVisitDate } = filterBookings(all, query);
+      // 완료·취소 탭: 예약 확정 전 고객이 취소한 요청(요청 취소)도 이 탭에 둔다(보낸 요청에는 없음 — reservationTabs.requestTabOf)
+      const cancelledAll = query.tab === 'past'
+        ? this.db.requests.filter((r) => requestTabOf(r) === 'past').sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).map((r) => this.reqListItem(r))
+        : [];
+      const cr = filterCancelledRequests(cancelledAll, query);
       return {
         items: items.map((it, i) => ({ it, i })).sort((a, b) => Number(b.it.display.actions.length > 0) - Number(a.it.display.actions.length > 0) || a.i - b.i).map((x) => x.it),
-        hasAnyInTab: all.some((it) => tabOf(it.booking) === query.tab),
+        hasAnyInTab: all.some((it) => tabOf(it.booking) === query.tab) || cancelledAll.length > 0,
         excludedMissingVisitDate,
+        cancelledRequests: cr.items,
+        excludedCancelledRequests: cr.excludedNoVisitDate,
       };
     });
   }

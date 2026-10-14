@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { NO_JOINT_EXTRA } from './providersExtra';
 import { createSeed } from './seed';
 import { DEMO_SCHEDULE_VERSION, RETIRED_ANCHOR, migrateDemoSchedule } from './scheduleMigration';
 import { MockRepository } from './mockRepository';
@@ -29,12 +30,13 @@ function oldSavedState(): MockDb {
 const openOf = (db: MockDb) => db.groups.filter((g) => !g.closed && !g.ended && g.anchorKey !== 'pending-new' && g.anchorKey !== RETIRED_ANCHOR);
 
 describe('공동 예약 데모 일정 이전(저장 상태)', () => {
-  it('새 시드: 모든 업체가 10/19~25 중 서로 다른 날짜 3개, 날짜당 하나, 마감 정책 충족, 업체별 조합이 모두 다름', () => {
+  it('새 시드: 공동 예약 후보가 있는 업체는 10/19~25 중 서로 다른 날짜 3개, 날짜당 하나, 마감 정책 충족, 업체별 조합이 모두 다름(없는 업체는 열린 일정 없음)', () => {
     const db = createSeed('full');
     expect(db.scheduleVersion).toBe(DEMO_SCHEDULE_VERSION);
     const combos = new Set<string>();
     for (const p of db.providers) {
       const gs = openOf(db).filter((g) => g.providerId === p.id);
+      if (NO_JOINT_EXTRA.has(p.id)) { expect(gs, p.id).toEqual([]); continue; }
       const dates = [...new Set(gs.map((g) => g.date))].sort();
       expect(dates, p.id).toHaveLength(3);
       const perArea = gs.map((g) => `${g.date}|${g.anchorKey}`);
@@ -45,13 +47,14 @@ describe('공동 예약 데모 일정 이전(저장 상태)', () => {
       }
       combos.add(dates.join(','));
     }
-    expect(combos.size).toBe(db.providers.length);
+    expect(combos.size).toBe(db.providers.filter((p) => !NO_JOINT_EXTRA.has(p.id)).length); // 후보 있는 업체(19곳)마다 다른 조합
   });
 
-  it('기본 데모 주소(햇살마을)에서 모든 업체가 3개 날짜·날짜당 그룹 하나로 보인다', async () => {
+  it('기본 데모 주소(햇살마을)에서 공동 예약 후보가 있는 업체는 3개 날짜·날짜당 그룹 하나로 보인다(없는 업체는 0개)', async () => {
     const r = new MockRepository({ latencyMs: 0 });
     for (const p of r.__db().providers) {
       const gs = (await r.getProvider(p.id, 'ad-apt')).groups;
+      if (NO_JOINT_EXTRA.has(p.id)) { expect(gs, p.id).toEqual([]); continue; }
       const dates = gs.map((g) => g.date);
       expect(new Set(dates).size, p.id).toBe(3);
       expect(dates.length, p.id).toBe(3);
@@ -111,5 +114,32 @@ describe('공동 예약 데모 일정 이전(저장 상태)', () => {
       expect((await r2.getProvider('p1', 'ad-apt')).groups.map((x) => x.date).sort()).toEqual(['2026-10-19', '2026-10-21', '2026-10-23']);
       expect(JSON.parse(store.get('on-gimae/mock-db/v3')!).scheduleVersion).toBe(DEMO_SCHEDULE_VERSION);
     });
+  });
+});
+
+describe('카테고리마다 절반쯤만 공동 예약 후보(spec 5.49)', () => {
+  it('기본 데모 주소에서 각 카테고리의 공동 예약 후보 업체 수 = 업체 수의 절반(내림)~절반(올림)+1 범위', async () => {
+    const r = new MockRepository({ latencyMs: 0 });
+    for (const c of r.__db().categories) {
+      const list = await r.listProviders({ categoryId: c.id, addressId: 'ad-apt' });
+      const j = list.filter((p) => p.nextJoint).length;
+      expect(j, c.id).toBeGreaterThanOrEqual(Math.floor(list.length / 2));
+      expect(j, c.id).toBeLessThanOrEqual(Math.ceil(list.length / 2) + 1);
+      expect(list.filter((p) => !p.nextJoint).every((p) => p.jointAvailable === false), c.id).toBe(true);
+    }
+  });
+  it('v3로 저장된 상태: 후보 없는 업체의 열린 데모 일정은 빼고(기록이 참조하면 연결만 남기고 숨김), 기록·다른 데이터는 그대로', () => {
+    const db = createSeed('full');
+    const extra = structuredClone(db.groups.find((g) => g.id.startsWith('gx-p10-'))!);
+    const ref = { ...extra, id: 'gx-p9-1', providerId: 'p9' }, unref = { ...extra, id: 'gx-p9-2', providerId: 'p9' };
+    db.groups.push(ref, unref);
+    db.requests[0] = { ...db.requests[0], groupId: 'gx-p9-1' };
+    db.scheduleVersion = 3;
+    const before = structuredClone(db.requests);
+    expect(migrateDemoSchedule(db, createSeed('full'))).toBe(true);
+    expect(db.groups.find((g) => g.id === 'gx-p9-2')).toBeUndefined();
+    expect(db.groups.find((g) => g.id === 'gx-p9-1')?.anchorKey).toBe(RETIRED_ANCHOR);
+    expect(db.requests).toEqual(before);
+    expect(db.scheduleVersion).toBe(DEMO_SCHEDULE_VERSION);
   });
 });

@@ -227,6 +227,13 @@ export interface ExtraJointDay {
 const j = (day: number, capacity: number, confirmedHouseholds: number, slots: TimeSlot[], extra: Partial<ExtraJointDay> = {}): ExtraJointDay => ({ day, capacity, confirmedHouseholds, slots, ...extra });
 
 /**
+ * 공동 예약 후보가 없는 추가 업체(2026-10-14, spec 5.49). 카테고리마다 업체의 절반쯤(10곳 중 5~6곳)만 공동 예약 후보가 보이도록 골랐다.
+ * 이 업체들은 열린 공동 예약 그룹을 만들지 않고(아래 EXTRA_JOINT_DAYS 값은 남겨 둠) 새 요청 날짜만 받는다(providerRequestDays.ts).
+ * 기존 8곳(p1~p8)은 요청·예약 기록이 그 그룹을 참조하므로 그대로 둔다.
+ */
+export const NO_JOINT_EXTRA = new Set(['p9', 'p12', 'p15', 'p16', 'p18', 'p19', 'p20', 'p23', 'p24', 'p25', 'p26', 'p27', 'p28', 'p29', 'p31', 'p32']);
+
+/**
  * 추가 업체의 공동 예약 데모 일정: 업체마다 2026-10-19~25 중 서로 다른 날짜 3개, 날짜당 그룹 하나(기본 데모 주소 햇살마을 3단지).
  * 날짜 조합은 업체마다 다르게 고정했다(기존 8곳과도 겹치지 않음). 그룹 ID는 gx-<업체>-<순번>, 접수 마감은 방문 전날 18:00(seed.ts에서 붙임).
  */

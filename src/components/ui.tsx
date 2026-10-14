@@ -33,6 +33,14 @@ export function PhoneButton({ phone, name, numberOnly }: { phone: string; name: 
 }
 
 // ───────── 표시 ─────────
+/**
+ * 확인 필요 건수 배지(spec 5.48): 메뉴·탭 글자 옆 작은 원형 숫자(두 자리 이상이면 가로로 늘어남). 0건·모름이면 그리지 않는다.
+ * 숫자는 화면용(aria-hidden)이고, 화면 읽기에는 ‘확인 필요한 항목 N건’으로 링크·탭 이름에 붙는다. 별도 버튼이 아니다.
+ */
+export function CountBadge({ n }: { n?: number }) {
+  if (!n || n <= 0) return null;
+  return <><span className="count-badge" aria-hidden="true">{n}</span><span className="sr-only">, 확인 필요한 항목 {n}건</span></>;
+}
 export function Badge({ tone = 'neutral', children }: { tone?: Tone; children: ReactNode }) {
   return <span className={`badge badge--${tone}`}>{children}</span>;
 }

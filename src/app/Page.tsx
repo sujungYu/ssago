@@ -3,7 +3,8 @@ import { Link, useLocation } from 'react-router-dom';
 import { useHistoryBack } from './backNav';
 import { Icon } from '../components/Icon';
 import { BrandLogo } from '../components/brand/Brand';
-import { Banner, Skeleton } from '../components/ui';
+import { Banner, CountBadge, Skeleton } from '../components/ui';
+import { useTodoCounts } from './hooks';
 
 /**
  * 상단·하단 메뉴. ‘내 예약’은 보낸 요청·확정된 예약·완료·취소를 함께 보여주는 메뉴라
@@ -32,6 +33,9 @@ export function Page({ title, back, onBack, tabs, progress, children }: { title:
   // 안내 제목: 기본은 알림 진입용. 다른 이동 안내(예: 없앤 카테고리)는 noticeTitle로 바꾼다
   const noticeTitle = (loc.state as { noticeTitle?: string } | null)?.noticeTitle ?? '알림 이후 내용이 바뀌었어요';
   const sent = (loc.state as { flash?: string } | null)?.flash;
+  // ‘내 예약’ 옆 확인 필요 합계(보낸 요청 + 확정된 예약, spec 5.48). 0건이면 숨김
+  const todo = useTodoCounts();
+  const todoTotal = todo ? todo.requests + todo.active : undefined;
   const heading = title ?? <><span className="sr-only">제목을 불러오는 중이에요</span><span className="app-header__title-skeleton"><Skeleton h={22} /></span></>;
   return (
     <div className="app">
@@ -54,7 +58,7 @@ export function Page({ title, back, onBack, tabs, progress, children }: { title:
             {/* ‘업체 찾기’는 처음 화면(홈)으로 가는 메뉴라 홈 아이콘을 앞에 둔다. 아이콘은 장식(aria-hidden), 링크 이름은 ‘업체 찾기 홈으로 이동’ */}
             {TABS.map((t) => t.to === '/' ? (
               <Link key={t.to} to={t.to} aria-current={isTabActive(t, loc.pathname) ? 'page' : undefined} aria-label="업체 찾기 홈으로 이동" className="top-nav__home"><Icon name="home" size={19} /><span>{t.label}</span></Link>
-            ) : <Link key={t.to} to={t.to} aria-current={isTabActive(t, loc.pathname) ? 'page' : undefined}>{t.label}</Link>)}
+            ) : <Link key={t.to} to={t.to} aria-current={isTabActive(t, loc.pathname) ? 'page' : undefined}>{t.label}{t.to === '/bookings' && <CountBadge n={todoTotal} />}</Link>)}
           </nav>
         </div>
       </header>
@@ -71,7 +75,7 @@ export function Page({ title, back, onBack, tabs, progress, children }: { title:
           <ul>
             {TABS.map((t) => (
               <li key={t.to}>
-                <Link to={t.to} aria-current={isTabActive(t, loc.pathname) ? 'page' : undefined}><Icon name={t.icon} />{t.label}</Link>
+                <Link to={t.to} aria-current={isTabActive(t, loc.pathname) ? 'page' : undefined}><Icon name={t.icon} /><span className="tabbar__label">{t.label}{t.to === '/bookings' && <CountBadge n={todoTotal} />}</span></Link>
               </li>
             ))}
           </ul>

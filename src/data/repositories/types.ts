@@ -159,6 +159,9 @@ export interface BookingListItem {
   display: BookingDisplay;
 }
 
+/** 확인 필요 카드 수. 헤더 ‘내 예약’ 합계 = requests + active */
+export interface TodoCounts { requests: number; active: number }
+
 export interface BookingQueryResult {
   /** 조건에 맞는 예약(기존 정렬: 확인할 내용이 있는 예약 먼저, 그다음 방문일 최신순) */
   items: BookingListItem[];
@@ -166,6 +169,13 @@ export interface BookingQueryResult {
   hasAnyInTab: boolean;
   /** 방문일이 없거나 잘못돼 날짜 조건에서 제외한 예약 수(추정하지 않음) */
   excludedMissingVisitDate: number;
+  /**
+   * 완료·취소 탭의 요청 취소(예약 확정 전 고객이 취소한 요청, spec 5.47). 다른 탭은 빈 배열. 요청 그대로(예약으로 바꾸지 않음), 최근 갱신순.
+   * 예약 목록(items) 다음에 보여준다. 건수 = items + cancelledRequests.
+   */
+  cancelledRequests: RequestListItem[];
+  /** 날짜 조건이 있어 제외한 요청 취소 수(확정 방문일이 없어 날짜 조건에 맞출 수 없음) */
+  excludedCancelledRequests: number;
 }
 
 export interface PrepaidSummary {
@@ -330,6 +340,11 @@ export interface Repository {
    * 서버 구현은 페이지네이션이 생겨도 이 조건을 전체 조회에 적용해야 한다(로드된 항목만 거르지 않는다).
    */
   queryRequests(query: RequestListQuery): Promise<RequestListResult>;
+  /**
+   * 확인 필요 건수(spec 5.48): 보낸 요청·확정된 예약 탭 전체에서 ‘확인이 필요해요’ 카드 수(필터와 무관, 카드 하나에 할 일이 여러 개여도 1).
+   * 판단은 카드 머리·‘확인 필요’ 필터와 같다(requestItemActions·bookingHasTodo). 완료·취소는 할 일이 없어 세지 않는다.
+   */
+  getTodoCounts(): Promise<TodoCounts>;
   getRequest(id: string): Promise<RequestDetail>;
   getBundle(bundleId: string): Promise<BundleDetail>;
   supplementRequest(id: string, input: { message: string; photoNames: string[]; idempotencyKey: string }): Promise<RepairRequest>;

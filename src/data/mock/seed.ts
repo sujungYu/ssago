@@ -9,7 +9,7 @@ import type {
 } from '../../domain/types';
 import { DEFAULT_SETTINGS, type AddressRecord, type MockDb, type ProviderRecord } from './db';
 import { PROVIDER_SERVICES } from './providerServices';
-import { EXTRA_JOINT_DAYS, EXTRA_PROVIDERS } from './providersExtra';
+import { EXTRA_JOINT_DAYS, EXTRA_PROVIDERS, NO_JOINT_EXTRA } from './providersExtra';
 import { DEMO_SCHEDULE_VERSION } from './scheduleMigration';
 
 export const MOCK_NOW = '2026-10-13T19:00:00+09:00';
@@ -152,7 +152,8 @@ const groups: GroupRecord[] = [
   group({ id: 'g8b', providerId: 'p8', date: ymd('10-24'), closeAt: k('10-23', '18:00'), totalTripFee: 40000, capacity: 5, confirmedHouseholds: 2, slots: ['09:00–12:00'], anchorKey: 'complex:haessal3' }),
   group({ id: 'g8c', providerId: 'p8', date: ymd('10-25'), closeAt: k('10-24', '18:00'), totalTripFee: 40000, capacity: 4, anchorKey: 'complex:haessal3' }),
   // 추가 업체(p9~p35): 업체마다 10/19~25 중 서로 다른 날짜 3개·날짜당 하나(providersExtra.ts의 고정 값). 접수 마감은 방문 전날 18:00, 총 출장비는 기본 출장비(따로 정한 그룹 제외)
-  ...EXTRA_PROVIDERS.flatMap((p) => EXTRA_JOINT_DAYS[p.id].map((d, i) => group({
+  // 공동 예약 후보가 없는 추가 업체(NO_JOINT_EXTRA)는 그룹을 만들지 않는다(spec 5.49)
+  ...EXTRA_PROVIDERS.filter((p) => !NO_JOINT_EXTRA.has(p.id)).flatMap((p) => EXTRA_JOINT_DAYS[p.id].map((d, i) => group({
     id: `gx-${p.id}-${i + 1}`, providerId: p.id, date: ymd(`10-${d.day}`), closeAt: k(`10-${d.day - 1}`, '18:00'), totalTripFee: d.totalTripFee ?? p.soloTripFee,
     capacity: d.capacity, confirmedHouseholds: d.confirmedHouseholds, pendingSeats: d.pendingSeats ?? 0, slots: [...d.slots], anchorKey: 'complex:haessal3',
   }))),

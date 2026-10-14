@@ -261,6 +261,9 @@ a.list-row:hover { background: #fafbfd; }
 .tabs__tab[aria-selected='true']::after { background: var(--c-primary); }
 /* 포커스 표시: 버튼 안쪽에 그려 sticky 띠·화면 가장자리에 잘리지 않는다 */
 .tabs__tab:focus-visible { outline: 3px solid var(--c-focus); outline-offset: -3px; border-radius: var(--r-sm); }
+/* 확인 필요 건수 배지(spec 5.48): 메뉴·탭 글자 옆 6px, 작은 원형(18px, 두 자리 이상이면 가로로 늘어남), 12px·600. 활성·비활성 같은 모양 */
+.count-badge { display: inline-flex; align-items: center; justify-content: center; flex: none; min-width: 18px; height: 18px; padding: 0 5px; margin-left: 6px; border-radius: var(--r-pill); background: var(--c-count-bg); color: var(--c-count); font-size: 12px; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; }
+.tabs__label, .tabbar__label { display: inline-flex; align-items: center; justify-content: center; }
 @media (min-width: 600px) {
   .tabs { display: flex; gap: var(--sp-4); }
   .tabs__tab { flex: none; padding-left: var(--sp-4); padding-right: var(--sp-4); white-space: nowrap; }
@@ -590,12 +593,9 @@ button.explore-address:hover { background: #fafbfd; }
 .cost--attn { padding-top: 0; overflow: hidden; }
 .cost--attn > .cost__head { margin: 0 calc(-1 * var(--sp-4)); }
 .sched-compare__item .sched__mark { align-self: flex-start; }
-/*
- * 목록 카드 할 일(spec 5.18): 카드 정보 아래 얇은 회색 구분선 + 12px, 작은 주황 점(7px, 기존 주황 배지 색 토큰 --c-orange) + 8px + 차콜 본문 문구(600).
- * 카드 바탕·테두리는 그대로. 할 일이 없으면 이 요소 자체가 없다.
- */
-.card-todo { display: flex; align-items: baseline; gap: var(--sp-2); margin-top: var(--sp-1); padding-top: var(--sp-3); border-top: 1px solid var(--c-line); color: var(--c-text); font-size: var(--fs-md); font-weight: 600; line-height: 1.45; overflow-wrap: anywhere; word-break: keep-all; }
-.card-todo__dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--c-orange); transform: translateY(-2px); }
+/* 내 예약 목록: 고객 할 일이 있는 카드 상단 ‘ⓘ 확인이 필요해요’ 머리(spec 5.46). 상세 확인 카드 머리(.act-card__head)를 재사용해 카드 안쪽 여백을 넘어 전체 너비로, 위 모서리는 카드 둥근 모서리로 잘린다. 머리 아래는 카드 여백과 같은 16px */
+.card--todo { overflow: hidden; }
+.card-head { margin: calc(-1 * var(--sp-4)) calc(-1 * var(--sp-4)) var(--sp-2); padding: 8px var(--sp-4); font-size: var(--fs-xs); }
 /*
  * 예약 상세 펼치기(spec 5.19): 카드 아래쪽에 얇은 구분선으로 나눈 줄. 제목(블루 700) + 오른쪽 화살표(열리면 위로), 기본 닫힘.
  * 내용은 안쪽 카드 없이 이름·값 정렬과 얇은 구분선, 긴 값은 줄바꿈.

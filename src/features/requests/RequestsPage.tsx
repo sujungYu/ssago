@@ -4,7 +4,7 @@ import { formatDate, formatRemaining, seoulYmd } from '../../domain/time';
 import { formatYmdDots } from '../../domain/requestFilter';
 import { Icon } from '../../components/Icon';
 import { requestDisplay, requestItemActions } from '../../domain/statusDisplay';
-import { StatusBadges, TodoLine } from '../shared';
+import { StatusBadges, TodoHead } from '../shared';
 import type { FilteredBundleListItem } from '../../data/repositories/types';
 import type { RequestStatus } from '../../domain/types';
 
@@ -28,18 +28,28 @@ function receivedLabel(b: FilteredBundleListItem): string {
  * 거절·철회·승인 만료로 끝난 요청도 남기고 카드에 종료 상태를 보여준다(사유는 요청 상세). 예약으로 이어진 묶음은 이 목록에 없다.
  */
 export function SentRequestList({ bundles, busy }: { bundles: FilteredBundleListItem[]; busy?: boolean }) {
-  const repo = useRepo();
   return (
     <ul className="stack request-list" aria-busy={busy || undefined}>
-      {bundles.map((b) => {
+      {bundles.map((b) => (
+        <li key={b.items.length === 1 && b.hiddenItemCount === 0 ? b.items[0].request.id : b.bundleId}><SentRequestCard b={b} /></li>
+      ))}
+    </ul>
+  );
+}
+
+/** 요청 카드(묶음 하나). 보낸 요청 목록과 완료·취소 탭의 요청 취소 카드가 함께 쓴다(spec 5.47) — 카드 전체가 요청 상세(비교 요청이면 비교 화면)로 간다 */
+export function SentRequestCard({ b }: { b: FilteredBundleListItem }) {
+  const repo = useRepo();
         const total = b.items.length + b.hiddenItemCount;
         // 묶음 전체 기준으로 이동한다(숨긴 요청도 비교 화면에서 그대로 보인다)
         const single = total === 1;
         const to = single ? `/requests/${b.items[0].request.id}` : `/requests/bundle/${b.bundleId}`;
         const ended = b.hiddenItemCount === 0 && b.items.every((i) => isEnded(i.request.status));
+        const todo = b.items.flatMap(requestItemActions);
         return (
-          <li key={b.items.length === 1 && b.hiddenItemCount === 0 ? b.items[0].request.id : b.bundleId}>
-            <Link to={to} className="card stack--sm stack" style={{ textDecoration: 'none', color: 'inherit' }}>
+            <Link to={to} className={`card stack--sm stack${todo.length ? ' card--todo' : ''}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+              {/* 할 일(예약금 결제·요청서 보완)이 있을 때만 상단 머리. 결제 결과 확인 중·업체 검토 중에는 없음. ‘확인 필요’ 필터와 같은 기준 */}
+              <TodoHead actions={todo} />
               <div className="row row--between">
                 <p className="strong">{b.taskTitles.join(' · ')}</p>
                 <Icon name="chevron" size={18} />
@@ -58,15 +68,9 @@ export function SentRequestList({ bundles, busy }: { bundles: FilteredBundleList
                   </li>
                 ))}
               </ul>
-              {/* 할 일(있을 때만): 예약금 결제·요청서 보완. 결제 결과 확인 중·업체 검토 중에는 없음. ‘확인 필요’ 필터와 같은 기준 */}
-              <TodoLine actions={b.items.flatMap(requestItemActions)} />
               {b.hiddenItemCount > 0 && (
                 <p className="xs muted">조건에 맞지 않는 다른 업체 요청 {b.hiddenItemCount}건은 목록에서만 숨겼어요. 눌러서 모두 볼 수 있어요.</p>
               )}
             </Link>
-          </li>
         );
-      })}
-    </ul>
-  );
 }

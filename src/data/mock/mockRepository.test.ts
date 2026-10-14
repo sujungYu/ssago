@@ -234,10 +234,13 @@ describe('보낸 요청 필터 조회', () => {
     expect(ids).not.toContain('rq-8');
     expect(new Set(ids).size).toBe(ids.length);
     expect(ids.sort()).toEqual(r.__db().requests.filter(requestInRequestsTab).map((x) => x.id).sort());
+    // 요청 취소(철회)하면 보낸 요청에서 빠지고 완료·취소 탭의 요청 취소로(spec 5.47). 같은 묶음의 다른 업체 요청(rq-3)은 보낸 요청에 그대로
     await r.withdrawRequest('rq-4');
-    const w = await r.queryRequests({ statuses: ['withdrawn'] });
-    expect(w.bundles.map((b) => b.items[0].request.id)).toContain('rq-4');
-    expect(w.bundles.flatMap((b) => b.items).some((i) => i.request.id === 'rq-3')).toBe(false);
+    expect((await r.queryRequests({})).bundles.flatMap((b) => b.items).map((i) => i.request.id)).not.toContain('rq-4');
+    const past = await r.queryBookings({ tab: 'past', statusGroup: 'request_cancelled' });
+    expect(past.cancelledRequests.map((i) => i.request.id)).toContain('rq-4');
+    expect(past.cancelledRequests.some((i) => i.request.id === 'rq-3')).toBe(false);
+    expect((await r.queryRequests({})).bundles.flatMap((b) => b.items).map((i) => i.request.id)).toContain('rq-3');
     expect((await r.getBundle('b-sink')).items).toHaveLength(2); // 원본 묶음 데이터 보존
   });
   it.skipIf(!COMPARE_REQUESTS_ENABLED)('비교 묶음은 조건에 맞는 업체 요청만 보여주고, 묶음 상세에는 모두 남는다', async () => {

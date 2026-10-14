@@ -31,6 +31,7 @@ export const ACTIVE_STATUS_OPTIONS: { value: ActiveStatus; label: string; hint?:
 export const PAST_STATUS_OPTIONS: { value: PastStatus; label: string }[] = [
   { value: 'all', label: '전체' },
   { value: 'completed', label: PAST_GROUP_LABEL.completed },
+  { value: 'request_cancelled', label: PAST_GROUP_LABEL.request_cancelled },
   { value: 'cancelled', label: PAST_GROUP_LABEL.cancelled },
 ];
 
@@ -128,6 +129,19 @@ export function filterBookings<T extends Filterable>(items: T[], q: BookingListQ
     return true;
   });
   return { items: out, excludedMissingVisitDate: excluded };
+}
+
+/**
+ * 완료·취소 탭의 요청 취소(예약 확정 전 고객 취소, spec 5.47). 예약 필터와 같은 조회 조건을 쓴다.
+ * - 상태: 전체·요청 취소일 때만 포함(이용 완료·예약 취소를 고르면 없음).
+ * - 날짜: 이 탭의 날짜 기준은 확정 방문일인데 요청 취소에는 확정 방문일이 없다(희망일·승인 제안일은 확정 방문일이 아니고, 요청일·취소일로 대신하지 않음).
+ *   그래서 날짜 조건이 있으면 제외하고 그 수를 돌려준다(‘전체 기간’에서는 보인다).
+ */
+export function filterCancelledRequests<T>(items: T[], q: BookingListQuery): { items: T[]; excludedNoVisitDate: number } {
+  if (q.tab !== 'past') return { items: [], excludedNoVisitDate: 0 };
+  if (q.statusGroup && q.statusGroup !== 'request_cancelled') return { items: [], excludedNoVisitDate: 0 };
+  if (q.visitFrom || q.visitTo) return { items: [], excludedNoVisitDate: items.length };
+  return { items, excludedNoVisitDate: 0 };
 }
 
 // ───────── 표시 ─────────

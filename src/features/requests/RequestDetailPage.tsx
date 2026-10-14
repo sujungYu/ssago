@@ -12,7 +12,7 @@ import { progressOfRequest, unlessComplete } from '../../domain/progressStep';
 import { ProgressSteps } from '../../components/ProgressSteps';
 import { TaskAttachments } from './TaskAttachments';
 import { ContactText, VisitAddressText, slotsText, ProviderContactRow } from '../shared';
-import { isConvertedToBooking, listPath } from '../../domain/reservationTabs';
+import { LIST_LINK_LABEL, isConvertedToBooking, listPath, requestTabOf } from '../../domain/reservationTabs';
 
 function Body({ d }: { d: RequestDetail }) {
   const repo = useRepo();
@@ -105,7 +105,10 @@ function Body({ d }: { d: RequestDetail }) {
       {!isConvertedToBooking(r) && (
         <div className="detail-actions">
           <div className={`detail-actions__pair${canWithdraw ? '' : ' detail-actions__pair--single'}`}>
-            <LinkButton to={listPath('requests')} variant="secondary" block>보낸 요청 목록으로</LinkButton>
+            {/* 이 요청이 보이는 탭으로: 요청 취소는 완료·취소(spec 5.47), 그 밖은 보낸 요청 */}
+            {requestTabOf(r) === 'past'
+              ? <LinkButton to={listPath('past')} variant="secondary" block>{LIST_LINK_LABEL.past}</LinkButton>
+              : <LinkButton to={listPath('requests')} variant="secondary" block>보낸 요청 목록으로</LinkButton>}
             {canWithdraw && <Button variant="danger" block onClick={() => setConfirm(true)}>이 업체 요청 철회하기</Button>}
           </div>
         </div>
@@ -130,9 +133,9 @@ function Body({ d }: { d: RequestDetail }) {
   );
 }
 
-/** 상단 뒤로: 보낸 요청 탭. 예약으로 이어진 요청이면 그 예약 상세(보낸 요청 목록에는 없음) */
+/** 상단 뒤로(앱 안 이전 화면이 없을 때의 대상): 이 요청이 보이는 탭(요청 취소 = 완료·취소). 예약으로 이어진 요청이면 그 예약 상세(보낸 요청 목록에는 없음) */
 const backOf = (d?: RequestDetail): string =>
-  d && isConvertedToBooking(d.request) && d.request.bookingId ? `/bookings/${d.request.bookingId}` : listPath('requests');
+  d && isConvertedToBooking(d.request) && d.request.bookingId ? `/bookings/${d.request.bookingId}` : listPath(d && requestTabOf(d.request) === 'past' ? 'past' : 'requests');
 
 export function RequestDetailPage() {
   const { id = '' } = useParams();
