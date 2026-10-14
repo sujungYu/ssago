@@ -26,7 +26,6 @@ export const CATEGORIES: Category[] = [
   { id: 'c7', name: '커튼·블라인드·선반 설치' },
   { id: 'c8', name: '생활 부속품 설치·교체' },
   { id: 'c9', name: '실리콘·줄눈 보수' },
-  { id: 'c10', name: '기타 수리·교체·설치' },
 ];
 
 const addressBook: AddressRecord[] = [
@@ -52,7 +51,7 @@ const review = (id: string, author: string, rating: number, body: string, md: st
 // 기존 업체 p1~p8. 카테고리마다 10곳이 보이도록 더한 업체(p9~p35)는 providersExtra.ts에 두고 아래에서 이어 붙인다(전체 35곳)
 const providers: ProviderRecord[] = [
   {
-    id: 'p1', name: '한빛설비', categoryIds: ['c2', 'c9', 'c10'], rating: 4.8, reviewCount: 126, soloTripFee: 50000, area: '가상구 일대',
+    id: 'p1', name: '한빛설비', categoryIds: ['c2', 'c9'], rating: 4.8, reviewCount: 126, soloTripFee: 50000, area: '가상구 일대',
     scope: ['수전·샤워기 교체', '배수 트랩·부품 교체', '실리콘 재시공', '그 외 생활 배관 소규모 수리'],
     intro: '욕실·주방 생활 배관을 주로 다루는 가상 업체입니다. 같은 날 가까운 댁을 묶어 방문합니다.',
     phone: '010-0000-0101',
@@ -63,14 +62,14 @@ const providers: ProviderRecord[] = [
     ],
   },
   {
-    id: 'p2', name: '새봄수리', categoryIds: ['c2', 'c3', 'c4', 'c10'], rating: 4.6, reviewCount: 88, soloTripFee: 60000, area: '가상구·가상동구',
+    id: 'p2', name: '새봄수리', categoryIds: ['c2', 'c3', 'c4'], rating: 4.6, reviewCount: 88, soloTripFee: 60000, area: '가상구·가상동구',
     scope: ['수전 교체', '문손잡이·경첩 교체', '서랍·수납장 수리', '기타 생활 수리'],
     intro: '작은 생활 수리를 폭넓게 맡는 가상 업체입니다.', phone: '010-0000-0102',
     afterServiceTerms: ['재방문 일정은 고객과 협의합니다.'],
     reviews: [review('rv-p2-1', '최*영', 5, '서랍 레일을 금방 고쳐 주셨어요.', '09-30', '서랍 수리')],
   },
   {
-    id: 'p3', name: '밝은전기', categoryIds: ['c6', 'c8', 'c10'], rating: 4.9, reviewCount: 203, soloTripFee: 40000, area: '가상구 일대',
+    id: 'p3', name: '밝은전기', categoryIds: ['c6', 'c8'], rating: 4.9, reviewCount: 203, soloTripFee: 40000, area: '가상구 일대',
     scope: ['조명 교체', '스위치·콘센트 교체', '생활 부속품 설치'],
     intro: '조명과 스위치를 전문으로 하는 가상 업체입니다.', phone: '010-0000-0103',
     afterServiceTerms: ['시공 후 이상이 있으면 먼저 업체에 연락해 주세요. 방문 일정은 협의합니다.'],
@@ -92,7 +91,7 @@ const providers: ProviderRecord[] = [
     reviews: [review('rv-p5-1', '송*아', 5, '마감이 깔끔해요.', '09-27', '실리콘 보수')],
   },
   {
-    id: 'p6', name: '손맵시', categoryIds: ['c4', 'c7', 'c8', 'c10'], rating: 4.4, reviewCount: 39, soloTripFee: 50000, area: '가상구 일대',
+    id: 'p6', name: '손맵시', categoryIds: ['c4', 'c7', 'c8'], rating: 4.4, reviewCount: 39, soloTripFee: 50000, area: '가상구 일대',
     scope: ['서랍·수납장 수리', '선반·블라인드 설치', '맞춤 도어 교체'], intro: '수납과 설치 작업을 맡는 가상 업체입니다.',
     phone: '010-0000-0106', afterServiceTerms: ['맞춤 자재는 사전 안내한 취소 조건을 따릅니다.'],
     reviews: [review('rv-p6-1', '윤*석', 4, '선반 설치가 튼튼해요.', '10-03', '선반 설치')],

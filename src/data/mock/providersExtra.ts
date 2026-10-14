@@ -48,7 +48,7 @@ export const EXTRA_PROVIDERS: ProviderRecord[] = [
     reviews: [review('rv-p13-1', '최*준', 4, '현관문이 쾅 닫히지 않게 맞춰 주셨어요.', '09-30', '도어클로저 조정')],
   },
   {
-    id: 'p14', name: '산들창', categoryIds: ['c1', 'c5', 'c10'], rating: 4.8, reviewCount: 74, soloTripFee: 35000, area: '가상구 일대',
+    id: 'p14', name: '산들창', categoryIds: ['c1', 'c5', 'c8'], rating: 4.8, reviewCount: 74, soloTripFee: 35000, area: '가상구 일대',
     scope: ['방충망 교체·틀 수리', '창문 틈새막이·잠금장치', '빨래건조대 설치·수리'],
     intro: '방충망과 베란다 주변 수리를 맡는 가상 업체입니다.', phone: '010-0000-0114',
     afterServiceTerms: ['부품 불량은 제조사 기준에 따라 교환합니다.'],
@@ -88,7 +88,7 @@ export const EXTRA_PROVIDERS: ProviderRecord[] = [
     ],
   },
   {
-    id: 'p19', name: '맑은물설비', categoryIds: ['c2', 'c9', 'c10'], rating: 4.5, reviewCount: 48, soloTripFee: 50000, area: '가상구 일대',
+    id: 'p19', name: '맑은물설비', categoryIds: ['c2', 'c9'], rating: 4.5, reviewCount: 48, soloTripFee: 50000, area: '가상구 일대',
     scope: ['배수 트랩 교체·막힘 수리', '수전 교체', '주방 실리콘 보수', '세탁기 급수 호스 교체'],
     intro: '배수와 급수 부품을 주로 손보는 가상 업체입니다.', phone: '010-0000-0119',
     afterServiceTerms: ['시공 부위에서 다시 물이 새면 업체와 직접 협의합니다.'],
@@ -122,7 +122,7 @@ export const EXTRA_PROVIDERS: ProviderRecord[] = [
     afterServiceTerms: ['설치 후 이상은 업체에 직접 문의해 주세요.'], reviews: [],
   },
   {
-    id: 'p24', name: '우리집수리', categoryIds: ['c2', 'c6', 'c10'], rating: 4.5, reviewCount: 82, soloTripFee: 60000, area: '가상구·가상동구',
+    id: 'p24', name: '우리집수리', categoryIds: ['c2', 'c6', 'c3'], rating: 4.5, reviewCount: 82, soloTripFee: 60000, area: '가상구·가상동구',
     scope: ['수전 교체', '조명·스위치 교체', '도어스토퍼 설치', '거울·액자 걸기'],
     intro: '집 안 여러 곳의 작은 수리를 한 번에 맡는 가상 업체입니다.', phone: '010-0000-0124',
     afterServiceTerms: ['시공 후 이상이 있으면 먼저 업체에 연락해 주세요. 방문 일정은 협의합니다.'],
@@ -139,7 +139,7 @@ export const EXTRA_PROVIDERS: ProviderRecord[] = [
     reviews: [review('rv-p25-1', '노*경', 5, '문이 바닥에 끌리지 않아요.', '10-05', '경첩 교체·조정')],
   },
   {
-    id: 'p26', name: '고쳐쓰는집', categoryIds: ['c3', 'c4', 'c10'], rating: 4.4, reviewCount: 31, soloTripFee: 55000, area: '가상구·푸른숲',
+    id: 'p26', name: '고쳐쓰는집', categoryIds: ['c3', 'c4'], rating: 4.4, reviewCount: 31, soloTripFee: 55000, area: '가상구·푸른숲',
     scope: ['문손잡이 교체·경첩 조정', '서랍·수납장 수리', '도어스토퍼 설치', '거울·액자 걸기'],
     intro: '쓰던 문과 가구를 고쳐 쓰도록 돕는 가상 업체입니다.', phone: '010-0000-0126',
     afterServiceTerms: ['재방문 일정은 고객과 협의합니다.'],
@@ -170,7 +170,7 @@ export const EXTRA_PROVIDERS: ProviderRecord[] = [
     reviews: [review('rv-p29-1', '전*지', 4, '거실이 밝아졌어요.', '09-29', '조명 교체')],
   },
   {
-    id: 'p30', name: '온집부속', categoryIds: ['c6', 'c8', 'c10'], rating: 4.3, reviewCount: 21, soloTripFee: 35000, area: '가상구 일대',
+    id: 'p30', name: '온집부속', categoryIds: ['c6', 'c8', 'c3'], rating: 4.3, reviewCount: 21, soloTripFee: 35000, area: '가상구 일대',
     scope: ['콘센트·스위치 교체', '수건걸이·휴지걸이 설치', '빨래건조대·도어스토퍼 설치'],
     intro: '집 안의 작은 부속품 교체와 설치를 하는 가상 업체입니다.', phone: '010-0000-0130',
     afterServiceTerms: ['부품 불량은 제조사 기준에 따라 교환합니다.'],
@@ -197,7 +197,7 @@ export const EXTRA_PROVIDERS: ProviderRecord[] = [
     reviews: [review('rv-p33-1', '양*원', 4, '서랍이 부드럽게 닫혀요.', '09-28', '서랍 레일 수리')],
   },
   {
-    id: 'p34', name: '현관지기', categoryIds: ['c6', 'c3', 'c10'], rating: 4.8, reviewCount: 52, soloTripFee: 40000, area: '가상구 일대',
+    id: 'p34', name: '현관지기', categoryIds: ['c6', 'c3'], rating: 4.8, reviewCount: 52, soloTripFee: 40000, area: '가상구 일대',
     scope: ['현관 센서등 설치·스위치 교체', '현관문 손잡이 교체·도어클로저 조정', '도어스토퍼 설치'],
     intro: '현관 주변 수리와 설치를 맡는 가상 업체입니다.', phone: '010-0000-0134',
     afterServiceTerms: ['조정 후에도 문이 잘 닫히지 않으면 업체에 전화해 주세요. 방문 일정은 협의합니다.'],

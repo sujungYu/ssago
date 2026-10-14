@@ -14,14 +14,13 @@ export const CATEGORY_ART: Record<string, string> = {
   c7: '/categories/flat/c7-curtain.svg', // 커튼과 봉
   c8: '/categories/flat/c8-towel.svg', // 수건걸이와 수건
   c9: '/categories/flat/c9-caulk-tile.svg', // 실리콘 건과 타일
-  c10: '/categories/flat/c10-toolbox.svg', // 공구함과 렌치
 };
 /** 원본 크기(비율 유지·레이아웃 흔들림 방지용 width/height) */
 export const CATEGORY_ART_SIZE = { width: 96, height: 96 } as const;
 
 /**
  * 카드 표시 제목(업체 찾기 화면 전용 짧은 이름). 표시만 줄였을 뿐 분류 범위·업체 연결은 데이터의 카테고리 그대로다.
- * 예: ‘수전·배수’ = 샤워기 포함(c2), ‘문 수리’ = 문손잡이·경첩·문(c3), ‘조명·전기’ = 스위치·콘센트 포함(c6), ‘커튼·선반’ = 블라인드 포함(c7).
+ * 예: ‘수전·배수’ = 샤워기 포함(c2), ‘문 수리’ = 문손잡이·경첩·문(c3), ‘조명·전기’ = 스위치·콘센트 포함(c6), ‘커튼·선반’ = 블라인드 포함(c7, 벽·천장에 고정하는 설치 작업 묶음).
  * 업체 목록·상세의 제목과 세부 설명은 데이터 이름을 쓴다. 없으면 데이터 이름을 쓴다.
  */
 export const CATEGORY_TITLE: Record<string, string> = {
@@ -34,5 +33,4 @@ export const CATEGORY_TITLE: Record<string, string> = {
   c7: '커튼·선반',
   c8: '생활 부속품',
   c9: '실리콘·줄눈',
-  c10: '기타 수리',
 };

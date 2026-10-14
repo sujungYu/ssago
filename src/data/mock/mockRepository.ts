@@ -34,6 +34,8 @@ import {
 import { DEFAULT_CUSTOMER, createSeed } from './seed';
 import { PROVIDER_SERVICES } from './providerServices';
 import { migrateDemoSchedule } from './scheduleMigration';
+import { migrateCatalog } from './catalogMigration';
+import { isRetiredCategory } from '../../domain/categories';
 import { PROVIDER_REQUEST_DAYS } from './providerRequestDays';
 import { PROVIDER_SHOWCASE } from './providerShowcase';
 import { newRequestBlock } from '../../domain/visitDays';
@@ -64,7 +66,11 @@ export class MockRepository implements Repository {
     this.db = loaded ?? opts.seed ?? createSeed('full');
     if (opts.latencyMs !== undefined) this.db.settings.latencyMs = opts.latencyMs;
     // 이전 버전 데모 일정으로 저장된 상태는 공동 예약 일정만 새 기준으로 옮긴다(다른 저장 데이터·기록은 그대로)
-    const migrated = !!loaded && migrateDemoSchedule(this.db, createSeed('full'));
+    const seed = loaded ? createSeed('full') : null;
+    const scheduleMoved = !!seed && migrateDemoSchedule(this.db, seed);
+    // 없앤 카테고리·업체 소속 정리(저장된 상태에 ‘기타 수리’가 남아 있어도 다시 보이지 않게)
+    const catalogMoved = !!seed && migrateCatalog(this.db, seed);
+    const migrated = scheduleMoved || catalogMoved;
     if (this.persist && (!loaded || migrated)) this.save(); // 새 세션의 시드도 저장해 새로고침·점검 도구가 같은 상태를 보게 한다
   }
 
@@ -207,7 +213,7 @@ export class MockRepository implements Repository {
   }
 
   // ───────── 탐색 ─────────
-  listCategories(): Promise<Category[]> { return this.read(() => this.db.categories); }
+  listCategories(): Promise<Category[]> { return this.read(() => this.db.categories.filter((c) => !isRetiredCategory(c.id))); }
   registerAddress(input: PostcodeAddressInput): Promise<Address> {
     return this.write(() => {
       const a = postcodeToAddress(input);
@@ -244,7 +250,11 @@ export class MockRepository implements Repository {
 
   listProviders(q: ProviderQuery): Promise<ProviderSummary[]> {
     return this.read(() => {
-      const list = this.db.providers.filter((p) => p.categoryIds.includes(q.categoryId)).map((p) => this.summary(p, q.addressId));
+      // 없앤 카테고리는 빈 목록. 같은 업체(ID)는 한 번만
+      const seen = new Set<string>();
+      const list = this.db.providers
+        .filter((p) => !isRetiredCategory(q.categoryId) && p.categoryIds.includes(q.categoryId) && !seen.has(p.id) && !!seen.add(p.id))
+        .map((p) => this.summary(p, q.addressId));
       return list.sort((a, b) => Number(!!b.jointAvailable) - Number(!!a.jointAvailable) || b.rating - a.rating);
     });
   }

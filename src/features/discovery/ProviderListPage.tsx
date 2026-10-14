@@ -1,4 +1,5 @@
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, Navigate, useSearchParams } from 'react-router-dom';
+import { isRetiredCategory, retiredCategoryNotice } from '../../domain/categories';
 import { DEFAULT_PROVIDER_SORT, PROVIDER_SORT_OPTIONS, isProviderSort, sortProviders, type ProviderSort } from '../../domain/providerSort';
 import { SortMenu } from '../../components/SortMenu';
 import { Page } from '../../app/Page';
@@ -23,7 +24,15 @@ export function JointBadge({ p, hasAddress, addressUnknown }: { p: ProviderSumma
   return <Badge tone="info">공동 예약 후보</Badge>;
 }
 
+/** C-03. 없앤 카테고리(‘기타 수리’ c10)의 예전 주소는 오류 대신 안내와 함께 홈으로 보낸다(기록 대체) */
 export function ProviderListPage() {
+  const [sp] = useSearchParams();
+  const categoryId = sp.get('category') ?? '';
+  if (isRetiredCategory(categoryId)) return <Navigate to="/" replace state={{ notice: retiredCategoryNotice(categoryId), noticeTitle: '카테고리가 정리됐어요' }} />;
+  return <ProviderList />;
+}
+
+function ProviderList() {
   const repo = useRepo();
   const [sp, setSp] = useSearchParams();
   const categoryId = sp.get('category') ?? '';

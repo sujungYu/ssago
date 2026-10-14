@@ -29,6 +29,8 @@ export function Page({ title, back, onBack, tabs, progress, children }: { title:
   const loc = useLocation();
   const goBack = useHistoryBack(back && back !== 'history' ? back : '/');
   const notice = (loc.state as { notice?: string } | null)?.notice;
+  // 안내 제목: 기본은 알림 진입용. 다른 이동 안내(예: 없앤 카테고리)는 noticeTitle로 바꾼다
+  const noticeTitle = (loc.state as { noticeTitle?: string } | null)?.noticeTitle ?? '알림 이후 내용이 바뀌었어요';
   const sent = (loc.state as { flash?: string } | null)?.flash;
   const heading = title ?? <><span className="sr-only">제목을 불러오는 중이에요</span><span className="app-header__title-skeleton"><Skeleton h={22} /></span></>;
   return (
@@ -59,7 +61,7 @@ export function Page({ title, back, onBack, tabs, progress, children }: { title:
       <main id="main" className={`main${tabs ? ' main--tabs' : ''}`}>
         <div className="stack stack--lg">
           {progress}
-          {notice && <Banner tone="warn" title="알림 이후 내용이 바뀌었어요">{notice}</Banner>}
+          {notice && <Banner tone="warn" title={noticeTitle}>{notice}</Banner>}
           {sent && <Banner tone="success" title={sent} />}
           {children}
         </div>

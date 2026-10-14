@@ -3645,8 +3645,8 @@ await test('요청서 오류 이동: 네트워크·처리 실패는 입력란으
 
 // ───────── 업체 찾기: 이미지 중심 카테고리 카드 ─────────
 // 카드 표시 제목(데이터의 카테고리 이름·ID·라우팅은 그대로)
-const CAT_NAMES = ['방충망', '수전·배수', '문손잡이·경첩', '수납장·서랍', '창문 보수', '조명·스위치', '커튼·선반', '생활 부속품', '실리콘·줄눈', '기타 수리'];
-const CAT_FILES = ['flat/c1-screen', 'flat/c2-faucet', 'flat/c3-handle-hinge', 'flat/c4-drawer', 'flat/c5-window-seal', 'flat/c6-bulb-switch', 'flat/c7-curtain', 'flat/c8-towel', 'flat/c9-caulk-tile', 'flat/c10-toolbox'];
+const CAT_NAMES = ['방충망', '수전·배수', '문손잡이·경첩', '수납장·서랍', '창문 보수', '조명·스위치', '커튼·선반', '생활 부속품', '실리콘·줄눈'];
+const CAT_FILES = ['flat/c1-screen', 'flat/c2-faucet', 'flat/c3-handle-hinge', 'flat/c4-drawer', 'flat/c5-window-seal', 'flat/c6-bulb-switch', 'flat/c7-curtain', 'flat/c8-towel', 'flat/c9-caulk-tile'];
 
 await test('카테고리 카드: 10개 순서·이름·개별 이미지 매핑, 장식 이미지 alt 비움·크기 지정, 카드 전체가 하나의 링크', async (page) => {
   await start(page, { path: '/' });

@@ -36,13 +36,13 @@ describe('실제 주소 검색 결과 → 건물 주소', () => {
 });
 
 describe('실제 주소와 데모 업체·공동 예약 분리', () => {
-  it('어떤 실제 주소를 골라도 카테고리 10개 모두 데모 업체 10곳과 공동 예약 후보가 보인다(오류·빈 목록 없음)', async () => {
+  it('어떤 실제 주소를 골라도 카테고리 9개 모두 데모 업체(10곳 이상)와 공동 예약 후보가 보인다(오류·빈 목록 없음)', async () => {
     const r = repo();
     for (const d of [APT, APT2]) {
       const a = await r.registerAddress(input(d));
-      for (let c = 1; c <= 10; c++) {
+      for (let c = 1; c <= 9; c++) {
         const list = await r.listProviders({ categoryId: `c${c}`, addressId: a.id });
-        expect(list).toHaveLength(10);
+        expect(list.length).toBeGreaterThanOrEqual(10);
         expect(list.every((p) => p.jointAvailable !== null)).toBe(true); // ‘확인 불가’로 비우지 않는다
       }
       expect((await r.listProviders({ categoryId: 'c2', addressId: a.id })).some((p) => p.nextJoint)).toBe(true);

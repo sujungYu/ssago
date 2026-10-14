@@ -105,7 +105,7 @@ export const PROVIDER_SERVICES: Record<string, ProviderService[]> = {
     { id: 'sv-p14-frame', name: '방충망 틀 수리', categoryId: 'c1' },
     { id: 'sv-p14-strip', name: '창문 틈새막이 시공', categoryId: 'c5' },
     { id: 'sv-p14-lock', name: '창문 잠금장치 교체', categoryId: 'c5' },
-    { id: 'sv-p14-dryrack', name: '빨래건조대 설치·수리', categoryId: 'c10' },
+    { id: 'sv-p14-dryrack', name: '빨래건조대 설치·수리', categoryId: 'c8' },
   ],
   // 또르르창문
   p15: [
@@ -147,7 +147,7 @@ export const PROVIDER_SERVICES: Record<string, ProviderService[]> = {
     { id: 'sv-p19-drain', name: '배수구 막힘 수리', categoryId: 'c2' },
     { id: 'sv-p19-faucet', name: '수전 교체', categoryId: 'c2' },
     { id: 'sv-p19-kitchen-silicone', name: '주방 실리콘 보수', categoryId: 'c9' },
-    { id: 'sv-p19-hose', name: '세탁기 급수 호스 교체', categoryId: 'c10' },
+    { id: 'sv-p19-hose', name: '세탁기 급수 호스 교체', categoryId: 'c2' },
   ],
   // 욕실단짝
   p20: [
@@ -187,8 +187,8 @@ export const PROVIDER_SERVICES: Record<string, ProviderService[]> = {
     { id: 'sv-p24-faucet', name: '수전 교체', categoryId: 'c2' },
     { id: 'sv-p24-light', name: '조명 교체', categoryId: 'c6' },
     { id: 'sv-p24-switch', name: '스위치 교체', categoryId: 'c6' },
-    { id: 'sv-p24-stopper', name: '도어스토퍼 설치', categoryId: 'c10' },
-    { id: 'sv-p24-mirror', name: '거울·액자 걸기', categoryId: 'c10' },
+    { id: 'sv-p24-stopper', name: '도어스토퍼 설치', categoryId: 'c3' },
+    { id: 'sv-p24-mirror', name: '거울·액자 걸기' }, // 남은 카테고리에 맞는 곳이 없어 카테고리 연결 없음(‘기타 수리’ 제거, spec 5.34) — 업체 등록 작업·요청서 칩에는 그대로
   ],
   // 단단철물
   p25: [
@@ -205,8 +205,8 @@ export const PROVIDER_SERVICES: Record<string, ProviderService[]> = {
     { id: 'sv-p26-hinge', name: '경첩 조정', categoryId: 'c3' },
     { id: 'sv-p26-drawer', name: '서랍 레일 수리', categoryId: 'c4' },
     { id: 'sv-p26-cabinet', name: '수납장 문 수리', categoryId: 'c4' },
-    { id: 'sv-p26-stopper', name: '도어스토퍼 설치', categoryId: 'c10' },
-    { id: 'sv-p26-mirror', name: '거울·액자 걸기', categoryId: 'c10' },
+    { id: 'sv-p26-stopper', name: '도어스토퍼 설치', categoryId: 'c3' },
+    { id: 'sv-p26-mirror', name: '거울·액자 걸기' }, // 남은 카테고리에 맞는 곳이 없어 카테고리 연결 없음(‘기타 수리’ 제거, spec 5.34) — 업체 등록 작업·요청서 칩에는 그대로
   ],
   // 나무결손질
   p27: [
@@ -239,8 +239,8 @@ export const PROVIDER_SERVICES: Record<string, ProviderService[]> = {
     { id: 'sv-p30-switch', name: '스위치 교체', categoryId: 'c6' },
     { id: 'sv-p30-towel', name: '수건걸이 설치', categoryId: 'c8' },
     { id: 'sv-p30-paper', name: '휴지걸이 설치', categoryId: 'c8' },
-    { id: 'sv-p30-dryrack', name: '빨래건조대 설치·수리', categoryId: 'c10' },
-    { id: 'sv-p30-stopper', name: '도어스토퍼 설치', categoryId: 'c10' },
+    { id: 'sv-p30-dryrack', name: '빨래건조대 설치·수리', categoryId: 'c8' },
+    { id: 'sv-p30-stopper', name: '도어스토퍼 설치', categoryId: 'c3' },
   ],
   // 아늑한손
   p31: [
@@ -271,7 +271,7 @@ export const PROVIDER_SERVICES: Record<string, ProviderService[]> = {
     { id: 'sv-p34-switch', name: '스위치 교체', categoryId: 'c6' },
     { id: 'sv-p34-handle', name: '현관문 손잡이 교체', categoryId: 'c3' },
     { id: 'sv-p34-closer', name: '도어클로저 조정', categoryId: 'c3' },
-    { id: 'sv-p34-stopper', name: '도어스토퍼 설치', categoryId: 'c10' },
+    { id: 'sv-p34-stopper', name: '도어스토퍼 설치', categoryId: 'c3' },
   ],
   // 부엌손길
   p35: [

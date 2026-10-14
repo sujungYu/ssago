@@ -35,13 +35,14 @@ describe('업체 목록 정렬', () => {
     for (const o of PROVIDER_SORT_OPTIONS) expect(sortProviders(items, o.value).map((x) => x.id).sort()).toEqual(items.map((x) => x.id).sort());
     expect(JSON.stringify(items)).toBe(snap);
   });
-  it('실제 데모 목록: 카테고리마다 10곳 그대로, 같은 기준이면 결과가 같다', async () => {
+  it('실제 데모 목록: 업체 수 그대로(숨기거나 더하지 않음), 같은 기준이면 결과가 같다', async () => {
     const r = new MockRepository({ latencyMs: 0 });
-    for (let i = 1; i <= 10; i++) {
+    for (let i = 1; i <= 9; i++) {
       const list = await r.listProviders({ categoryId: `c${i}`, addressId: 'ad-apt' });
       for (const o of PROVIDER_SORT_OPTIONS) {
         const a = sortProviders(list, o.value).map((x) => x.id);
-        expect(a).toHaveLength(10);
+        expect(a).toHaveLength(list.length);
+        expect(new Set(a).size).toBe(list.length);
         expect(sortProviders(list, o.value).map((x) => x.id)).toEqual(a);
       }
     }

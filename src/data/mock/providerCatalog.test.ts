@@ -18,16 +18,27 @@ const PUBLIC = join(process.cwd(), 'public');
 const ORIGINAL = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8'];
 const ORIGINAL_NAMES = ['한빛설비', '새봄수리', '밝은전기', '든든문고리', '깔끔마감', '손맵시', '맑은창방충망', '반듯설치'];
 
-describe('데모 업체 구성: 카테고리마다 10곳', () => {
-  it('카테고리 10개 모두 업체 목록에 중복 없이 10곳이 보인다', async () => {
+// ‘기타 수리’(c10) 제거 후 카테고리별 고유 업체 수(spec 5.34). 업체를 복제해 수를 맞추지 않는다
+const CATEGORY_COUNTS: Record<string, number> = { c1: 10, c2: 10, c3: 12, c4: 10, c5: 10, c6: 10, c7: 10, c8: 11, c9: 10 };
+/** 남은 카테고리에 맞는 곳이 없어 카테고리 연결 없이 업체 작업으로만 둔 작업 */
+const UNCATEGORIZED = ['거울·액자 걸기'];
+
+describe('데모 업체 구성: 카테고리 9개', () => {
+  it('카테고리 9개(‘기타 수리’ 없음) 목록에 같은 업체는 한 번만, 정해진 고유 업체 수', async () => {
     const r = repo();
-    expect(CATEGORIES).toHaveLength(10);
+    expect(CATEGORIES.map((c) => c.id)).toEqual(Object.keys(CATEGORY_COUNTS));
+    const phone = (id: string) => r.__db().providers.find((x) => x.id === id)!.phone;
     for (const c of CATEGORIES) {
       const list = await r.listProviders({ categoryId: c.id, addressId: 'ad-apt' });
-      expect(list.map((p) => p.id), c.id).toHaveLength(10);
-      expect(new Set(list.map((p) => p.id)).size, c.id).toBe(10);
-      expect(new Set(list.map((p) => p.name)).size, c.id).toBe(10);
+      expect(list, c.id).toHaveLength(CATEGORY_COUNTS[c.id]);
+      expect(new Set(list.map((p) => p.id)).size, c.id).toBe(list.length);
+      expect(new Set(list.map((p) => p.name.replace(/\s+/g, ''))).size, c.id).toBe(list.length);
+      expect(new Set(list.map((p) => phone(p.id))).size, c.id).toBe(list.length);
     }
+    expect(await r.listProviders({ categoryId: 'c10', addressId: 'ad-apt' })).toEqual([]);
+    expect(r.__db().providers.some((p) => p.categoryIds.includes('c10'))).toBe(false);
+    // 모든 업체가 남은 카테고리 하나 이상에 속한다(목록에서 사라진 업체 없음)
+    expect(r.__db().providers.every((p) => p.categoryIds.length > 0)).toBe(true);
   });
 
   it('고유 업체 35곳: ID·이름·연락처 중복 없음, 기존 8곳은 ID·이름 그대로', () => {
@@ -70,10 +81,11 @@ describe('업체 등록 작업·카테고리 일치', () => {
     for (const p of ps) expect(new Set(p.services!.map((s) => s.name)).size, p.id).toBe(p.services!.length);
   });
 
-  it('추가 업체: 소속 카테고리마다 그 카테고리의 등록 작업이 있고, 등록 작업은 모두 소속 카테고리 안에 있다', () => {
+  it('추가 업체: 소속 카테고리마다 그 카테고리의 등록 작업이 있고, 등록 작업은 모두 소속 카테고리 안에 있다(맞는 카테고리가 없는 작업만 연결 없음)', () => {
     for (const p of EXTRA_PROVIDERS) {
-      const cats = PROVIDER_SERVICES[p.id].map((s) => s.categoryId);
-      expect(cats.every((c) => !!c && p.categoryIds.includes(c)), p.id).toBe(true);
+      for (const s of PROVIDER_SERVICES[p.id]) if (!s.categoryId) expect(UNCATEGORIZED, s.id).toContain(s.name);
+      const cats = PROVIDER_SERVICES[p.id].flatMap((s) => (s.categoryId ? [s.categoryId] : []));
+      expect(cats.every((c) => p.categoryIds.includes(c)), p.id).toBe(true);
       expect(p.categoryIds.every((c) => cats.includes(c)), p.id).toBe(true);
     }
   });
@@ -155,7 +167,11 @@ describe('업체 소개·작업 사례(데모 콘텐츠)', () => {
   });
 
   it('소개 사진은 그 업체의 소속 분야 사진이고(같은 분야끼리 함께 씀), 사례 사진 묶음이 똑같은 업체가 없다', () => {
-    for (const p of ps) expect(p.categoryIds, p.id).toContain(PROVIDER_SHOWCASE[p.id].profile.photo.src.match(/intro\/(c\d+)-thumb/)![1]);
+    // ‘c10’ 소개 사진(공구함)은 여러 작업을 함께 하는 업체(p24·p26) 소개용으로 그대로 쓴다(카테고리 ‘기타 수리’는 없앰)
+    for (const p of ps) {
+      const k = PROVIDER_SHOWCASE[p.id].profile.photo.src.match(/intro\/(c\d+)-thumb/)![1];
+      if (k !== 'c10') expect(p.categoryIds, p.id).toContain(k);
+    }
     const sets = ps.map((p) => PROVIDER_SHOWCASE[p.id].portfolio.flatMap((c) => c.photos.map((x) => x.src)).sort().join('|'));
     expect(new Set(sets).size).toBe(ps.length);
     expect(new Set(ps.map((p) => PROVIDER_SHOWCASE[p.id].profile.about)).size).toBe(ps.length);

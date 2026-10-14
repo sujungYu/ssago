@@ -238,7 +238,6 @@ function Body({ p, addressId, now }: { p: ProviderDetail; addressId: string | nu
       </Section>
 
       <Section title="리뷰">
-        {p.reviews.length > 0 && <p className="xs muted">가상 데모 리뷰예요. 실제 이용 후기가 아니에요.</p>}
         {p.reviews.length === 0 ? <p className="muted small">아직 리뷰가 없어요.</p> : (
           <ul className="card card--flush divided">
             {p.reviews.map((r) => (
