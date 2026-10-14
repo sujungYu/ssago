@@ -559,6 +559,13 @@ button.explore-address:hover { background: #fafbfd; }
 @media (max-width: 479px) { .info-req__actions .btn { width: 100%; } }
 /* 목록 카드의 대표 상태 배지 */
 .status-badges { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; min-width: 0; }
+/* 목록 카드 첫 행(spec 5.50): 제목(업체명·작업명)은 남는 너비에서 줄바꿈, 상태 배지 → 꺾쇠는 오른쪽 끝. 꺾쇠는 첫 줄 높이(15px×1.5)에 맞춰 위쪽 정렬 */
+.card-top { display: flex; align-items: flex-start; gap: var(--sp-2); min-width: 0; }
+.card-top__title { flex: 1; min-width: 0; overflow-wrap: anywhere; word-break: keep-all; }
+.card-top > .status-badges { flex: 0 1 auto; }
+.card-chevron { flex: none; display: inline-flex; margin-top: 2px; color: var(--c-text-2); }
+/* 목록 카드 업체명(spec 5.51): 작업명 아래 기본 크기·보통 굵기. 요청 카드는 같은 줄에 방문일(작은 회색)이 붙는다 */
+.card-provider { font-size: var(--fs-md); font-weight: 400; overflow-wrap: anywhere; word-break: keep-all; }
 /*
  * 상세 상단 공통 행동 카드(spec 5.17): 회색 테두리·둥근 모서리, 연한 블루 머리(정보 아이콘 · ‘확인이 필요해요’), 구체 제목, 흰 본문(왼쪽 정렬), 하단 버튼.
  * 노란 바탕·노란 테두리·안쪽 카드 없음. 여러 확인 사항은 카드마다 따로 쌓는다.

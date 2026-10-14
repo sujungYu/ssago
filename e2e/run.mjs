@@ -1453,7 +1453,7 @@ await test('예약 목록·상세: 확정된 예약/완료·취소, 마감 후 �
   eq(await page.locator('main .booking-list .badge').filter({ hasText: '확인 필요' }).count(), 0, '확인 필요 배지 없음');
   const listText = await page.locator('main .booking-list').innerText();
   for (const gone of ['지연되고 있어요', '추가 작업 동의가 필요해요', '자재 조건을 확인하고', '금액을 협의 중이에요', '리뷰를 작성할 수 있어요', '결제 결과를 확인 중이에요']) truthy(!listText.includes(gone), `목록 설명 문구 없음: ${gone}`);
-  eq(await page.locator('main .booking-list svg:not(.card-head svg)').count(), 0, '목록 본문에 아이콘 없음(확인 머리 아이콘만)');
+  eq(await page.locator('main .booking-list svg:not(.card-head svg):not(.card-chevron svg)').count(), 0, '목록 본문에 다른 아이콘 없음(확인 머리 아이콘·상세 이동 꺾쇠만)');
   // 확인 머리(spec 5.46): 카드 전체 너비 맨 위, 연한 블루 바탕·블루 작은 글씨 + 정보 아이콘, 주황 점·하단 문구 없음. 카드 바탕·테두리·상태 배지 그대로
   const st = await k3.evaluate((a) => {
     const h = a.querySelector('.card-head'); const hs = getComputedStyle(h); const cs = getComputedStyle(a); const r = a.getBoundingClientRect(), hr = h.getBoundingClientRect();

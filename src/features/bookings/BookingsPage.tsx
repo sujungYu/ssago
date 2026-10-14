@@ -6,7 +6,7 @@ import { useAsync, useTodoCounts } from '../../app/hooks';
 import { formatWon } from '../../domain/money';
 import { AsyncView, CountBadge, EmptyState, LinkButton } from '../../components/ui';
 import type { BookingListItem, BookingQueryResult, RequestListResult } from '../../data/repositories/types';
-import { StatusBadges, TodoHead, VisitText } from '../shared';
+import { CardChevron, StatusBadges, TodoHead, VisitText } from '../shared';
 import { formatDate } from '../../domain/time';
 import { useListScrollRestore, useUrlFilter, type UrlFilterCodec } from '../../app/listFilter';
 import { toBookingQuery } from '../../domain/bookingFilter';
@@ -37,11 +37,13 @@ export function BookingCard({ it }: { it: BookingListItem }) {
     <Link to={`/bookings/${b.id}`} className={`card stack--sm stack${disp.actions.length ? ' card--todo' : ''}`} style={{ textDecoration: 'none', color: 'inherit' }}>
       {/* 할 일이 있을 때만 상단 머리(처리는 상세 상단 확인 카드에서) */}
       <TodoHead actions={disp.actions} />
-      <div className="row row--between row--top" style={{ gap: 'var(--sp-2)' }}>
-        <p className="strong" style={{ minWidth: 0, overflowWrap: 'anywhere' }}>{it.providerName}</p>
+      {/* 첫 행: 작업명(가장 크고 굵게, 줄바꿈) · 상태 태그 · 상세 이동 꺾쇠 → 그 아래 업체명(기본 크기·보통 굵기). 요청 카드와 같은 위계(spec 5.50·5.51) */}
+      <div className="card-top">
+        <p className="strong card-top__title">{b.tasks.map((t) => t.title).join(' · ')}</p>
         <StatusBadges d={disp} />
+        <CardChevron />
       </div>
-      <p>{b.tasks.map((t) => t.title).join(' · ')}</p>
+      <p className="card-provider">{it.providerName}</p>
       {disp.visitPending ? <p className="small">방문 일정 조율 중</p>
         : followUpNext ? <p className="small">후속 방문 예정 · <span className="nowrap">{formatDate(followUpNext.date)}</span> <span className="nowrap">{followUpNext.window}</span></p>
         : <p className="small">{visitLabel(b)} · <VisitText date={b.visitDate} time={b.visitTime} /></p>}

@@ -37,6 +37,14 @@ export function StatusBadges({ d }: { d: Pick<StatusDisplay, 'label' | 'tone'> }
  * 목록 카드 상단 ‘ⓘ 확인이 필요해요’ 머리(spec 5.46). 고객이 처리할 일이 하나라도 있을 때만(‘확인 필요’ 필터와 같은 기준), 여러 개여도 한 번.
  * 상세 화면 확인 카드 머리(.act-card__head)와 같은 모양. 구체적인 할 일은 상세에서 확인한다(목록에는 문구를 두지 않음).
  */
+/**
+ * 목록 카드의 상세 이동 표시(spec 5.50): 카드 본문 첫 행 오른쪽 끝 꺾쇠(18px, 보조 회색). 장식이라 화면 읽기에서 숨기고, 카드 전체가 링크다(따로 누르는 버튼 아님).
+ * 상태 배지가 같은 행에 있으면 배지 → 꺾쇠 순서. 긴 제목은 왼쪽에서 줄바꿈되고 꺾쇠는 첫 줄 높이에 고정된다(.card-top).
+ */
+export function CardChevron() {
+  return <span className="card-chevron" aria-hidden="true"><Icon name="chevron" size={18} /></span>;
+}
+
 export function TodoHead({ actions }: { actions: ActionKind[] }) {
   if (!actions.length) return null;
   return <p className="act-card__head card-head"><Icon name="info" size={14} />확인이 필요해요</p>;
