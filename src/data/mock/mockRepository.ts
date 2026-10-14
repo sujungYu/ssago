@@ -38,6 +38,7 @@ import { migrateCatalog } from './catalogMigration';
 import { isRetiredCategory } from '../../domain/categories';
 import { PROVIDER_REQUEST_DAYS } from './providerRequestDays';
 import { PROVIDER_SHOWCASE } from './providerShowcase';
+import { DEMO_ATTACHMENT_PHOTOS } from './attachmentPhotos';
 import { newRequestBlock } from '../../domain/visitDays';
 
 // v3: 주소 구조 변경(탐색 주소 / 재사용 방문 주소 / 요청·예약 방문 주소 스냅숏 분리). 이전 형식 저장값은 읽지 않는다.
@@ -209,6 +210,7 @@ export class MockRepository implements Repository {
     return {
       request: r, provider: this.brief(this.provider(r.providerId)), visitAddress: r.visitAddress ?? null,
       group: g ? toPublicGroup(g) : undefined, groupClosed: !!g?.closed, approval: ap, now: this.db.now,
+      attachmentImages: Object.fromEntries(r.tasks.flatMap((t) => t.photoNames).filter((n) => Object.hasOwn(DEMO_ATTACHMENT_PHOTOS, n)).map((n) => [n, DEMO_ATTACHMENT_PHOTOS[n]])),
     };
   }
 
@@ -413,6 +415,8 @@ export class MockRepository implements Repository {
       return {
         ...d, approval: d.approval, groupEnded: !!g?.ended, confirmedTripFee: g?.closed ? g.finalPerHouseholdFee : null,
         inFlightPayment: this.inFlight((t) => t.requestId === r.id && t.kind === 'deposit'),
+        hasOrderedMaterialTerms: this.db.bookings.some((b) => b.requestId === r.id
+          && this.db.materials.some((m) => m.bookingId === b.id && !!m.agreedAt && m.nonRefundableIfCancelled > 0)),
       };
     });
   }

@@ -7,7 +7,7 @@ import { addHours, formatDate, seoulYmd } from '../../domain/time';
 import { NEW_DATE_WINDOWS, formatSlot, selectableTimes } from '../../domain/visitTime';
 import { canRejectKeepingOld, canRequestOther } from '../../domain/scheduleChange';
 import { Icon } from '../../components/Icon';
-import { ActionCard, Banner, Button, KV, MockPayNotice, PhoneButton } from '../../components/ui';
+import { ActionCard, Banner, Button, KV, PhoneButton } from '../../components/ui';
 import type { BookingDetail } from '../../data/repositories/types';
 import { VisitText } from '../shared';
 
@@ -89,7 +89,6 @@ export function ScheduleChangeCard({ d }: { d: BookingDetail }) {
     <ActionCard id="schedule-change" className="sched" title={title} head={waiting ? '업체 응답을 기다리고 있어요' : undefined}
       actions={!!action.error || (p?.status === 'proposed' && !otherOpen) || (s.kind === 'customer_requested' && p) || s.kind === 'negotiating' || s.kind === 'unavailable_open' || s.oldVisit === 'unknown' || otherOpen ? <>
         {action.error && <Banner tone="danger" title={action.error.title}>{action.error.hint} 다시 시도할 수 있어요.</Banner>}
-        {shortfall > 0 && p?.status === 'proposed' && <MockPayNotice compact />}
         {/* 응답 버튼(최신 진행 중 제안에만). 기존 방문 가능: 수락/거절 · 기존 방문 불가: 수락/다른 일정 요청 */}
         {p?.status === 'proposed' && !otherOpen && (
           <div className="detail-actions__pair">
@@ -99,7 +98,7 @@ export function ScheduleChangeCard({ d }: { d: BookingDetail }) {
           </div>
         )}
         {s.kind === 'customer_requested' && p && <Button variant="secondary" block busy={action.busy} onClick={withdraw}>변경 요청 철회</Button>}
-        {(s.kind === 'negotiating' || s.kind === 'unavailable_open' || s.oldVisit === 'unknown') && <PhoneButton phone={d.provider.phone} name={d.provider.name} />}
+        {(s.kind === 'negotiating' || s.kind === 'unavailable_open' || s.oldVisit === 'unknown') && <PhoneButton phone={d.provider.phone} name={d.provider.name} numberOnly />}
 
         {/* 다른 일정 요청: 희망 날짜 + 정확한 시각(희망 일정, 확정 아님) */}
         {otherOpen && p && (

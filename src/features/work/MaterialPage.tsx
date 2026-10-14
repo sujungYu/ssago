@@ -56,9 +56,9 @@ export function MaterialPage() {
                   <MockPayNotice />
                   <label className="check card"><input type="checkbox" checked={ok} onChange={(e) => setOk(e.target.checked)} /><span>자재 조건과 취소 조건을 확인했고, {formatWon(m.price)} 선결제에 동의해요.</span></label>
                   {action.error && <Banner tone="danger" title={action.error.title}>{action.error.hint}</Banner>}
-                  <ActionBar note="모의 결제 · 실제 청구 없음">
+                  <ActionBar>
                     <Button variant="primary" block disabled={!ok} busy={action.busy} onClick={() => void action.run(async () => { const r = await repo.agreeAndPayMaterial(m.id, key.get()); nav(`/pay/${r.tx.id}`); })}>
-                      {action.busy ? '결제 진행 중… 화면을 닫지 마세요' : `동의하고 ${formatWon(m.price)} 모의 결제`}
+                      {action.busy ? '결제 진행 중… 화면을 닫지 마세요' : `${formatWon(m.price)} 결제하기`}
                     </Button>
                     <LinkButton to={`/bookings/${booking.id}`} variant="secondary" block>나중에 결정하기</LinkButton>
                   </ActionBar>

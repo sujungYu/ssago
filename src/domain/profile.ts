@@ -7,7 +7,6 @@
 import type { CustomerContact } from './types';
 
 export const NAME_MAX = 20;
-export const PHONE_HINT = '010으로 시작하는 휴대전화 번호 11자리예요. 하이픈(-)은 넣어도, 빼도 돼요.';
 
 export const phoneDigits = (s: string): string => s.replace(/\D/g, '');
 

@@ -6,7 +6,7 @@ import { focusFirstError } from '../../app/focusFirstError';
 import { useAction, useAsync } from '../../app/hooks';
 import { Icon } from '../../components/Icon';
 import { AsyncView, Banner, Button, Dialog, Field, Section } from '../../components/ui';
-import { NAME_MAX, PHONE_HINT, formatPhone, nameError, phoneError } from '../../domain/profile';
+import { NAME_MAX, formatPhone, nameError, phoneError } from '../../domain/profile';
 import type { CustomerProfile } from '../../domain/types';
 
 /**
@@ -90,7 +90,7 @@ function ProfileEditDialog({ profile, onClose, onSaved }: { profile: CustomerPro
         <Field label="이름" error={touched ? err.name : null} liveError={false}>
           {(fp) => <input {...fp} data-err-target="name" className="input" value={name} maxLength={NAME_MAX + 10} autoComplete="off" onChange={(e) => setName(e.target.value)} />}
         </Field>
-        <Field label="연락처" hint={PHONE_HINT} error={touched ? err.phone : null} liveError={false}>
+        <Field label="연락처" error={touched ? err.phone : null} liveError={false}>
           {(fp) => <input {...fp} data-err-target="phone" className="input" type="tel" inputMode="tel" value={phone} maxLength={20} autoComplete="off" placeholder="010-0000-0000" onChange={(e) => setPhone(e.target.value)} />}
         </Field>
         <p className="xs muted">바꾼 정보는 새로 작성하는 수리 요청서에 기본으로 채워져요. 이미 보낸 요청과 확정된 예약의 연락처는 바뀌지 않아요.</p>

@@ -22,7 +22,6 @@ export function LedgerPage() {
   const [f, setF] = useState<'all' | 'pay' | 'refund'>('all');
   return (
     <Page title="결제·환불 내역" back="/me">
-      <MockPayNotice compact />
       <div className="chips" role="group" aria-label="내역 종류">
         {([['all', '전체'], ['pay', '결제'], ['refund', '환불·공제']] as const).map(([k, label]) => (
           <button key={k} type="button" className="chip" aria-pressed={f === k} onClick={() => setF(k)}>{label}</button>

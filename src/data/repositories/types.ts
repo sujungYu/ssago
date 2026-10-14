@@ -18,7 +18,7 @@ export type { BookingListQuery, PendingAction } from '../../domain/bookingFilter
 import type {
   Address, AdditionalWork, SavedVisitAddress, VisitAddress, Approval, Booking, CancelCause, Category, ChangeProposal, CustomerContact, CustomerProfile, DelayChoice,
   DelayNotice, Deduction, FinalStatement, IsoDate, IsoDateTime, MaterialOffer, ProviderDetail, ProviderSummary,
-  PublicGroup, Refund, RepairRequest, Review, StatementStatus, TaskItem, TimeSlot, Transaction, Won,
+  PublicGroup, Refund, RepairRequest, Review, ShowcaseImage, StatementStatus, TaskItem, TimeSlot, Transaction, Won,
 } from '../../domain/types';
 import type { CancelPreview, DateChangePreview, Settlement } from '../../domain/pricing';
 
@@ -94,6 +94,8 @@ export interface RequestDetail {
   groupClosed: boolean;
   approval?: Approval;
   now: IsoDateTime;
+  /** 첨부 사진 중 실제 데모 이미지가 있는 것(첨부 파일명 → 이미지). 없는 파일명은 화면에서 파일명으로 표시한다 */
+  attachmentImages: Record<string, ShowcaseImage>;
 }
 
 export interface BundleDetail {
@@ -109,6 +111,11 @@ export interface ApprovalView extends RequestDetail {
   /** 접수 마감으로 확정된 세대별 출장비(마감 전·확정값 없음이면 null) */
   confirmedTripFee: Won | null;
   inFlightPayment?: Transaction;
+  /**
+   * 이 요청에 별도 주문 자재 조건이 있는지: 이 요청에서 이어진 예약에 고객이 동의한 자재 중 회수 불가 비용이 있는 건이 있다.
+   * 취소 조건의 ‘별도 주문 자재’ 안내를 이때만 보여준다(부품·자재 예상 금액만으로는 표시하지 않음). 실제 차감은 기존 정책(materialDeductionOf)
+   */
+  hasOrderedMaterialTerms: boolean;
 }
 
 // ───────── 결제 ─────────

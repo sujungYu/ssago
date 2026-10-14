@@ -6,11 +6,11 @@ import { Page } from '../../app/Page';
 import { useRepo } from '../../app/context';
 import { useAction, useAsync } from '../../app/hooks';
 import { formatDate, formatDateTime } from '../../domain/time';
-import { Icon } from '../../components/Icon';
 import { ActionCard, AsyncView, Banner, Button, Dialog, KV, LinkButton, Section } from '../../components/ui';
 import type { RequestDetail } from '../../data/repositories/types';
 import { progressOfRequest, unlessComplete } from '../../domain/progressStep';
 import { ProgressSteps } from '../../components/ProgressSteps';
+import { TaskAttachments } from './TaskAttachments';
 import { ContactText, VisitAddressText, slotsText, ProviderContactRow } from '../shared';
 import { isConvertedToBooking, listPath } from '../../domain/reservationTabs';
 
@@ -42,7 +42,7 @@ function Body({ d }: { d: RequestDetail }) {
         </ActionCard>
       )}
       {r.status === 'reviewing' && r.infoRequest?.response && <Banner tone="info" title="보완한 내용을 업체가 확인하고 있어요">{r.infoRequest.response.message}</Banner>}
-      {r.status === 'rejected' && <Banner tone="danger" title="업체가 거절했어요">{r.rejectionReason ?? '사유가 전달되지 않았어요.'} 취소수수료는 없어요. 다른 업체에 요청할 수 있어요.</Banner>}
+      {r.status === 'rejected' && <Banner tone="danger" title="업체가 거절했어요">{r.rejectionReason ?? '사유가 전달되지 않았어요.'}<br />취소 수수료는 없으며, 다른 업체에 다시 요청할 수 있어요.</Banner>}
       {r.status === 'approval_expired' && <Banner tone="warn" title="결제 기한이 지나 예약이 확정되지 않았어요">취소수수료는 없어요. 새 요청을 보낼 수 있어요.</Banner>}
       {r.status === 'closed_other_booking' && <Banner tone="info" title="같은 작업으로 다른 업체 예약이 확정됐어요">이 요청은 취소수수료 없이 종료됐어요.</Banner>}
       {r.status === 'withdrawn' && <Banner tone="info" title="직접 취소한 요청이에요">취소수수료는 없어요.</Banner>}
@@ -62,13 +62,13 @@ function Body({ d }: { d: RequestDetail }) {
       {/* 보낸 요청: 업체명·전화(예약 상세와 같은 머리) → 구분선 → 작업 내용 → 요청 정보. 별도 ‘업체 연락’ 영역은 두지 않는다 */}
       <Section title="보낸 요청">
         <div className="card stack" id="sent-request">
-          <ProviderContactRow name={d.provider.name} phone={d.provider.phone} />
+          <ProviderContactRow name={d.provider.name} phone={d.provider.phone} numberOnly />
           <hr className="hr" />
           {r.tasks.map((t) => (
             <div key={t.id} className="stack--sm stack">
               <p className="strong">{t.title}</p>
               {t.description && <p className="small">{t.description}</p>}
-              {t.photoNames.length > 0 && <div className="chips">{t.photoNames.map((n) => <span key={n} className="photo-chip"><Icon name="camera" size={14} />{n}</span>)}</div>}
+              <TaskAttachments title={t.title} names={t.photoNames} images={d.attachmentImages} />
             </div>
           ))}
           <hr className="hr" />

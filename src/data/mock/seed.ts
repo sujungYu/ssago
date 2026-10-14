@@ -219,7 +219,7 @@ requests.push(
   request({ id: 'rq-3', bundleId: 'b-sink', providerId: 'p1', groupId: 'g1', status: 'approved_pending_payment', tasks: T_FAUCET(), createdAt: k('10-13', '10:00'), updatedAt: k('10-13', '15:00') }),
   request({ id: 'rq-4', bundleId: 'b-sink', providerId: 'p2', groupId: 'g4', slots: ['13:00–16:00'], status: 'approved_pending_payment', tasks: T_FAUCET(), createdAt: k('10-13', '10:10'), updatedAt: k('10-13', '17:00') }),
   request({ id: 'rq-5', providerId: 'p6', status: 'rejected', tasks: [tk('거실장 서랍 레일 수리', '서랍이 빠집니다.')],
-    rejectionReason: '서랍 레일 규격 확인이 어려워 이번 일정에는 수행이 어려워요.', createdAt: k('10-11', '10:00'), updatedAt: k('10-12', '10:00') }),
+    rejectionReason: '서랍 레일 규격을 확인하기 어려워 이번에는 작업을 진행할 수 없어요.', createdAt: k('10-11', '10:00'), updatedAt: k('10-12', '10:00') }),
   request({ id: 'rq-6', providerId: 'p7', status: 'withdrawn', tasks: [tk('안방 방충망 교체', '찢어졌어요.')], newDateWish: ymd('10-22'), createdAt: k('10-10', '10:00'), updatedAt: k('10-11', '10:00') }),
   request({ id: 'rq-7', providerId: 'p5', groupId: 'g7', addressId: 'ad-apt2', status: 'approval_expired', tasks: [tk('욕실 실리콘 보수', '곰팡이가 생겼어요.')], createdAt: k('10-10', '09:00'), updatedAt: k('10-12', '09:00') }),
   request({ id: 'rq-8', bundleId: 'b-lamp', providerId: 'p6', status: 'closed_other_booking', tasks: [tk('거실 조명 교체', '거실 등 교체')], createdAt: k('10-11', '09:00'), updatedAt: k('10-12', '16:00') }),

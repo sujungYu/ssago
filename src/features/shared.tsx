@@ -12,12 +12,13 @@ import type { BookingDetail } from '../data/repositories/types';
 /**
  * 상세 카드 최상단의 업체명(왼쪽) + 전화 버튼(오른쪽, ‘업체명에 전화 · 번호’). 요청 상세 ‘보낸 요청’·예약 상세 ‘예약 정보’ 공통.
  * 좁아서 한 줄에 들어가지 않으면 전화 버튼이 다음 줄로 내려간다. 업체명·번호는 화면에서 이 한 곳에만 둔다.
+ * numberOnly: 전화 버튼에 아이콘 + 번호만(요청 상세·예약 상세, 2026-10-14). 업체명은 바로 왼쪽에 있다
  */
-export function ProviderContactRow({ name, phone }: { name: string; phone: string }) {
+export function ProviderContactRow({ name, phone, numberOnly }: { name: string; phone: string; numberOnly?: boolean }) {
   return (
     <div className="row row--between row--wrap provider-contact">
       <p className="strong provider-contact__name">{name}</p>
-      <PhoneButton phone={phone} name={name} />
+      <PhoneButton phone={phone} name={name} numberOnly={numberOnly} />
     </div>
   );
 }

@@ -77,7 +77,7 @@ function Body({ d }: { d: BookingDetail }) {
       {/* 예약 정보(spec 5.19): 업체·전화 · 확정 방문 일정. 상태 배지는 두지 않는다(진행 단계·상단 확인 카드가 안내) */}
       <Section title="예약 정보">
         <div className="card stack booking-info" id="booking-info">
-          <ProviderContactRow name={d.provider.name} phone={d.provider.phone} />
+          <ProviderContactRow name={d.provider.name} phone={d.provider.phone} numberOnly />
           <KV rows={[
             // 기존 방문 불가·새 일정 미확정이면 날짜 대신 ‘방문 일정 조율 중’. 일정 비교·사유·응답은 상단 확인 카드에서만(일정 변경 기록은 데이터로 보존, 화면 펼치기 없음)
             { k: '방문 일정', v: disp.visitPending ? '방문 일정 조율 중' : <VisitText date={b.visitDate} time={b.visitTime} strong /> },
@@ -170,7 +170,6 @@ function Body({ d }: { d: BookingDetail }) {
                       { k: '선결제', v: m.paymentStatus === 'none' ? '결제 전 · 동의 전' : `${PAYMENT_STATUS[m.paymentStatus].label}${m.agreedAt ? ` · 동의 ${formatDateTime(m.agreedAt)}` : ''}` },
                       { k: '업체 주문', v: m.orderStatus === 'ordered' ? '주문 완료' : '주문 전' },
                     ]} />
-                    <p className="xs muted">취소 조건: {m.cancellationTerms}{m.nonRefundableIfCancelled > 0 ? ` 주문·제작 후 취소하면 회수 불가능한 실제 비용 최대 ${formatWon(m.nonRefundableIfCancelled)}이 공제될 수 있어요.` : ''}</p>
                   </div>
                 ))}
                 {d.additionalWorks.map((w) => (

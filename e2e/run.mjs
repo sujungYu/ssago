@@ -206,7 +206,7 @@ await test('요청: 새 요청은 업체 상세에서 고른 희망 날짜가 �
   truthy(await page.getByRole('button', { name: '요청 보내기' }).isDisabled(), '접수 기준 밖 날짜 제출 불가');
   await page.goto(`${BASE}/providers/p1/request?new=1&date=2026-10-21`);
   const kv = await page.locator('form .card').first().innerText();
-  truthy(kv.includes('새 요청') && kv.includes('희망 날짜') && kv.includes('10월 21일 (수)') && kv.includes('요청만으로 예약이 확정되지 않아요'), `요청서 희망 날짜: ${kv}`);
+  truthy(kv.includes('새 요청') && kv.includes('희망 날짜') && kv.includes('10월 21일 (수)'), `요청서 희망 날짜: ${kv}`);
   await pickTask(page, '수전 교체');
   await page.getByLabel('상세 주소', { exact: true }).fill('301동 1204호');
   await timeChip(page, '09:00').check();
@@ -1125,7 +1125,7 @@ async function actCardStyle(loc) {
       headTop: Math.round(head.getBoundingClientRect().top - cr.top), bodyBg: getComputedStyle(body).backgroundColor,
       title: c.querySelector('.act-card__title')?.textContent ?? '', textAlign: getComputedStyle(c.querySelector('.act-card__title')).textAlign,
       nested: c.querySelectorAll('.card:not(.check), .banner--warn').length,
-      yellow: [c, ...c.querySelectorAll('*')].some((e) => ['rgb(255, 243, 214)'].includes(getComputedStyle(e).backgroundColor) && !e.closest('.badge, .mock-label')),
+      yellow: [c, ...c.querySelectorAll('*')].some((e) => ['rgb(255, 243, 214)'].includes(getComputedStyle(e).backgroundColor) && !e.closest('.badge')),
       overflow: document.documentElement.scrollWidth > innerWidth || [...c.querySelectorAll('*')].some((e) => e.getBoundingClientRect().right > cr.right + 0.5),
     };
   });
@@ -1198,7 +1198,7 @@ await test('결제: 요청 상세에서 조건 확인 → 동의 → [예약금 
   const st = await sec.innerText();
   const stx = st.replace(/\s+/g, ' ');
   // 기본 화면: 방문 일정 · 예상 총금액(안내 두 줄) · 지금 결제할 예약금(안내) · 예약금 결제 기한(남은 시간 같은 줄) + 접힌 펼치기 둘
-  for (const k of ['확인이 필요해요', '방문 일정 10월 19일 (월) 10:00', '예상 총금액 약 112,500원', '작업 견적·자재비·참여 시 예상 출장비를 포함한 금액이에요.', '자재비와 참여 세대 수에 따라 달라질 수 있어요.', '지금 결제할 예약금 50,000원', '예약금은 최종 정산 시 차감돼요.', '예약금 결제 기한 10월 14일 (수) 15:00 · 20시간 0분 남음', '견적 상세', '취소 조건', '방문 일정과 금액, 취소 조건을 확인했어요.', '모의 결제 · 실제 청구 없음']) truthy(stx.includes(k), `결제 카드 ‘${k}’: ${stx}`);
+  for (const k of ['확인이 필요해요', '방문 일정 10월 19일 (월) 10:00', '예상 총금액 약 112,500원', '작업 견적·자재비·참여 시 예상 출장비를 포함한 금액이에요.', '자재비와 참여 세대 수에 따라 달라질 수 있어요.', '지금 결제할 예약금 50,000원', '예약금은 최종 정산 시 차감돼요.', '예약금 결제 기한 10월 14일 (수) 15:00 · 20시간 0분 남음', '견적 상세', '취소 조건', '방문 일정과 금액, 취소 조건을 확인했어요.']) truthy(stx.includes(k), `결제 카드 ‘${k}’: ${stx}`);
   // 기본 화면에서 뺀 정보: 요청 당시 가능 시간·접수 마감·예상 잔액·작업별 견적·반복 안내
   for (const gone of ['방문 가능한 시간', '13:00~16:00', '접수 마감', '잔액', '62,500원', '욕실 세면대 수전 교체', '그룹 총 출장비', '작업 견적 합계', '조건 확인에 동의하면', '도착 예정 시각']) truthy(!stx.includes(gone), `기본 화면에 없음 ‘${gone}’: ${stx}`);
   // 예약금은 연한 블루 강조 영역, 예상 총금액과 구분
@@ -1209,11 +1209,13 @@ await test('결제: 요청 상세에서 조건 확인 → 동의 → [예약금 
   eq((await sec.locator('.fold__btn').evaluateAll((bs) => bs.map((b) => b.textContent + ':' + b.getAttribute('aria-expanded')))).join(), '견적 상세:false,취소 조건:false', '펼치기 기본 접힘');
   await sec.locator('.fold__btn').filter({ hasText: '견적 상세' }).click();
   const es = (await page.locator('#pay-estimate-panel').innerText()).replace(/\s+/g, ' ');
-  for (const k of ['욕실 세면대 수전 교체', '50,000원', '작업 견적 합계 80,000원', '부품·자재 예상 20,000원', '참여 시 예상 출장비 약 12,500원', '예상 총금액 약 112,500원', '내 예약이 확정되면 총 출장비 50,000원을 4세대가 나눠요. 최종 출장비는 접수 마감 때 확정된 세대 수로 정해져요.']) truthy(es.includes(k), `견적 상세 ‘${k}’: ${es}`);
+  for (const k of ['욕실 세면대 수전 교체', '50,000원', '작업 견적 합계 80,000원', '부품·자재 예상 20,000원', '참여 시 예상 출장비 약 12,500원', '예상 총금액 약 112,500원', '예약이 확정되면 총 출장비 50,000원을 나를 포함한 4세대가 나눠요.', '출장비는 접수 마감 때 확정된 세대 수에 따라 달라질 수 있어요.']) truthy(es.includes(k), `견적 상세 ‘${k}’: ${es}`);
   truthy(!es.includes('잔액'), '예상 잔액 없음');
   await sec.locator('.fold__btn').filter({ hasText: '취소 조건' }).click();
   const cs = (await page.locator('#pay-cancel-panel').innerText()).replace(/\s+/g, ' ');
-  for (const k of ['접수 마감 전 취소 예약금을 전액 환불해요.', '접수 마감 후 취소 내 확정 출장비를 차감하고 나머지 예약금을 환불해요.', '업체 사유 취소 차감 없이 선결제 전액을 환불해요.', '별도 주문 자재', '회수 불가능 비용', '접수 마감: 10월 18일 (일) 18:00']) truthy(cs.includes(k), `취소 조건 ‘${k}’: ${cs}`);
+  // 2026-10-14: 접수 마감 한 줄 → 2열 표. 이 요청에는 별도 주문 자재 조건이 없어 자재 안내는 보이지 않는다
+  truthy(cs.startsWith('접수 마감 · 10월 18일 (일) 18:00') && !cs.includes('별도 주문 자재'), `취소 조건 머리·자재 안내 없음: ${cs}`);
+  for (const k of ['취소 시점·사유 환불 기준', '예약금 결제 전 비용 없이 요청 취소', '접수 마감 전 예약금 전액 환불', '접수 마감 후 내 확정 출장비 차감 후 환불', '업체 사유 취소 결제한 금액 전액 환불']) truthy(cs.includes(k), `취소 조건 ‘${k}’: ${cs}`);
   // 문구를 눌러도 체크, 체크 영역 안쪽 여백
   const chk = sec.locator('label.pay-check');
   truthy(parseFloat(await chk.evaluate((e) => getComputedStyle(e).paddingLeft)) >= 12 && parseFloat(await chk.evaluate((e) => getComputedStyle(e).paddingTop)) >= 12, '체크 영역 안쪽 여백');
@@ -1535,7 +1537,7 @@ await test('예약 상세 구성: (확인 카드) → 예약 정보 / 방문 주
   const cardsStyle = await page.evaluate(() => ['booking-info', 'work', 'visit-address'].map((id) => { const e = document.getElementById(id); const cs = getComputedStyle(e); return [cs.backgroundColor, cs.borderTopColor, parseFloat(cs.borderTopLeftRadius) >= 12, Math.round(e.getBoundingClientRect().width)].join(); }));
   truthy(new Set(cardsStyle).size === 1 && cardsStyle[0].startsWith('rgb(255, 255, 255),rgb(228, 230, 234),true'), `세 카드 같은 스타일·너비: ${cardsStyle}`);
   const info = await sectionText(page, '예약 정보');
-  for (const s of ['깔끔마감', '깔끔마감에 전화', '방문 일정 방문 일정 조율 중', '공동 예약 정보', '결제한 예약금']) truthy(info.includes(s), `예약 정보 ‘${s}’: ${info}`);
+  for (const s of ['깔끔마감', '010-0000-0105', '방문 일정 방문 일정 조율 중', '공동 예약 정보', '결제한 예약금']) truthy(info.includes(s), `예약 정보 ‘${s}’: ${info}`);
   truthy(!info.includes('일정 변경 내역'), `일정 변경 내역 펼치기 없음: ${info}`);
   for (const gone of ['진행 상태', '일정 조율 중 일정', '작업 전', '응답 전', '욕실 실리콘 보수', '햇살로', '결제한 금액', '10월 14일']) truthy(!info.includes(gone), `예약 정보에 없음 ‘${gone}’: ${info}`);
   truthy(!info.includes('제안된 새 일정') && !info.includes('10월 19일 (월) 10:00'), '진행 중 제안 비교는 상단 카드에서만');
@@ -2121,11 +2123,14 @@ await test('확인 카드 D(자재): 사양·금액·납기·취소 조건 → �
   await start(page, { path: '/bookings/bk-k5' });
   const card = page.locator('section[id^="material-"]');
   await card.waitFor();
+  // 자재 취소 조건은 처음엔 접힘(spec 5.43) — 펼친 뒤 표·안내 확인
+  eq(await card.locator('.fold__btn').getAttribute('aria-expanded'), 'false', '자재 취소 조건 처음 접힘');
+  await card.locator('.fold__btn').click();
   const t = (await card.innerText()).replace(/\s+/g, ' ');
   const m = (await db(page)).materials.find((x) => x.bookingId === 'bk-k5');
-  for (const k of ['확인이 필요해요', '자재 주문 조건을 확인해 주세요', m.name, m.spec, m.price.toLocaleString('ko-KR') + '원', '납기', m.cancellationTerms.slice(0, 12), '모의 결제 · 실제 청구 없음']) truthy(t.includes(k), '카드 ‘' + k + '’: ' + t);
+  for (const k of ['확인이 필요해요', '자재 주문 조건을 확인해 주세요', m.name, m.spec, m.price.toLocaleString('ko-KR') + '원', '납기', '결제 후 업체가 주문·제작을 시작해요.', '자재 취소 조건', '자재 결제 전 비용 없이 취소', '결제 후 주문·제작 전 자재 선결제금 전액 환불', '주문·제작 시작 후 사전 동의한 실제 회수 불가 비용 차감 후 환불', '업체 사유 취소 자재 선결제금 전액 환불', '차감 금액과 근거는 취소 전에 안내해요. 출장비 취소 조건은 별도로 적용돼요.']) truthy(t.includes(k), '카드 ‘' + k + '’: ' + t);
   expectActCard(await actCardStyle(card));
-  const pay = card.getByRole('button', { name: /모의 결제$/ });
+  const pay = card.getByRole('button', { name: /결제하기$/ });
   truthy(await pay.isDisabled(), '동의 전 결제 불가');
   eq((await db(page)).transactions.filter((x) => x.materialOfferId === m.id).length, 0, '동의 전 거래 없음');
   await card.getByRole('checkbox').check();
@@ -2139,7 +2144,7 @@ await test('확인 카드 D(자재): 사양·금액·납기·취소 조건 → �
   truthy(paidRows.includes('결제한 예약금 50,000원') && paidRows.includes(`결제한 자재비 ${m.price.toLocaleString('ko-KR')}원`) && paidRows.includes('선결제 금액은 최종 정산 시 차감돼요'), `자재 선결제는 예약금과 따로: ${paidRows}`);
   await openFold(page, '자재·추가 작업 상세');
   const mrec = (await page.locator('#fold-extra-panel').innerText()).replace(/\s+/g, ' ');
-  truthy(mrec.includes(m.name) && mrec.includes(m.spec) && mrec.includes('선결제 결제 완료') && mrec.includes('업체 주문 주문 전') && mrec.includes('취소 조건'), `자재 기록: ${mrec}`);
+  truthy(mrec.includes(m.name) && mrec.includes(m.spec) && mrec.includes('선결제 결제 완료') && mrec.includes('업체 주문 주문 전') && !mrec.includes('주문·제작 후 취소하면') && !mrec.includes('공제 금액과 근거는') && !mrec.includes('취소 조건') && !mrec.includes('최대 30,000원'), `자재 기록: ${mrec}`);
   await page.goto(BASE + '/bookings?tab=active');
   eq((await badgesOf(page, 'bk-k5')).join(), '방문 예정', '대표 상태 유지');
   eq(await todoOf(page.locator('a[href="/bookings/bk-k5"]')), '', '선결제 후 할 일 문구 사라짐');
@@ -2244,9 +2249,9 @@ await test('자재: 동의 전 청구 없음 → 선결제 후에도 주문은 �
   await start(page, { path: '/materials/mt-1' });
   await waitText(page, '동의하기 전에는 결제되지 않아요');
   await waitText(page, '최대 30,000원');
-  truthy(await page.getByRole('button', { name: /동의하고/ }).isDisabled(), '동의 전 비활성');
+  truthy(await page.getByRole('button', { name: '80,000원 결제하기' }).isDisabled(), '동의 전 비활성');
   await page.getByRole('checkbox').check();
-  await page.getByRole('button', { name: /동의하고/ }).dblclick();
+  await page.getByRole('button', { name: '80,000원 결제하기' }).dblclick();
   await waitText(page, '자재비 선결제 결제가 완료됐어요').catch(() => {});
   await page.goto(`${BASE}/materials/mt-1`);
   await waitText(page, '주문 전');
@@ -4050,7 +4055,7 @@ await test('내 예약 통합: 각 요청·예약은 한 탭에만(건수 = 표�
   // 종료된 요청: 상태와 사유
   await openTab(page, '보낸 요청');
   const main = await page.locator('main').innerText();
-  truthy(main.includes('업체 거절') && main.includes('거절 사유: 서랍 레일 규격 확인이 어려워'), '거절 + 사유');
+  truthy(main.includes('업체 거절') && main.includes('거절 사유: 서랍 레일 규격을 확인하기 어려워'), '거절 + 사유');
   truthy(main.includes('요청 취소') && main.includes('결제 기한 만료') && !main.includes('철회') && !main.includes('승인 만료'), '요청 취소·결제 기한 만료(이전 이름 없음)');
   truthy(main.includes('업체 검토 중') && main.includes('요청서를 보완해 주세요') && main.includes('예약금 결제') && !main.includes('추가 정보 필요') && !main.includes('확인 필요'), '검토(보완 요청은 할 일)·예약금 결제');
   truthy(!main.includes('예약 완료'), '보낸 요청에 예약 완료 없음');
@@ -4122,7 +4127,7 @@ await test('내 예약 통합: 새 요청 제출 → 보낸 요청(목록 문구
   await page.getByRole('button', { name: '요청 보내기' }).click();
   await page.waitForURL((u) => /^\/requests\/rq-[^/]+\/sent$/.test(u.pathname));
   const rid = new URL(page.url()).pathname.split('/')[2];
-  await page.getByRole('main').getByRole('link', { name: '보낸 요청', exact: true }).click(); // 완료 화면의 보조 안내 링크
+  await page.goto(`${BASE}/bookings?tab=requests`); // 완료 화면의 ‘보낸 요청’ 안내 링크는 2026-10-14에 뺐다
   await page.waitForURL((u) => u.pathname === '/bookings' && u.search.includes('tab=requests'));
   await resCount(page);
   truthy((await hrefs(page)).includes(`/requests/${rid}`), '제출한 요청이 보낸 요청에');
@@ -4186,7 +4191,7 @@ await test('요청 완료: 단일 요청 제출 → 완료 화면(실제 요약�
   await sentHeading(page).waitFor();
   eq(await page.evaluate(() => document.activeElement?.textContent), '수리 요청을 보냈어요', '이동 후 제목에 포커스');
   const t = await sentText(page);
-  for (const s of ['업체가 작업 가능 여부와 견적을 확인하고 있어요.', '요청한 수리', '수전 교체', '요청한 업체', '한빛설비', '아직 예약이 확정된 것은 아니에요.', '업체 승인 후 예약금을 결제하면 예약이 확정돼요.', '요청 내용 확인하기', '보낸 요청에서 진행 상황을 확인할 수 있어요.']) truthy(t.includes(s), `완료 화면 ‘${s}’: ${t}`);
+  for (const s of ['업체가 작업 가능 여부와 견적을 확인하고 있어요.', '요청한 수리', '수전 교체', '요청한 업체', '한빛설비', '아직 예약이 확정된 것은 아니에요.', '업체 승인 후 예약금을 결제하면 예약이 확정돼요.', '요청 내용 확인하기']) truthy(t.includes(s), `완료 화면 ‘${s}’: ${t}`);
   for (const s of ['예약 완료', '예약이 확정됐어요', '방문 예정', '10월 21일', ' 외 ', '개 업체']) truthy(!t.includes(s), `표시하지 않음 ‘${s}’: ${t}`);
   eq(await page.locator('.sent__icon').evaluate((e) => getComputedStyle(e).color), 'rgb(49, 93, 168)', '블루 체크 아이콘');
   const d = await db(page);
@@ -4455,9 +4460,9 @@ await test('방문 가능한 시간: 새 날짜·공동 예약별 선택 가능 
   eq((await timeNames(page)).join(' '), '09:00 10:00 11:00 13:00 14:00 15:00', '공동 예약(g1 09:00–12:00 · 13:00–16:00) 시각');
   const sec = page.locator('section').filter({ has: page.getByRole('heading', { name: '방문 가능한 시간', exact: true }) });
   const st = await sec.innerText();
-  truthy(st.includes('방문 가능한 시간을 여러 개 선택하면, 업체가 그중 방문 시간을 제안해요.'), '안내 한 문장');
+  truthy(st.includes('방문 가능한 시간을 여러 개 골라주세요. 업체가 선택한 시간 중 방문 시간을 제안해요.'), '안내 한 문장');
   for (const s of ['방문받을 수 있는 시각을 선택해 주세요', '업체가 선택한 시각 중 방문 시간을 제안해요', '09:00~12:00', '고객 가능 시간']) truthy(!st.includes(s), `없음: ${s}`);
-  eq(await page.getByText('방문 가능한 시간을 여러 개 선택하면, 업체가 그중 방문 시간을 제안해요.').count(), 1, '안내는 한 번만');
+  eq(await page.getByText('방문 가능한 시간을 여러 개 골라주세요. 업체가 선택한 시간 중 방문 시간을 제안해요.').count(), 1, '안내는 한 번만');
   // 다중 선택·해제
   await timeChip(page, '14:00').check();
   await timeChip(page, '09:00').focus(); await page.keyboard.press('Space');

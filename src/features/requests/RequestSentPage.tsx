@@ -1,6 +1,6 @@
 import { COMPARE_REQUESTS_ENABLED } from '../../domain/demoScope';
 import { useEffect, useRef } from 'react';
-import { Link, Navigate, useLocation, useParams } from 'react-router-dom';
+import { Navigate, useLocation, useParams } from 'react-router-dom';
 import { Page } from '../../app/Page';
 import { useRepo } from '../../app/context';
 import { useAsync } from '../../app/hooks';
@@ -79,7 +79,6 @@ function Sent({ d, b, addressSaved }: { d: RequestDetail; b: BundleDetail; addre
       <Banner tone="info" title="아직 예약이 확정된 것은 아니에요.">업체 승인 후 예약금을 결제하면 예약이 확정돼요.</Banner>
       <div className="stack stack--sm">
         <LinkButton to={detailTo} variant="primary" block>요청 내용 확인하기</LinkButton>
-        <p className="small muted sent__foot"><Link to={listPath('requests')}>보낸 요청</Link>에서 진행 상황을 확인할 수 있어요.</p>
       </div>
     </div>
   );

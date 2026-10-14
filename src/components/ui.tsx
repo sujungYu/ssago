@@ -23,10 +23,11 @@ export function Button({ variant = 'default', block, sm, busy, children, disable
 export function LinkButton({ variant = 'default', block, sm, children, ...rest }: LinkProps & { variant?: Variant; block?: boolean; sm?: boolean }) {
   return <Link {...rest} className={vcls(variant, block, sm)}>{children}</Link>;
 }
-export function PhoneButton({ phone, name }: { phone: string; name: string }) {
+/** numberOnly: 화면에는 전화 아이콘 + 번호만(업체 상세 ‘연락처·사후 처리 조건’). 접근성 이름에는 업체명을 남긴다 */
+export function PhoneButton({ phone, name, numberOnly }: { phone: string; name: string; numberOnly?: boolean }) {
   return (
-    <a className={vcls('secondary', false, true)} href={`tel:${phone.replace(/[^0-9]/g, '')}`}>
-      <Icon name="phone" size={16} /> {name}에 전화 <span className="nowrap">{phone}</span>
+    <a className={vcls('secondary', false, true)} href={`tel:${phone.replace(/[^0-9]/g, '')}`} aria-label={numberOnly ? `${name}에 전화 ${phone}` : undefined}>
+      <Icon name="phone" size={16} /> {!numberOnly && <>{name}에 전화 </>}<span className="nowrap">{phone}</span>
     </a>
   );
 }
@@ -110,8 +111,7 @@ export function Section({ title, aside, children, id, headClassName }: { title?:
     </section>
   );
 }
-export function MockPayNotice({ compact }: { compact?: boolean }) {
-  if (compact) return <span className="mock-label"><Icon name="warn" size={14} />모의 결제 · 실제 청구 없음</span>;
+export function MockPayNotice() {
   return (
     <Banner tone="warn" title="모의 결제입니다" icon="warn">
       실제 카드·계좌 결제나 환불이 일어나지 않는 연습용 화면이에요. 입력한 결제 정보도 없어요.

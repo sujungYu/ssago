@@ -120,7 +120,6 @@ a.list-row:hover { background: #fafbfd; }
 .banner--warn .banner__icon { color: var(--c-warn); }
 .banner--danger .banner__icon { color: var(--c-danger); }
 .banner--success .banner__icon { color: var(--c-success); }
-.mock-label { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-xs); font-weight: 700; color: var(--c-warn); background: var(--c-warn-bg); padding: 3px 10px; border-radius: var(--r-pill); }
 
 /* ───────── 폼 ───────── */
 .field { display: flex; flex-direction: column; gap: 6px; }
@@ -264,6 +263,10 @@ a.list-row:hover { background: #fafbfd; }
   .tabs__tab { flex: none; padding-left: var(--sp-4); padding-right: var(--sp-4); white-space: nowrap; }
 }
 @media (prefers-reduced-motion: reduce) { .tabs__tab, .tabs__tab::after { transition: none; } }
+/* 요청 상세 첨부 사진 썸네일(spec 5.35): 96×96 둥근 모서리, 가로 나열·좁으면 줄바꿈. 누르면 원본 비율 확대 보기 */
+.attach-thumbs { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin: 0; padding: 0; list-style: none; }
+.attach-thumb { display: block; width: 96px; height: 96px; padding: 0; border: 1px solid var(--c-line); border-radius: var(--r-md); overflow: hidden; background: var(--c-neutral-bg); cursor: zoom-in; }
+.attach-thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .photo-chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: var(--r-sm); background: var(--c-neutral-bg); font-size: var(--fs-sm); max-width: 100%; }
 .stars { color: #b7791f; letter-spacing: 1px; }
 .compare { display: grid; gap: var(--sp-3); }
@@ -461,8 +464,6 @@ button.explore-address:hover { background: #fafbfd; }
 .sent__head p, .sent__title { word-break: keep-all; text-wrap: balance; }
 .sent .kv__v { overflow-wrap: anywhere; word-break: keep-all; }
 .sent__names { display: block; font-weight: 400; font-size: var(--fs-sm); color: var(--c-text-2); }
-.sent__foot { text-align: center; }
-.sent__foot a { color: var(--c-primary); font-weight: 600; }
 /*
  * 요청서 작업 선택 칩(업체 등록 작업, 다중 선택). 작고 촘촘한 타원형: 보이는 높이 28px · 13px 글자 · 칩 사이 6px.
  * 선택 = 연한 블루 바탕 + 블루 테두리·글씨 + 12px 체크(색만으로 구분하지 않음). 글자 굵기는 바꾸지 않는다.
@@ -631,9 +632,24 @@ button.explore-address:hover { background: #fafbfd; }
 .pay-deposit__k { font-weight: 700; color: var(--c-text); }
 .pay-deposit__v { font-size: var(--fs-2xl); font-weight: 800; color: var(--c-primary); margin-left: auto; }
 .pay-tasks { display: flex; flex-direction: column; gap: var(--sp-2); }
-.pay-terms { display: flex; flex-direction: column; gap: var(--sp-2); font-size: var(--fs-sm); }
-.pay-terms li { overflow-wrap: anywhere; word-break: keep-all; }
-.pay-terms li > .strong { display: block; }
+/* 예약 상세 자재 확인 카드의 주문 안내 한 줄(‘결제 후 업체가 주문·제작을 시작해요.’, spec 5.40): 14px 회색·줄 간격 1.6 */
+.mat-note { display: flex; flex-direction: column; gap: var(--sp-3); }
+.mat-note p { font-size: 14px; color: var(--c-text-2); line-height: 1.6; overflow-wrap: anywhere; word-break: keep-all; }
+/* 자재 취소 조건 펼치기 ↔ 동의 체크 영역 간격 16px(spec 5.44). 카드 본문 간격 8px에 맞춰 이 펼치기에서만 조정 — 제목 행(48px)·체크 영역 크기는 그대로.
+   접힘: 제목 글자(줄 상자) 아래 → 체크 영역 위 16px. 제목 행 안 글자 아래 빈 높이 (48px − 1줄)/2 를 빼고 카드 간격 8px을 뺀 만큼 아래 여백을 줄인다.
+   펼침: 본문 아래 패딩(16px) 대신 8px만 둬 안내 끝 → 체크 영역 위 16px(8px + 카드 간격 8px), 아래 여백이 겹치지 않게 */
+.mat-cancel-fold .fold { margin-bottom: calc(16px - var(--sp-2) - (48px - 1lh) / 2); }
+.mat-cancel-fold .fold--open { margin-bottom: 0; }
+.mat-cancel-fold .fold__panel { padding-bottom: var(--sp-2); }
+/* 취소 조건(펼치기 안): 접수 마감 한 줄 → 2열 비교 표(두 열 왼쪽 정렬, 흰 머리글 + 아래 얇은 회색선, 행 사이 얇은 회색선만) → 별도 주문 자재 보조 문구 */
+.pay-terms__close { font-size: var(--fs-sm); font-weight: 600; }
+.pay-terms { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: var(--fs-sm); line-height: 1.45; }
+.pay-terms th, .pay-terms td { padding: 10px var(--sp-3); text-align: left; vertical-align: top; overflow-wrap: anywhere; word-break: keep-all; }
+.pay-terms th:first-child { width: 42%; }
+/* 머리글: 카드와 같은 흰 바탕(배경·둥근 모서리 없음 — 비활성 버튼처럼 보이지 않게), 14px 회색 중간 굵기, 아래 얇은 연회색 선만. 본문과 같은 안쪽 여백이라 열 시작 위치가 같다 */
+.pay-terms thead th { background: var(--c-surface); color: var(--c-text-2); font-size: 14px; font-weight: 500; border-bottom: 1px solid var(--c-line); }
+.pay-terms tbody th { font-weight: 600; }
+.pay-terms tbody tr + tr > * { border-top: 1px solid var(--c-line); }
 .pay-check { display: flex; align-items: flex-start; gap: var(--sp-3); padding: 14px var(--sp-4); border: 1px solid var(--c-line-strong); border-radius: var(--r-md); cursor: pointer; }
 .pay-check input { width: 22px; height: 22px; margin: 1px 0 0; accent-color: var(--c-primary); flex: none; }
 .pay-check > span { min-width: 0; overflow-wrap: anywhere; word-break: keep-all; font-weight: 600; }

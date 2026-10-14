@@ -4,7 +4,7 @@ import { useRepo } from '../../app/context';
 import { useAction, useAttemptKey } from '../../app/hooks';
 import { formatDate, formatDateTime } from '../../domain/time';
 import { formatWon } from '../../domain/money';
-import { ActionCard, Banner, Button, KV, LinkButton, MockPayNotice } from '../../components/ui';
+import { ActionCard, Banner, Button, Fold, KV, LinkButton } from '../../components/ui';
 import type { BookingDetail } from '../../data/repositories/types';
 import type { AdditionalWork, MaterialOffer } from '../../domain/types';
 import { VisitText } from '../shared';
@@ -56,7 +56,7 @@ export function AdditionalActionCard({ w }: { w: AdditionalWork }) {
 }
 
 /**
- * D. 자재 확인·선결제 동의: 사양·수량·금액·납기·취소 조건 + 동의 체크 + [동의하고 {금액} 모의 결제](기존 agreeAndPayMaterial).
+ * D. 자재 확인·선결제 동의: 사양·수량·금액·납기·취소 조건 + 동의 체크 + [{금액} 결제하기](기존 agreeAndPayMaterial).
  * 자재는 선결제해야 업체가 주문하는 조건이라 결제 행동이 있다. 실패하면 동의·입력을 그대로 두고 다시 시도, 결과 확인 중이면 카드가 사라지고 예약 정보에 결제 상태로 남는다.
  */
 export function MaterialActionCard({ m }: { m: MaterialOffer }) {
@@ -71,22 +71,45 @@ export function MaterialActionCard({ m }: { m: MaterialOffer }) {
       actions={<>
         {action.error && <Banner tone="danger" title={action.error.title}>{action.error.hint} 다시 시도할 수 있어요.</Banner>}
         <Button variant="primary" block disabled={!ok} busy={action.busy} onClick={pay}>
-          {action.busy ? '결제 진행 중… 화면을 닫지 마세요' : `동의하고 ${formatWon(m.price)} 모의 결제`}
+          {action.busy ? '결제 진행 중… 화면을 닫지 마세요' : `${formatWon(m.price)} 결제하기`}
         </Button>
-        <MockPayNotice compact />
       </>}>
       <KV rows={[
         { k: '자재', v: <span>{m.name}<span className="xs muted" style={{ display: 'block' }}>{m.spec} · {m.quantity}개</span></span> },
         { k: '금액', v: <span className="money strong">{formatWon(m.price)}</span> },
         { k: '납기', v: formatDate(m.deliveryDate) },
       ]} />
-      <p className="small">{m.cancellationTerms}</p>
-      {m.nonRefundableIfCancelled > 0 && <p className="xs muted">주문·제작이 시작된 뒤 취소하면 회수 불가능한 실제 비용 최대 {formatWon(m.nonRefundableIfCancelled)}이 출장비와 별도로 공제될 수 있어요.</p>}
-      <p className="xs muted">선결제해야 업체가 주문해요. 결제 전에는 청구되지 않아요.</p>
+      {/* 결제 전 동의 화면이라 주문 전이라도 자재 취소 조건 표를 펼쳐 보여준다(실제 비용 발생 여부와 무관, spec 5.40). 접수 마감은 자재 기준이 아니라 두지 않는다 */}
+      <div className="mat-note"><p>결제 후 업체가 주문·제작을 시작해요.</p></div>
+      <MaterialCancelTerms id={`mat-cancel-${m.id}`} />
       <label className="check">
         <input type="checkbox" checked={ok} onChange={(e) => setOk(e.target.checked)} />
         <span>자재 조건과 취소 조건을 확인했고, {formatWon(m.price)} 선결제에 동의해요.</span>
       </label>
     </ActionCard>
+  );
+}
+
+/**
+ * 자재 취소 조건 표(spec 5.40). 요청 상세 ‘취소 조건’ 표(.pay-terms)와 같은 모양 — 흰 바탕, 가로 구분선만, 두 열 왼쪽 정렬.
+ * 요청 상세 ‘취소 조건’과 같은 펼치기(Fold, 파란 제목 + 오른쪽 화살표, 버튼 aria-expanded). 처음엔 접힌 상태(spec 5.43).
+ * 표와 아래 안내만 접힘 영역 — 자재 정보·주문 안내·동의 체크·결제 버튼은 밖. 금액은 넣지 않는다(실제 차감은 기존 자재 정책 materialDeductionOf).
+ */
+export function MaterialCancelTerms({ id }: { id: string }) {
+  return (
+    <div className="folds mat-cancel-fold">
+    <Fold id={id} title="자재 취소 조건">
+      <table className="pay-terms">
+        <thead><tr><th scope="col">취소 시점·사유</th><th scope="col">환불 기준</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">자재 결제 전</th><td>비용 없이 취소</td></tr>
+          <tr><th scope="row">결제 후 주문·제작 전</th><td>자재 선결제금 전액 환불</td></tr>
+          <tr><th scope="row">주문·제작 시작 후</th><td>사전 동의한 실제 회수 불가 비용 차감 후 환불</td></tr>
+          <tr><th scope="row">업체 사유 취소</th><td>자재 선결제금 전액 환불</td></tr>
+        </tbody>
+      </table>
+      <p className="xs muted">차감 금액과 근거는 취소 전에 안내해요. 출장비 취소 조건은 별도로 적용돼요.</p>
+    </Fold>
+    </div>
   );
 }

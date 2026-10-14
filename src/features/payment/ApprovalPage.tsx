@@ -6,7 +6,7 @@ import { formatDateTime, formatRemaining } from '../../domain/time';
 import { formatWon } from '../../domain/money';
 import { approvalEstimate } from '../../domain/approvalCost';
 import type { ApprovalView } from '../../data/repositories/types';
-import { ActionCard, Banner, Button, ErrorState, Fold, LoadingBlock, MockPayNotice } from '../../components/ui';
+import { ActionCard, Banner, Button, ErrorState, Fold, LoadingBlock } from '../../components/ui';
 import { PAYMENT_STATUS, VisitText } from '../shared';
 
 /**
@@ -63,7 +63,6 @@ function Panel({ v, reload }: { v: ApprovalView; reload: () => void }) {
         <Button variant="primary" block disabled={!checked || !!inflight} busy={action.busy} onClick={pay}>
           {action.busy ? '결제 진행 중… 화면을 닫지 마세요' : `예약금 ${formatWon(depositAmount)} 결제하기`}
         </Button>
-        <MockPayNotice compact />
       </>}>
       {inflight && (
         <p className="small">{PAYMENT_STATUS[inflight.status].label} · 결제 결과를 확인하는 중이라 다시 결제할 수 없어요. <Link to={`/pay/${inflight.id}`}>결제 결과 확인하기</Link></p>
@@ -128,22 +127,26 @@ function Panel({ v, reload }: { v: ApprovalView; reload: () => void }) {
           </dl>
           {/* 세대 분담 안내: 공동 예약(분담 2세대 이상)이고 출장비가 아직 확정 전일 때만. 세대 = 결제 완료 확정 세대 + 본인(결제 대기 자리 제외) */}
           {est.joint && !est.tripFeeConfirmed && (
-            <p className="xs muted">내 예약이 확정되면 총 출장비 {formatWon(totalTripFee)}을 {est.householdsWithMe}세대가 나눠요. 최종 출장비는 접수 마감 때 확정된 세대 수로 정해져요.</p>
+            <p className="xs muted">예약이 확정되면 총 출장비 {formatWon(totalTripFee)}을 나를 포함한 {est.householdsWithMe}세대가 나눠요.<br />출장비는 접수 마감 때 확정된 세대 수에 따라 달라질 수 있어요.</p>
           )}
           {ap.materialNote && <p className="xs muted">자재: {ap.materialNote}</p>}
-          {ap.discountNote && <p className="xs muted">업체 추가 할인 조건: {ap.discountNote} — 조건 충족이 확인된 뒤 적용돼 예상 총금액에는 넣지 않았어요.</p>}
-          <p className="xs muted">최종 금액은 작업이 끝난 뒤 실제 내역으로 확인해요.</p>
         </Fold>
         <Fold id="pay-cancel" title="취소 조건">
-          {/* 실제 구현된 취소 정책(domain/pricing previewCancellation)과 같은 기준. 접수 마감 = 이 방문 날짜의 공동 예약 접수 마감 */}
-          <ul className="pay-terms">
-            <li><span className="strong">결제 전</span> 수수료 없이 요청을 취소할 수 있어요.</li>
-            <li><span className="strong">접수 마감 전 취소</span> 예약금을 전액 환불해요.</li>
-            <li><span className="strong">접수 마감 후 취소</span> 내 확정 출장비를 차감하고 나머지 예약금을 환불해요.</li>
-            <li><span className="strong">업체 사유 취소</span> 차감 없이 선결제 전액을 환불해요.</li>
-            <li><span className="strong">별도 주문 자재</span> 주문 전에 동의한 회수 불가능 비용이 있으면 출장비와 별도로 차감돼요. 동의한 자재가 없으면 적용되지 않아요.</li>
-          </ul>
-          <p className="xs muted">접수 마감: <span className="nowrap">{formatDateTime(closeAt)}</span>{v.request.groupId ? '' : ' (새 날짜 요청도 승인된 방문 날짜의 접수 마감을 기준으로 해요.)'}</p>
+          {/* 실제 구현된 취소 정책(domain/pricing previewCancellation)과 같은 기준. 접수 마감 = 이 방문 날짜의 공동 예약 접수 마감(새 조건이면 새 마감) */}
+          <p className="pay-terms__close">접수 마감 · <span className="nowrap">{formatDateTime(closeAt)}</span></p>
+          <table className="pay-terms">
+            <thead><tr><th scope="col">취소 시점·사유</th><th scope="col">환불 기준</th></tr></thead>
+            <tbody>
+              <tr><th scope="row">예약금 결제 전</th><td>비용 없이 요청 취소</td></tr>
+              <tr><th scope="row">접수 마감 전</th><td>예약금 전액 환불</td></tr>
+              <tr><th scope="row">접수 마감 후</th><td>내 확정 출장비 차감 후 환불</td></tr>
+              <tr><th scope="row">업체 사유 취소</th><td>결제한 금액 전액 환불</td></tr>
+            </tbody>
+          </table>
+          {/* 별도 주문 자재 조건이 있는 요청에만(부품·자재 예상 금액만으로는 표시하지 않음). 차감 여부·금액은 기존 자재 정책 그대로 */}
+          {v.hasOrderedMaterialTerms && (
+            <p className="xs muted"><span className="strong">별도 주문 자재</span><br />주문 전 동의한 자재의 회수 불가 비용이 있다면 추가로 차감돼요.</p>
+          )}
         </Fold>
       </div>
     </ActionCard>

@@ -100,7 +100,7 @@ export function BookingCostCard({ d }: { d: BookingDetail }) {
       <StageNote d={d} c={c} view={view} refunds={refunds} />
 
       {c.stage === 'final_awaiting' && view && <ConfirmBox d={d} c={c} view={view} />}
-      {c.stage === 'final_disputed' && <PhoneButton phone={d.provider.phone} name={d.provider.name} />}
+      {c.stage === 'final_disputed' && <PhoneButton phone={d.provider.phone} name={d.provider.name} numberOnly />}
 
       <div className="cost__more">
         <AmountDetail d={d} c={c} />
@@ -159,7 +159,6 @@ function ConfirmBox({ d, c, view }: { d: BookingDetail; c: CostSummary; view: St
   const stamp = `${st.version}:${s.delta}`;
   const ok = consented === stamp; // 금액·버전이 바뀌면 확인이 초기화된다
   const inflight = view.inFlightPayment;
-  const done = st.actualWork.filter((w) => w.done).length;
   // 마지막 잔금 결제가 실패했으면 알리고 다시 결제할 수 있게 한다(진행 중이 아니면 버튼은 그대로)
   const lastBalance = d.ledger.filter((l) => l.kind === 'payment' && l.tx.kind === 'balance').at(-1);
   const failed = !inflight && lastBalance?.kind === 'payment' && lastBalance.tx.status === 'failed';
@@ -170,9 +169,6 @@ function ConfirmBox({ d, c, view }: { d: BookingDetail; c: CostSummary; view: St
   const label = s.kind === 'pay' ? `${formatWon(s.amount)} 결제하기` : s.kind === 'zero' ? '확인하고 정산 완료하기' : '확인하고 환불 진행하기';
   return (
     <div className="stack cost__confirm">
-      <p className="small">
-        실제 작업 {st.actualWork.length}건 중 {done}건 완료 · <a href="#work">작업 내용 확인하기</a>
-      </p>
       {failed && <Banner tone="danger" title="잔금 결제가 완료되지 않았어요">청구되지 않았어요. 내용을 확인하고 다시 결제할 수 있어요.</Banner>}
       {inflight && (
         <Banner tone="warn" title={PAYMENT_STATUS[inflight.status].label}>결제 결과를 확인 중이라 다시 결제할 수 없어요. <Link to={`/pay/${inflight.id}`}>결제 결과 확인하기</Link></Banner>
@@ -192,7 +188,7 @@ function ConfirmBox({ d, c, view }: { d: BookingDetail; c: CostSummary; view: St
           </>}>
           <p>이견을 접수하면 업체와 합의하기 전까지 금액이 확정되거나 자동으로 청구되지 않아요.</p>
           <p className="small muted">싸고는 누가 옳은지 판단하지 않아요. 먼저 {d.provider.name}에 전화로 확인해 보세요.</p>
-          <PhoneButton phone={d.provider.phone} name={d.provider.name} />
+          <PhoneButton phone={d.provider.phone} name={d.provider.name} numberOnly />
           {action.error && <Banner tone="danger" title={action.error.title}>{action.error.hint}</Banner>}
         </Dialog>
       )}

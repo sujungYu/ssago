@@ -17,7 +17,7 @@ import { expectedFeeForJoiner } from '../../domain/pricing';
 import { Icon } from '../../components/Icon';
 import { AsyncView, Banner, Button, EmptyState, Field, KV, LinkButton, Section } from '../../components/ui';
 import { SAVED_ADDRESS_LOADED, detailError, savedDetailFor } from '../../domain/address';
-import { NAME_MAX, PHONE_HINT, formatPhone, nameError, phoneDigits, phoneError } from '../../domain/profile';
+import { NAME_MAX, formatPhone, nameError, phoneDigits, phoneError } from '../../domain/profile';
 import type { Address } from '../../domain/types';
 import { PostcodeDialog } from '../discovery/PostcodeSearch';
 import { addressSubline, addressTitle } from '../discovery/exploreAddress';
@@ -239,9 +239,6 @@ function RequestForm({ id }: { id: string }) {
                     { k: '내 예상 출장비', v: <span className="money">약 {formatWon(expectedFeeForJoiner(group.totalTripFee, group.confirmedHouseholds))}</span> },
                   ] : []),
                 ]} />
-                {!joint && !wishBlock && (
-                  <p className="xs muted">희망 날짜예요. 업체가 방문 가능 여부를 확인하고, 승인할 때 방문 날짜·시각과 접수 마감을 정해요. 요청만으로 예약이 확정되지 않아요.</p>
-                )}
               </div>
               {wishBlock && (
                 <div className="stack--sm stack">
@@ -337,7 +334,7 @@ function RequestForm({ id }: { id: string }) {
                     <input type="checkbox" checked={saveForNext} disabled={!address.data} onChange={(e) => setSaveForNext(e.target.checked)} />
                     <span className="stack--sm stack" style={{ gap: 2 }}>
                       <span className="strong small">다음 신청에도 이 주소 사용</span>
-                      <span className="xs muted">요청을 보내면 이 건물과 상세 주소를 저장해, 같은 건물로 다시 신청할 때 자동으로 채워요. 선택하지 않으면 이전에 저장한 주소를 바꾸지 않아요.</span>
+                      <span className="xs muted">선택하면 요청 완료 후 주소를 저장하고, 같은 건물로 다시 신청할 때 상세주소를 자동으로 채워요.</span>
                     </span>
                   </label>
                 </div>
@@ -351,13 +348,12 @@ function RequestForm({ id }: { id: string }) {
 
               <Section title="연락받을 정보">
                 <div className="card stack">
-                  <p className="small muted">업체가 방문 일정을 안내할 때 쓰는 이름·연락처예요. 내 정보에 저장된 값으로 채웠고, 이 요청에만 바꿔 쓸 수 있어요(내 정보는 그대로예요). 데모라 가상 정보를 입력해도 돼요.</p>
                   {profile.error !== undefined && <p className="xs muted">내 정보를 불러오지 못했어요. 이름·연락처를 직접 입력해 주세요.</p>}
                   <Field label="이름" error={touched ? err.name : null} liveError={false}>
                     {(fp) => <input {...fp} data-err-target="name" className="input" value={contactName} maxLength={NAME_MAX + 10} autoComplete="off"
                       onChange={(e) => { contactEdited.current.name = true; setContactName(e.target.value); }} />}
                   </Field>
-                  <Field label="연락처" hint={PHONE_HINT} error={touched ? err.phone : null} liveError={false}>
+                  <Field label="연락처" error={touched ? err.phone : null} liveError={false}>
                     {(fp) => <input {...fp} data-err-target="phone" className="input" type="tel" inputMode="tel" value={contactPhone} maxLength={20} autoComplete="off" placeholder="010-0000-0000"
                       onChange={(e) => { contactEdited.current.phone = true; setContactPhone(e.target.value); }} />}
                   </Field>
@@ -369,7 +365,7 @@ function RequestForm({ id }: { id: string }) {
                 <div className="card stack">
                   <fieldset className="svc-pick time-pick" data-err-region aria-describedby="req-time-hint">
                     <legend className="sr-only">방문 가능한 시각 (여러 개 선택 가능)</legend>
-                    <p className="small muted time-pick__hint" id="req-time-hint">방문 가능한 시간을 여러 개 선택하면, 업체가 그중 방문 시간을 제안해요.</p>
+                    <p className="small muted time-pick__hint" id="req-time-hint">방문 가능한 시간을 여러 개 골라주세요. 업체가 선택한 시간 중 방문 시간을 제안해요.</p>
                     {timeOptions.length === 0 ? (
                       <Banner tone="warn" title="지금 선택할 수 있는 방문 시각이 없어요">다른 날짜나 일정을 골라 주세요.</Banner>
                     ) : (
